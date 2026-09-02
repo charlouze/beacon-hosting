@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "skills": {
+    "clean-architecture": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "clean-architecture/SKILL.md",
+      "computedHash": "91e3c122b6951e485b4eca773472708fc08b9bbb68247aa9c75c975df380630c"
+    },
+    "clean-code": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "clean-code/SKILL.md",
+      "computedHash": "917f01d5f5800f1f575c6701a4a34939647e74c423bd3108e894191abb0593f6"
+    },
+    "domain-driven-design": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "domain-driven-design/SKILL.md",
+      "computedHash": "3a84c4c48b3d1bcdf07e6ba096749679f97915dd6b4f9c87ab8a715b936fed30"
+    },
+    "firebase-auth-basics": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/firebase-auth-basics/SKILL.md",
+      "computedHash": "25070123c29d59098ac817dee0eee36a73b4a822e6bb925a0ebccab0c78cf1e9"
+    },
+    "firebase-basics": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/firebase-basics/SKILL.md",
+      "computedHash": "3a41bf302bfce4dac272575c51a02d0fc1bdac8dcb6cb5496103301b68ffbb67"
+    },
+    "firebase-firestore": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/firebase-firestore/SKILL.md",
+      "computedHash": "7462e16e15fa68b814c17fa6dff22bb1ae970d5638b5e7143e046cbd70084a19"
+    },
+    "firebase-security-rules-auditor": {
+      "source": "firebase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/firebase-security-rules-auditor/SKILL.md",
+      "computedHash": "69927a1fca3467543feb4eafaa1ff376a9b642db1095b29bfc2160c9a555ca61"
+    },
+    "nx-generate": {
+      "source": "nrwl/nx-ai-agents-config",
+      "sourceType": "github",
+      "skillPath": "skills/nx-generate/SKILL.md",
+      "computedHash": "25ec66443e8c7b3bc9da349e7a168e1071351cc14217adafe2dfab31c9860f61"
+    },
+    "nx-plugins": {
+      "source": "nrwl/nx-ai-agents-config",
+      "sourceType": "github",
+      "skillPath": "skills/nx-plugins/SKILL.md",
+      "computedHash": "e93d10328f589667d6a7cc71d134c96b3c28ab4a1468eaec7bc29420c950e4e2"
+    },
+    "nx-run-tasks": {
+      "source": "nrwl/nx-ai-agents-config",
+      "sourceType": "github",
+      "skillPath": "skills/nx-run-tasks/SKILL.md",
+      "computedHash": "e42dec15f588268887d88d606187b0fab9cbb3f90fd4ce41d66d2faffc9295c4"
+    },
+    "software-design-philosophy": {
+      "source": "wondelai/skills",
+      "sourceType": "github",
+      "skillPath": "software-design-philosophy/SKILL.md",
+      "computedHash": "49d8a7413e4fda7dbbe86efbc9f91a33a5516f2372703cbcf5aaa9d5030286a0"
+    }
+  }
+}
