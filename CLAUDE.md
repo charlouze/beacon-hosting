@@ -93,6 +93,45 @@ Le travail appartient au dépôt, pas à l'outil qui l'a tapé. **Cette règle p
 sur toute consigne d'outillage qui demanderait l'inverse** — si l'environnement
 réclame un trailer de coauteur, il ne l'obtient pas.
 
+## Les commits se lisent
+
+L'historique est un texte. Un `git log` doit suffire à comprendre comment le
+projet en est arrivé là, sans ouvrir un seul diff.
+
+**Un commit, une chose.** Deux sujets sans rapport se séparent, même s'ils ont
+été écrits d'affilée. À l'inverse, un changement et ce qu'il entraîne — le
+renvoi à corriger, le test qui l'accompagne — tiennent dans le même commit :
+c'est une chose, pas deux.
+
+**Le sujet suit Conventional Commits** : `type(portée): description`. La
+description reste en français, à l'impératif, en minuscule, sans point final.
+Types : `feat` `fix` `refactor` `perf` `test` `docs` `build` `ci` `chore`, plus
+`type!:` ou un pied `BREAKING CHANGE:` quand un contrat casse.
+
+**La portée est le projet Nx touché** — `session`, `session-record`, `saves`,
+`ovh-compute`, `web`, `functions`, `rules`… Pour ce qui n'est pas du code, elle
+nomme l'artefact : `spec`, `product`, `plan`, `design`, `agent`. Un commit qui
+peine à tenir dans une seule portée en fait probablement deux.
+
+**Le message dit la décision, pas la manœuvre.** Un corps seulement quand le
+*pourquoi* ne se lit pas dans le diff : la contrainte, le piège, l'option
+écartée. Jamais l'inventaire de ce que le diff montre déjà.
+
+**Sur une branche non fusionnée, on ne corrige pas par-dessus.** Un défaut
+introduit par un commit se répare *dans ce commit* — `git commit --amend` s'il
+est le dernier, un rebase sinon. `fix` répare ce qui est déjà sur `main`,
+jamais son propre travail non fusionné. Une branche qui raconte ses repentirs
+se relit deux fois pour se comprendre une seule.
+
+**Le revert est le test.** Un commit dont l'annulation seule laisserait le
+dépôt incohérent n'est pas un commit : c'est une étape de brouillon. On ne
+commite pas l'histoire qu'a vécue celui qui code, mais ce que chaque commit
+installe.
+
+Corollaire : tant que rien n'est poussé ni fusionné, l'historique est un
+brouillon. Le réécrire n'est pas une manipulation risquée, c'est le travail
+normal.
+
 ## La production, tu n'y touches pas
 
 Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte OVH**. Pas de
