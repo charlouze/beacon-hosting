@@ -1,0 +1,210 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — The Departure Board</title>
+<style>
+  :root {
+    --paper:#faf8f3; --ink:#16181b; --red:#d8232a; --blue:#12457f;
+    --rule:rgba(22,24,27,.18); --mute:#6b6f75;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:#e7e4dc; color:var(--ink);
+    font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:0 0 80px;
+  }
+  .note {
+    max-width:760px; margin:0 auto; padding:28px 24px 8px;
+    font-size:14px; color:#4d4a44;
+  }
+  .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:#16181b; }
+  .note p { max-width:66ch; }
+  .stage { max-width:760px; margin:0 auto; padding:24px; display:grid; gap:40px; }
+  .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin-bottom:10px; }
+
+  /* ---------- the screen ---------- */
+  .screen {
+    background:var(--paper);
+    box-shadow:0 1px 2px rgba(0,0,0,.14), 0 18px 44px rgba(0,0,0,.16);
+    padding:26px 24px 24px;
+    display:flex; flex-direction:column;
+    min-height:660px;
+  }
+  .lede { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .wordmark { font-size:13px; font-weight:800; letter-spacing:.26em; text-transform:uppercase; }
+  .wordmark span { font-weight:500; color:var(--mute); }
+  .status { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; }
+  .status .dot { width:8px; height:8px; border-radius:50%; background:var(--red); }
+  .status.live .dot { animation:pulse 2.4s ease-in-out infinite; }
+  .status.off { color:var(--mute); }
+  .status.off .dot { background:#b6b2a8; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.28} }
+
+  .band { border-top:3px solid var(--ink); margin-top:18px; }
+  .band.thin { border-top-width:1px; border-color:var(--rule); }
+
+  .headline { padding:22px 0 18px; }
+  .k { font-size:10px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--mute); }
+  .clock {
+    font:800 clamp(56px,17vw,84px)/0.86 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-variant-numeric:tabular-nums; letter-spacing:-.035em; margin-top:10px;
+  }
+  .clock .sec { color:var(--red); }
+  .closes { display:flex; align-items:baseline; gap:10px; margin-top:14px; }
+  .closes .v { font:700 22px/1 ui-sans-serif, system-ui, sans-serif; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+
+  .rows { padding:4px 0 2px; }
+  .row { display:flex; gap:14px; align-items:baseline; padding:13px 0; border-bottom:1px solid var(--rule); }
+  .row:last-child { border-bottom:0; }
+  .row .k { width:86px; flex:none; padding-top:2px; }
+  .row .v { flex:1; font-size:15px; font-variant-numeric:tabular-nums; }
+  .row .v.mono { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:13.5px; letter-spacing:.01em; word-break:break-all; }
+  .row .v .host { color:var(--blue); font-weight:600; }
+  .copy {
+    font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--mute); border:1px solid var(--rule); padding:5px 7px; background:transparent; cursor:pointer;
+  }
+
+  .plate {
+    margin-top:18px; border:1px solid var(--rule); background:rgba(18,69,127,.045);
+    padding:14px 15px; display:flex; flex-direction:column; gap:9px;
+  }
+  .plate .line { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+
+  .money { display:flex; gap:26px; padding:16px 0 20px; }
+  .money div .k { display:block; }
+  .money div .v { font:700 19px/1.2 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:6px; }
+  .money .cmp .v { color:var(--mute); font-weight:600; }
+
+  .acts { margin-top:auto; display:flex; gap:10px; padding-top:8px; }
+  .btn {
+    flex:1; text-align:center; padding:16px 8px; border:2px solid var(--ink); background:var(--ink); color:var(--paper);
+    font:700 12px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn.ghost { background:transparent; color:var(--ink); }
+  .btn.off { border-color:#c9c5ba; color:#b3aea3; background:transparent; cursor:default; }
+  .hint { margin-top:11px; font-size:11.5px; color:var(--red); letter-spacing:.02em; }
+  .hint.grey { color:var(--mute); }
+
+  .empty { padding:44px 0 10px; }
+  .empty .big { font:800 clamp(30px,8.5vw,42px)/1.06 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.02em; max-width:12ch; }
+  .empty .sub { margin-top:14px; font-size:14.5px; color:var(--mute); max-width:34ch; }
+
+  @media (min-width:640px) {
+    .screen { padding:34px 38px 30px; }
+    .headline { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
+    .headline .closes { margin-top:0; flex-direction:column; align-items:flex-end; gap:6px; text-align:right; }
+    .money { gap:44px; }
+  }
+</style>
+
+<div class="note">
+  <h1>Direction 1 — The Departure Board, reconstruite</h1>
+  <p>Plus aucun objet dessiné : la matière est l'impression elle-même — filets épais et fins, capitales
+  espacées, chiffres tabulaires, un seul rouge. À taille réelle, et responsive : élargis la fenêtre pour voir
+  la version large. Les deux autres mondes attendent, je peux les rebâtir au même niveau.</p>
+</div>
+
+<div class="stage">
+
+  <div>
+    <div class="label">En service — l'écran pendant la partie</div>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="status live"><span class="dot"></span>En service</div>
+      </div>
+
+      <div class="band"></div>
+
+      <div class="headline">
+        <div>
+          <div class="k">Temps restant</div>
+          <div class="clock" id="clock">2:47<span class="sec">:12</span></div>
+        </div>
+        <div class="closes">
+          <span class="k">Ferme à</span>
+          <span class="v">00:30</span>
+        </div>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="rows">
+        <div class="row">
+          <span class="k">Adresse</span>
+          <span class="v mono"><span class="host">enshrouded.beacon.charlouze.com</span></span>
+          <button class="copy">Copier</button>
+        </div>
+        <div class="row">
+          <span class="k">IP</span>
+          <span class="v mono">51.83.42.117</span>
+          <button class="copy">Copier</button>
+        </div>
+        <div class="row">
+          <span class="k">Ouvert</span>
+          <span class="v">20:14 par Charlouze</span>
+        </div>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="money">
+        <div><span class="k">Cette session</span><span class="v">0,13 €</span></div>
+        <div><span class="k">Ce mois</span><span class="v">1,42 €</span></div>
+      </div>
+
+      <div class="acts">
+        <div class="btn off">+ 1 heure</div>
+        <div class="btn ghost">Fermer</div>
+      </div>
+      <div class="hint">La prolongation s'ouvre à 00:00, trente minutes avant la fermeture.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">Hors service — l'écran le plus souvent vu</div>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="status off"><span class="dot"></span>Hors service</div>
+      </div>
+
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Rien ne tourne.</div>
+        <div class="sub">Dernière soirée hier, fermée à 00:30 sans que personne ait eu à y penser.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Prochaine session</span><span class="v" style="font-weight:700">4 h, jusqu'à 00:14</span></div>
+        <div class="line"><span class="k">Coût estimé</span><span class="v" style="font-weight:700">0,19 €</span></div>
+      </div>
+
+      <div class="band thin" style="margin-top:22px"></div>
+      <div class="money">
+        <div><span class="k">Ce mois</span><span class="v">1,42 €</span></div>
+        <div><span class="k">Joué</span><span class="v">18 h</span></div>
+        <div><span class="k">Soirées</span><span class="v">6</span></div>
+      </div>
+
+      <div class="acts">
+        <div class="btn">Ouvrir le service</div>
+      </div>
+      <div class="hint grey">Environ quatre minutes avant que le serveur réponde. On te dira l'heure exacte.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // The countdown is the page's only motion: seconds in red, minutes in ink.
+  let left = 2 * 3600 + 47 * 60 + 12;
+  const el = document.getElementById('clock');
+  setInterval(() => {
+    left = left > 0 ? left - 1 : 0;
+    const h = Math.floor(left / 3600);
+    const m = String(Math.floor(left % 3600 / 60)).padStart(2, '0');
+    const s = String(left % 60).padStart(2, '0');
+    el.innerHTML = h + ':' + m + '<span class="sec">:' + s + '</span>';
+  }, 1000);
+</script>

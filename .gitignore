@@ -18,3 +18,6 @@ node_modules/
 dist/
 .nx/
 .firebase/
+
+# Fichiers de travail du serveur de questions Impeccable
+.impeccable/questions/

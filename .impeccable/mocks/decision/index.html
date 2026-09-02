@@ -1,0 +1,49 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — maquettes du tour de direction</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { color-scheme:light; }
+  body {
+    background:#e7e4dc; color:#16181b;
+    font:16px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:48px 26px 80px;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+  .kk { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#6b6f75; display:block; }
+  h1 { font-size:15px; font-weight:800; letter-spacing:.28em; text-transform:uppercase; margin:10px 0 0; }
+  h1 span { font-weight:500; color:#6b6f75; letter-spacing:.1em; text-transform:none; }
+  .rule { border-top:4px solid #16181b; margin:20px 0 0; }
+  .rule.thin { border-top:1px solid rgba(22,24,27,.18); }
+  .intro { padding:24px 0 8px; max-width:62ch; color:#4d4a44; font-size:15px; }
+  .intro b { color:#16181b; }
+  ul { list-style:none; }
+  li a {
+    display:flex; align-items:baseline; gap:18px; padding:20px 2px;
+    border-bottom:1px solid rgba(22,24,27,.18); text-decoration:none; color:inherit;
+  }
+  li:first-child a { border-top:1px solid rgba(22,24,27,.18); }
+  li a:hover { background:rgba(18,69,127,.05); }
+  li a .n { font:800 22px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; width:36px; flex:none; color:#12457f; }
+  li a .t { flex:1; }
+  li a .t b { display:block; font-size:17px; font-weight:700; }
+  li a .t span { display:block; font-size:14px; color:#6b6f75; margin-top:4px; }
+  li a .go { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.2em; text-transform:uppercase; color:#d8232a; }
+  .out { margin-top:34px; font-size:14px; color:#6b6f75; }
+  .out code { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:13px; color:#16181b; }
+</style>
+<div class="wrap">
+  <span class="kk">Beacon · tour de direction · 2026-09-02 · seed 21285bd8</span>
+  <h1>Maquettes <span>— trace du monde visuel retenu</span></h1>
+  <div class="rule"></div>
+  <p class="intro">Monde retenu : <b>The Departure Board</b>. Les deux mondes finalistes écartés
+  sont conservés tels qu'ils ont été présentés — une décision se relit mieux avec ce
+  qu'elle a refusé. Le pourquoi est dans <code>README.md</code>, le contrat dans
+  <code>../../DIRECTION.md</code>.</p>
+  <ul>
+    <li><a href="desktop.html"><span class="n">01</span><span class="t"><b>Départ — écran large</b><span>1440 px, en service et hors service. La composition de référence.</span></span><span class="go">Ouvrir</span></a></li>
+    <li><a href="directions.html"><span class="n">02</span><span class="t"><b>Départ — téléphone</b><span>Le même monde à l'échelle du mobile, responsive.</span></span><span class="go">Ouvrir</span></a></li>
+    <li><a href="compare.html"><span class="n">03</span><span class="t"><b>Les deux écartés</b><span>Call Board et Watch Roster, 1440 px, côte à côte.</span></span><span class="go">Ouvrir</span></a></li>
+  </ul>
+  <p class="out">Servir le dossier localement : <code>npx http-server .impeccable/mocks/decision</code> —
+  ou ouvrir les fichiers directement, ils n'ont aucune dépendance externe.</p>
+</div>
