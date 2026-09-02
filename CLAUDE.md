@@ -132,6 +132,19 @@ Corollaire : tant que rien n'est poussé ni fusionné, l'historique est un
 brouillon. Le réécrire n'est pas une manipulation risquée, c'est le travail
 normal.
 
+## Les graphes sont en Mermaid
+
+Tout schéma — architecture, machine à états, séquence, dépendances — s'écrit
+dans un bloc de code `mermaid`, jamais en art ASCII. GitHub le rend nativement
+dans le Markdown : le schéma reste lisible dans le fichier comme dans la revue.
+
+Un dessin ASCII se périme sans qu'on s'en aperçoive, parce qu'ajouter une
+flèche oblige à redessiner les colonnes — alors on ne l'ajoute pas. Le coût
+d'une transition oubliée est nul à l'écriture et cher à la lecture.
+
+Restent en bloc de texte brut ce qui n'est pas un graphe : arborescence de
+fichiers, extrait de terminal, format de message.
+
 ## La production, tu n'y touches pas
 
 Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte OVH**. Pas de
