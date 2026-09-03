@@ -151,12 +151,13 @@ Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte OVH**. Pas de
 préproduction : la base que tu déploierais est celle où les joueurs jouent, et
 les ressources que tu créerais sont facturées à quelqu'un.
 
-Le déploiement se fait de deux façons, et tu n'es ni l'une ni l'autre : **à la
-main**, par un humain qui déclenche le workflow, ou **par le système lui-même**
-— le watchdog, les workflows, le semis idempotent.
+Le déploiement se fait de deux façons, et tu n'es ni l'une ni l'autre : **par la
+fusion d'une pull request dans `main`**, décidée par un humain, ou **par le
+système lui-même** — le watchdog, les workflows, le semis idempotent.
 
 Donc jamais, quelle que soit la raison :
 
+- **fusionner dans `main`** — la fusion *est* la mise en production
 - `firebase deploy`, sous aucune forme — règles, index, Functions, Hosting
 - une écriture dans le Firestore de production, y compris un semis
 - un appel à l'API OVH qui crée, modifie ou détruit une ressource réelle
