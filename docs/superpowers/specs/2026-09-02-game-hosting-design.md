@@ -1,7 +1,8 @@
 # Beacon — serveur Enshrouded à la demande
 
 Date : 2026-09-02
-Statut : en revue
+Statut : **validé par le commanditaire le 2026-09-03**, après quatre relectures
+d'architecture (DDD et Clean Architecture) dont les corrections sont intégrées.
 
 Vérité produit : [`PRODUCT.md`](../../../PRODUCT.md). Ce document fait autorité
 sur l'architecture ; PRODUCT.md fait autorité sur les utilisateurs, le but et

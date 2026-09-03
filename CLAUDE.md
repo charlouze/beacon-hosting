@@ -41,6 +41,23 @@ propre schéma : ils se régénèrent, ils ne s'éditent pas à la main.
 Les maquettes s'ouvrent depuis `.impeccable/mocks/decision/index.html`. Aucune
 dépendance externe, elles s'ouvrent dans un navigateur telles quelles.
 
+## Où en est le projet
+
+Aucun code. **Le spec est validé** par le commanditaire le 2026-09-03, après
+quatre relectures d'architecture dont les corrections sont intégrées. Le
+lotissement, lui, reste marqué *proposé* : il n'a pas été validé explicitement.
+
+Il ne s'implémente pas d'un bloc. **La prochaine chose à écrire est le plan de la
+tranche 0**, avec `superpowers:writing-plans` — pas du code.
+
+Et la tranche 0 est une sonde : elle répond aux questions ouvertes du §12, dont
+deux peuvent encore déplacer l'architecture. Si `affectedKeys().hasOnly()` ne
+restreint pas champ par champ, `server/current` se scinde en deux documents ; si
+l'API OVH n'accepte pas de métadonnée sur l'IP flottante, toute la
+réconciliation change de mécanisme. **Un spec validé n'est pas un spec vérifié** :
+si la sonde invalide une hypothèse, le spec se corrige avant que le plan de la
+tranche 1 s'écrive.
+
 ## Les skills ne sont pas optionnelles
 
 Les skills ci-dessous ont été importées dans ce dépôt. Leurs descriptions
