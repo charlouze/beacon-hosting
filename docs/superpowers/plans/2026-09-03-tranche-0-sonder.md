@@ -38,16 +38,18 @@ reprendre.
 | Tâche | État |
 |---|---|
 | 1 · Sonde R | **faite**, verdict dans `probe/RESULTS.md` |
-| 2 · Le filet | **à refaire pour Scaleway** — le code OVH est écrit, testé, et à remplacer |
-| 3 · Sonde T | **à moitié faite** : l'API OVH v1 est éliminée par lecture du schéma, la vérification en vivo chez Scaleway reste entière |
+| 2 · Le filet | **faite** — client, inventaire, faucheur sur le SDK Scaleway, 13 cas de test |
+| 3 · Sonde T | **faite** — tag posé, relu et filtrable sur l'instance comme sur l'IP, filtre exact et non par préfixe |
 | 4 · Sonde I | **faite** |
 | 5 · Les artefacts | **faits**, `deploy/` est écrit et validé |
-| 6 · Sonde S | **entière**, bloquée sur le compte Scaleway |
-| 7 · Les trois questions | l'alerte de monitoring et l'identité fédérée sont **répondues** ; le tarif attend le catalogue du projet |
-| 8 · Le spec | le §2, le §4, le §11 et le §12 sont **déjà repris** par la bascule ; il reste à refermer les questions des tâches 3, 6 et 7 |
+| 6 · Sonde S | **faite** — trois sessions, démarrage mesuré, session jouée, sauvegarde restaurée sur une machine neuve |
+| 7 · Les trois questions | **faite** — alerte de monitoring, identité fédérée et tarif du catalogue |
+| 8 · Le spec | **faite** — le §12 est un relevé, il ne reste que deux réponses différées |
 
-La reprise commence par la tâche 2 : sans clé Scaleway ni faucheur, rien
-d'autre ne peut avancer.
+Le §12 du spec est passé de neuf questions ouvertes à deux, et aucune ne bloque
+la tranche 1 : l'egress Object Storage avec le prix du stockage, qui se lit sur
+la facture du mois, et la charge à quatre joueurs, qui affinera le
+dimensionnement sans pouvoir faire choisir moins.
 
 ## Contraintes globales
 
@@ -447,6 +449,13 @@ git commit -m "test(probe): mesure la restriction champ par champ des regles Fir
 
 ### Task 2: Le filet — inventaire, alerte de budget, faucheur manuel
 
+> **Cette tâche est faite, et le code ci-dessous est le brouillon d'avant le
+> SDK.** La sonde parlait à l'API par un `fetch` maison ; elle s'est trompée
+> trois fois sur la forme des requêtes, deux fois après qu'une ressource
+> facturée existe, et elle est passée au SDK officiel `@scaleway/sdk`. **Le code
+> qui fait foi est dans `probe/scaleway/`**, pas ici. Ce qui suit reste pour le
+> raisonnement — pourquoi chaque pièce existe — et ne se recopie pas.
+
 Aucun watchdog n'existe. Ce qui est créé dans les tâches suivantes n'est détruit
 que si quelqu'un le détruit, et une instance oubliée un vendredi soir coûte
 ~3,10 € le temps qu'on s'en aperçoive. Le faucheur passe donc avant le semeur, à
@@ -468,6 +477,7 @@ est que l'enveloppe.
 - Créer : `probe/scaleway/reaper-policy.ts`
 - Test : `probe/scaleway/reaper-policy.spec.ts`
 - Créer : `probe/scaleway/inventory.ts`
+- Créer : `probe/scaleway/inventory-report.ts`
 - Créer : `probe/scaleway/reap.ts`
 - Modifier : `probe/RESULTS.md`
 - Supprimer : `probe/ovh/` — sauf `schema.ts`, dont la mesure a fondé la bascule
@@ -493,9 +503,26 @@ Cette étape se fait à la main dans la console Scaleway, elle ne s'automatise p
 3. Recopier la `Secret Key` et l'`ID du projet` dans `probe/.env`. L'`Access
    Key` ne sert pas : l'API Instance s'authentifie par la seule clé secrète.
 
-Contrairement à OVH, il n'y a pas de droits à cocher route par route : la clé
-hérite des permissions de l'utilisateur. C'est moins fin, et c'est une raison de
-plus pour que le faucheur refuse d'agir sans `--yes`.
+**Une clé ne suffit pas : il faut une politique.** Scaleway ne coche pas les
+droits route par route comme OVH, mais il ne donne pas non plus tout par
+défaut — le principal porteur de la clé doit avoir une *policy* qui lui attache
+un *permission set*, sinon les lectures passent et les écritures rendent
+`403 permissions_denied`.
+
+Pour la sonde, dans *IAM → Policies*, attacher au principal :
+
+| Jeu de permissions | Portée | Pourquoi |
+|---|---|---|
+| `InstancesFullAccess` | le projet | créer et **détruire** serveurs, IP, volumes |
+| `ObjectStorageFullAccess` | le projet | la mesure d'egress de la tâche 6, et la tranche 3 |
+
+`InstancesReadOnly` seul suffit à tout ce que la sonde fait en lecture —
+inventaire, catalogue, faucheur à vide — mais pas à la sonde T.
+
+C'est une bonne nouvelle pour plus tard : la tranche 2 pourra donner à la
+Function une clé qui crée des instances **sans** aucun droit sur le stockage, et
+au compagnon une clé Object Storage **sans** aucun droit de calcul. Le §8 du spec
+parle d'identifiants restreints ; voilà avec quoi les restreindre.
 
 `probe/.env.example` — versionné, sans valeur :
 
@@ -623,7 +650,7 @@ Remplacer les scripts et les dépendances de `probe/package.json` :
     "probe:scw": "vitest run scaleway",
     "scw:products": "tsx scaleway/products.ts",
     "ovh:schema": "tsx ovh/schema.ts",
-    "scw:inventory": "tsx scaleway/inventory.ts",
+    "scw:inventory": "tsx scaleway/inventory-report.ts",
     "scw:reap": "tsx scaleway/reap.ts",
     "scw:tag": "tsx scaleway/tag-probe.ts",
     "scw:session": "tsx scaleway/session-probe.ts"
@@ -768,9 +795,12 @@ survit.
 `probe/scaleway/inventory.ts` :
 
 ```ts
-import { scwConfig, scwFetch, runScript } from './client'
-import type { ProbeInventory, ProbeIp, ProbeServer } from './reaper-policy'
+import { scwConfig, scwFetch } from './client'
+import type { ProbeInventory, ProbeIp, ProbeServer, ProbeVolume } from './reaper-policy'
 
+// Library only, deliberately: `reap.ts` imports this, and a module-level
+// runScript here would run the report every time the reaper starts.
+// The human-facing listing lives in inventory-report.ts.
 export async function readInventory(): Promise<ProbeInventory> {
   const { zone, projectId } = scwConfig()
   const query = `project=${projectId}&per_page=100`
@@ -789,6 +819,13 @@ export async function readInventory(): Promise<ProbeInventory> {
     volumes: Object.values(volumes.volumes),
   }
 }
+```
+
+`probe/scaleway/inventory-report.ts` :
+
+```ts
+import { scwConfig, runScript } from './client'
+import { readInventory } from './inventory'
 
 runScript(async () => {
   const { zone } = scwConfig()
@@ -815,8 +852,13 @@ runScript(async () => {
 })
 ```
 
-`readInventory` est exporté parce que le faucheur le réutilise : deux lectures
-divergentes de « ce qui existe » seraient deux vérités.
+`inventory.ts` est une bibliothèque et rien d'autre. Le faucheur l'importe, et
+un `runScript` au niveau du module y ferait tourner l'inventaire à chaque
+lancement du faucheur — c'est arrivé, et c'est le même piège que celui du
+résolveur d'image. Le listing pour l'humain vit donc dans `inventory-report.ts`.
+
+`readInventory` est partagé parce que deux lectures divergentes de « ce qui
+existe » seraient deux vérités, et que le faucheur détruit sur cette lecture.
 
 - [ ] **Step 8: Lancer l'inventaire et noter l'état initial**
 
@@ -924,6 +966,13 @@ rapport, et une mesure dont on a perdu la commande n'est plus une mesure.
 
 ### Task 3: Sonde T — le tag sur l'IP flottante, puis sur l'instance
 
+> **Cette tâche est faite, et le code ci-dessous est le brouillon d'avant le
+> SDK.** La sonde parlait à l'API par un `fetch` maison ; elle s'est trompée
+> trois fois sur la forme des requêtes, deux fois après qu'une ressource
+> facturée existe, et elle est passée au SDK officiel `@scaleway/sdk`. **Le code
+> qui fait foi est dans `probe/scaleway/`**, pas ici. Ce qui suit reste pour le
+> raisonnement — pourquoi chaque pièce existe — et ne se recopie pas.
+
 Deuxième question qui peut déplacer l'architecture. Toute la réconciliation du
 watchdog repose sur un tag `beacon:{sessionId}` posé sur l'instance **et** sur
 l'IP flottante, et sur la capacité de les lister.
@@ -960,11 +1009,25 @@ plan d'origine allumait une machine pour rien.
   réconciliation de la tranche 1 ; et la réponse sur le gabarit, dont dépend le
   §2 du spec.
 
-- [ ] **Step 1: Lire le catalogue des gabarits — gratuit, un agent peut le lancer**
+- [x] **Step 1: Lire le catalogue des gabarits — gratuit, un agent peut le lancer**
 
-Le §2 du spec retient `DEV1-L` sous réserve que la gamme soit encore
-commandable et que ses 80 Go soient bien locaux. C'est un `GET`, il ne crée
-rien, et il répond aux deux premières questions ouvertes du §12.
+**Fait le 2026-09-03**, et le résultat a corrigé le §2 du spec. Le script reste
+ici parce qu'il se rejoue, et parce que la suite du plan s'en sert.
+
+Ce qu'il a montré, en deux temps. Le catalogue diffère par zone, et `PRO2` —
+que le §2 nommait en repli — n'est commandable dans aucune zone parisienne.
+Puis, moins évident et bien plus utile : **un type listé, tarifé et non obsolète
+peut refuser d'être créé faute de capacité.** Toute la famille `BASIC1` est en
+`shortage`, et `createServer` rend alors un `403 quotas_exceeded` dont le
+libellé oriente vers un quota de compte qui n'existe pas.
+
+`DEV1-L` est donc le défaut : le seul gabarit à 8 Gio de la zone qui soit à la
+fois `available` et livré avec son disque. Pas par préférence — faute
+d'alternative.
+
+C'est aussi ce qui a fait de la zone une décision : `fr-par-1` porte le défaut
+et son repli aux meilleurs prix de la région, ce que personne n'avait vérifié
+avant de la poser dans `.env.example`.
 
 `probe/scaleway/products.ts` :
 
@@ -1008,27 +1071,27 @@ runScript(async () => {
 })
 ```
 
-Run, deux fois :
+Run, une fois par gamme candidate, et sans argument pour voir la zone entière :
 
 ```bash
 npm --prefix probe run scw:products -- DEV1
-npm --prefix probe run scw:products -- PRO2
+npm --prefix probe run scw:products
+SCW_ZONE=fr-par-2 npm --prefix probe run scw:products   # le catalogue change par zone
 ```
 
-Consigner dans `RESULTS.md` : `DEV1-L` figure-t-il dans la réponse — s'il n'y
-est pas, la gamme n'est plus commandable dans cette zone —, son `l_ssd`, son
-prix horaire réel, et les mêmes pour `PRO2-XXS`.
+Consigner dans `RESULTS.md` le gabarit retenu, son disque local, son prix
+horaire réel, et ce que la zone change.
 
 **Si la colonne du disque affiche `block only` pour tout le monde, se méfier
 avant de conclure** : c'est aussi ce qu'affiche un nom de champ erroné. Vérifier
 sur la réponse brute — `curl` sur la même route — que `per_volume_constraint` et
 `l_ssd` existent bien sous ces noms. Un gabarit déclaré sans disque local
-pousserait à tort vers `PRO2-XXS` et ferait ajouter un `volumeId` au §5 pour
-rien.
+pousserait à tort vers un gabarit sans disque et ferait ajouter un `volumeId`
+au §5 pour rien.
 
-**Si `DEV1-L` a disparu ou n'a pas de disque local, le §2 du spec se corrige
-avant la suite**, et le §5 gagne un `volumeId` à réconcilier. Ne pas enchaîner
-sans avoir tranché.
+**Si le gabarit retenu disparaît du catalogue ou perd son disque local, le §2 du
+spec se corrige avant la suite**, et le §5 gagne un `volumeId` à réconcilier. Ne
+pas enchaîner sans avoir tranché.
 
 - [ ] **Step 2: Résoudre l'image, puis écrire la sonde de tag**
 
@@ -1114,7 +1177,7 @@ runScript(async () => {
   }
 
   const typeIndex = process.argv.indexOf('--type')
-  const commercialType = typeIndex === -1 ? 'DEV1-S' : process.argv[typeIndex + 1]
+  const commercialType = typeIndex === -1 ? PROBE_TYPE : process.argv[typeIndex + 1]
 
   const server = await scwFetch<{ server: ProbeServer }>(`/instance/v1/zones/${zone}/servers`, {
     method: 'POST',
@@ -1165,11 +1228,17 @@ changent de mécanisme, et le spec se corrige avant la tranche 1.
 
 - [ ] **Step 4: Éprouver le serveur — geste humain**
 
-Run : `npm --prefix probe run scw:tag -- --with-server --type DEV1-S`
+Run : `npm --prefix probe run scw:tag -- --with-server`
 
-`DEV1-S` parce que le tag ne dépend pas du calibre et que c'est le moins cher.
-Si la gamme a disparu à l'étape 1, utiliser le plus petit gabarit qu'elle a
-listé.
+Le défaut est `DEV1-L`, à 0,04284 €/h. Ce n'est pas le moins cher de la zone —
+c'est le seul à 8 Gio qui soit `available` **et** livré avec son disque, et la
+sonde a appris à ses dépens que le reste ne se crée pas.
+
+Deux gabarits sont tombés avant lui. `DEV1-S` n'existe pas : de la gamme `DEV1`,
+seul le `L` subsiste ici. `BASIC1-X1C-2G`, à 0,0068 €/h, semblait imbattable —
+toute sa famille est en `shortage`, et `createServer` rend alors un
+`403 quotas_exceeded` dont le libellé égare. Les deux auraient échoué **après**
+la création de l'IP facturée ; l'étape 1 les attrape avant.
 
 Mêmes questions que l'étape 3, et une de plus : **une IP détachée reste-t-elle
 listée**, et avec quel `server` ? C'est ce qui rend le repli du faucheur viable,
@@ -1214,7 +1283,7 @@ OVH ayant fondé la bascule. Y ajouter :
 | IP flottante | | | |
 | serveur | | | |
 
-- Gabarits disponibles en `fr-par-1` : `DEV1-L` présent ? disque local ? prix ?
+- Gabarits disponibles en `fr-par-1` : relevé le 2026-09-03, voir plus haut.
 - Une IP détachée reste-t-elle listée, et avec quel `server` ?
 - L'action `terminate` emporte-t-elle les volumes attachés ?
 
@@ -1588,103 +1657,102 @@ changement du `deploy/`, donc son propre commit, avec le motif.
 ```ts
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { scwConfig, scwFetch, runScript } from './client'
-import { PROBE_PREFIX, PROBE_TAG, type ProbeIp, type ProbeServer } from './reaper-policy'
+import { instanceApi, scwConfig, runScript } from './client'
 import { resolveImageId } from './images'
+import { PROBE_PREFIX, PROBE_TAG } from './reaper-policy'
 
 const RENDERER = fileURLToPath(new URL('../../deploy/render-cloud-init.mjs', import.meta.url))
 const COMMERCIAL_TYPE = process.env.SCW_COMMERCIAL_TYPE ?? 'DEV1-L'
-const POLL_INTERVAL_MS = 10_000
-const POLL_TIMEOUT_MS = 10 * 60 * 1000
+const BOOT_TIMEOUT_MS = 10 * 60 * 1000
 
-// The instance is billed from creation, so this loop must always end. A machine
-// that never reaches running is exactly what the watchdog will handle in tranche
-// 1; here the operator is the watchdog, and they need to be told.
-async function waitUntilRunning(zone: string, serverId: string, startedAt: number) {
-  while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-    const { server } = await scwFetch<{ server: ProbeServer }>(
-      `/instance/v1/zones/${zone}/servers/${serverId}`,
-    )
-    console.log(`${Math.round((Date.now() - startedAt) / 1000)}s  ${server.state}`)
-    if (server.state === 'running') return server
-    if (server.state === 'stopped in place') throw new Error(`server ${serverId} failed to boot`)
-  }
-  throw new Error(`server ${serverId} never reached running — destroy it now with scw:reap`)
-}
+const since = (start: number) => `${Math.round((Date.now() - start) / 1000)}s`
 
 runScript(async () => {
   const { zone, projectId } = scwConfig()
+  const api = instanceApi()
   const sessionId = process.argv[2]
   if (!sessionId) throw new Error('usage: scw:session -- <sessionId>')
   if (!process.env.SERVER_PASSWORD) throw new Error('probe/.env is missing SERVER_PASSWORD')
 
-  // Two tags, as §5 of the spec now has it: one to enumerate, one to match.
-  const tags = [PROBE_TAG, `session:${sessionId}`]
+  // Two tags, as §5 of the spec has it: one to enumerate, one to match.
+  const sessionTag = `session:${sessionId}`
+  const tags = [PROBE_TAG, sessionTag]
+  const name = `${PROBE_PREFIX}${sessionId}`
 
-  // The very same renderer the README documents: what boots is what was tested.
+  // Re-runnable by design. A probe that is retried after a boot failure must
+  // retry, not seed: the reaper would otherwise chase resources this run forgot.
+  const known = await api.listServers({ zone, project: projectId, tags: [sessionTag] })
+  if (known.servers.length > 0) {
+    throw new Error(
+      `server ${known.servers[0].id} already carries ${sessionTag} — reap it or use another sessionId`,
+    )
+  }
+
+  // The very same renderer the deploy README documents: what boots is what was
+  // tested locally in task 4.
   const userData = execFileSync('node', [RENDERER], { encoding: 'utf8' })
+  const image = await resolveImageId(zone, COMMERCIAL_TYPE)
 
   const startedAt = Date.now()
-  const { ip } = await scwFetch<{ ip: ProbeIp }>(`/instance/v1/zones/${zone}/ips`, {
-    method: 'POST',
-    body: { project: projectId, type: 'routed_ipv4', tags },
-  })
-  console.log(`reserved ip ${ip.address}`)
 
-  const { server } = await scwFetch<{ server: ProbeServer }>(
-    `/instance/v1/zones/${zone}/servers`,
-    {
-      method: 'POST',
-      body: {
-        project: projectId,
-        name: `${PROBE_PREFIX}${sessionId}`,
-        commercial_type: COMMERCIAL_TYPE,
-        image: await resolveImageId(zone, COMMERCIAL_TYPE),
-        public_ips: [ip.id],
-        tags,
-      },
-    },
+  // The ip first, and attached at creation rather than after: the Function owns
+  // the address before the machine exists, which is what lets §6 update DynHost
+  // from what it knows instead of from what the agent claims.
+  const reusable = await api.listIps({ zone, project: projectId, tags: [sessionTag] })
+  const ip = reusable.ips[0] ?? (await api.createIp({ zone, project: projectId, tags })).ip
+  if (!ip) throw new Error('createIp returned no ip — nothing to attach, nothing to reap')
+  console.log(`${since(startedAt).padEnd(6)} ip ${ip.address}`)
+
+  const { server } = await api.createServer({
+    zone,
+    project: projectId,
+    name,
+    commercialType: COMMERCIAL_TYPE,
+    image,
+    publicIps: [ip.id],
+    tags,
+    protected: false,
+  })
+  if (!server) throw new Error('createServer returned no server — run scw:reap before retrying')
+  console.log(`${since(startedAt).padEnd(6)} server ${server.id} created, ${server.state}`)
+
+  // cloud-init travels as user data, a call of its own, and it must land before
+  // the machine boots — there is no second chance at first boot.
+  await api.setServerUserData({ zone, serverId: server.id, key: 'cloud-init', content: userData })
+  console.log(`${since(startedAt).padEnd(6)} cloud-init posted (${userData.length} bytes)`)
+
+  const running = await api.serverActionAndWait(
+    { zone, serverId: server.id, action: 'poweron' },
+    { timeout: BOOT_TIMEOUT_MS },
   )
-  console.log(`server ${server.id} created at ${new Date(startedAt).toISOString()}`)
+  console.log(`${since(startedAt).padEnd(6)} ${running.state}`)
 
-  // cloud-init travels as user data, which is a separate call at Scaleway, and
-  // the only one that wants text/plain — hence `text` rather than `body`.
-  await scwFetch(`/instance/v1/zones/${zone}/servers/${server.id}/user_data/cloud-init`, {
-    method: 'PATCH',
-    text: userData,
-  })
+  console.log(`
+=== à relever, montre en main ===
+  création → running          ${since(startedAt)}
+  ssh root@${ip.address} 'cloud-init status --wait; docker logs -f enshrouded'
 
-  await scwFetch(`/instance/v1/zones/${zone}/servers/${server.id}/action`, {
-    method: 'POST',
-    body: { action: 'poweron' },
-  })
-  console.log('poweron requested')
+Le compte à rebours du produit continue au-delà de « running » : SteamCMD mange
+les minutes suivantes, et c'est cette durée-là qu'annonce l'interface.
 
-  await waitUntilRunning(zone, server.id, startedAt)
-  console.log(`ip ${ip.address}`)
+détruire :  npm --prefix probe run scw:reap -- --yes`)
 })
 ```
 
-Deux différences avec OVH qui comptent. L'IP est **réservée avant** le serveur et
-lui est passée à la création, au lieu d'être attachée après : une seule fenêtre
-de panne au lieu de deux. Et le `cloud-init` ne voyage pas dans le corps de
-création mais par un appel `user_data` dédié, avant l'allumage — d'où le
-`poweron` explicite, que l'API OVH faisait implicitement.
+Trois choses que le SDK règle et qu'un `fetch` maison ratait. Le `cloud-init`
+part par `setServerUserData`, qui prend une chaîne et pose le bon type de
+contenu — sérialisé en JSON il serait arrivé entre guillemets, retours à la
+ligne échappés, sur une machine qui aurait booté nue sans que rien ne le
+signale. L'attente est `serverActionAndWait` plutôt qu'une boucle de polling
+écrite à la main. Et `image` reçoit l'UUID que `resolveImageId` va chercher, là
+où le label rendait un 400 après création de l'IP.
 
-Le `user_data` part en `text/plain` par le paramètre `text` du client, jamais en
-JSON : sérialisé, le cloud-init arriverait entre guillemets avec ses retours à
-la ligne échappés, et la machine booterait nue sans que rien ne le signale.
-C'est pour ce seul appel que `scwFetch` a ce mode.
-
-Un endroit où l'API peut démentir ce code, et il se corrige ici :
-
-- **`public_ips`** attend une liste d'identifiants. Si la création la refuse,
-  attacher l'IP après coup par
-  `PATCH /instance/v1/zones/{zone}/ips/{ipId}` avec `{ "server": "<serverId>" }`,
-  et le noter dans `RESULTS.md` : la tranche 2 doit savoir si le
-  provisionnement tient en un appel ou en deux, puisque la seconde fenêtre est
-  une panne possible de plus.
+Deux choix de séquence qui viennent du spec, pas du SDK. **L'IP est réservée
+avant le serveur** et lui est passée à la création : la Function possède
+l'adresse avant que la machine existe, ce qui est exactement ce qui permet au §6
+de mettre DynHost à jour depuis ce qu'elle sait plutôt que depuis ce que l'agent
+déclare. Et la sonde **refuse de démarrer si un serveur porte déjà le tag de
+session** : relancée après un échec de boot, elle doit retenter, pas semer.
 
 Le compte à rebours du produit continue au-delà de `running` : c'est SteamCMD qui
 mange les minutes suivantes, et il se mesure à l'étape 4, pas ici.
@@ -1761,7 +1829,8 @@ Jouer vingt minutes. Relever :
 - la latence ressentie et toute saccade ;
 - `docker stats` et `free -m` sur l'instance. Le gabarit retenu ayant 4 vCPU, le
   doute du §2 sur les 2 vCPU ne se pose plus dans les mêmes termes : la question
-  devient **si 2 auraient suffi**, ce qui décide du repli `PRO2-XXS` ;
+  devient **si 2 auraient suffi** — auquel cas `BASIC1-X2C-8G`, à 0,0286 €/h,
+  fait tomber la facture d'un tiers ;
 - la bande passante sortante, qui fonde l'estimation d'egress du §11.
 
 **Et provoquer une vraie sauvegarde**, maintenant qu'un monde existe :
@@ -1887,9 +1956,10 @@ publique.
 
 Croiser avec le catalogue du projet, qui donne le prix réellement appliqué et
 non celui de la page publique — c'est le `hourly_price` que
-`npm --prefix probe run scw:products -- DEV1` imprime déjà à la tâche 3
-étape 1. Relever aussi celui de `PRO2-XXS`, et le prix du volume bloc qu'il
-exigerait : c'est ce qui départage les deux gabarits si `DEV1` a disparu.
+`npm --prefix probe run scw:products` imprime déjà à la tâche 3 étape 1, qui est
+faite : le tarif du catalogue coïncide avec la grille. Reste à relever le prix
+du volume bloc, qui départagerait les gabarits si celui retenu perdait son
+disque.
 
 Si l'écart avec la grille dépasse quelques centimes, le tableau du §11 se
 corrige et le point d'équilibre de 163 h avec lui.
@@ -2012,9 +2082,9 @@ Les deux réponses qui pouvaient déplacer l'architecture sont tombées le
 Ce qui reste ouvert peut encore déplacer le spec, et ce n'est alors pas le §12
 qu'on corrige mais son corps :
 
-- si `DEV1-L` n'est plus commandable ou n'a pas de disque local, le §2 bascule
-  sur `PRO2-XXS`, et le §5 gagne un `volumeId` à écrire, réconcilier et
-  détruire — la table des champs réservés et le flux d'arrêt changent tous deux ;
+- si le gabarit retenu perd son disque local, le §5 gagne un `volumeId` à
+  écrire, réconcilier et détruire — la table des champs réservés et le flux
+  d'arrêt changent tous deux ;
 - si le tag n'est pas rendu ou pas filtrable en vivo chez Scaleway, on est
   revenu au point de départ et le §5 change de mécanisme — rapprochement par
   l'instance d'attachement, ou par la seule présence dans

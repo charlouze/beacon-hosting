@@ -513,6 +513,299 @@ Un seul port UDP à ouvrir, `15637`, pas deux. Et le nom, le nombre de places et
 le mot de passe de session se passent par `SERVER_ROLE_0_*`, jamais par
 `SERVER_PASSWORD` — ce que le `cloud-init` de la tranche 2 devra rendre.
 
+## S · La session réelle
+
+Questions du §12 : port UDP et groupe de sécurité, débit réel de SteamCMD,
+egress Object Storage intra-région, et ce qui reste facturé sur une instance
+éteinte.
+
+Session `s0001` lancée le 2026-09-03 sur `DEV1-L`, `fr-par-1`.
+
+| Mesure | `s0001` | `s0002` |
+|---|---|---|
+| création → `running` | 15 s | 15 s |
+| `cloud-init` : apt, Docker, image amont | 1 min 17 s | **2 min 41 s** |
+| amorçage du conteneur : SteamCMD, préfixe Wine | 1 min 7 s | 39 s |
+| téléchargement du jeu, 8,81 Go installés | 1 min 52 s | **3 min 20 s** |
+| chargement du monde par le serveur | 18 s | 39 s |
+| **création → serveur jouable** | **4 min 49 s** | **7 min 58 s** |
+| `15637/udp` joignable sans configuration | **oui**, voir ci-dessous |
+| RAM et CPU à 4 joueurs | reporté — pas assez de joueurs le soir de la sonde |
+| 2 vCPU auraient-ils suffi | **non**, et la réponse n'a pas eu besoin des quatre joueurs |
+| format d'une archive de backup réelle | `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip`, deux entrées |
+| une sauvegarde se restaure-t-elle sur une machine neuve | **oui**, vérifié |
+| débit Object Storage → instance, même région | |
+| prix du stockage pour 2-3 Go | |
+| egress facturé — à vérifier sur la facture du mois | |
+
+### Où passent les cinq minutes
+
+Première session, instance créée à 20:34:45 UTC, serveur annonçant écouter à
+20:39:34. Toutes les horloges sont en UTC — celle de l'API, celle de l'instance
+(`date -u` et `date` y coïncident) et celle des journaux du conteneur.
+
+```text
+0:00  création de l'instance          20:34:45   (API, creationDate)
+0:15  la machine a booté              20:35:00   (uptime -s)
+1:32  cloud-init terminé              20:36:17   (76,5 s, cloud-init analyze)
+1:41  supervisord démarre             20:36:26
+2:39  le jeu commence à descendre     20:37:24
+4:31  8,81 Go installés               20:39:16
+4:49  état Run, le serveur écoute     20:39:34
+```
+
+Ces instants viennent de la machine, pas de l'opérateur : `docker logs` rejoue
+tout l'historique, et `cloud-init analyze` mesure indépendamment. Le temps mis à
+se connecter en SSH n'entre pas dans le compte.
+
+**Sur cette première session, le pari du spec était tenu — mais pas par le poste
+qu'il désignait.** Il prévoyait
+« environ 4 minutes, dont 2 à 3 pour SteamCMD ». Le téléchargement du jeu n'en
+prend que 1 min 52, et **aucun segment ne domine** : quatre postes de tailles
+comparables, entre 18 s et 1 min 52.
+
+Deux d'entre eux se supprimeraient par une image de machine préparée à
+l'avance — `cloud-init` et l'amorçage du conteneur, soit **2 min 24 à eux
+deux, la moitié de l'attente**. C'est le seul levier sérieux, et il ne porte
+pas là où on l'aurait cherché : optimiser le téléchargement du jeu, poste le
+plus visible, aurait rapporté le moins.
+
+### La durée n'est pas stable, et c'est le résultat le plus important
+
+Deux sessions, même gabarit, même zone, même image, à une heure d'intervalle :
+**4 min 49 s puis 7 min 58 s.** Trois minutes d'écart, soit deux tiers de plus.
+
+L'écart ne vient pas d'un poste : `cloud-init` a doublé (77 s → 161 s) et le
+téléchargement du jeu aussi (112 s → 200 s), tandis que les deux autres segments
+bougeaient dans l'autre sens. Ce profil — tout ce qui touche le réseau ralentit
+d'un facteur deux — désigne la variabilité du lien ou du voisinage sur l'hôte,
+pas un composant fautif.
+
+Le débit du téléchargement le confirme. 8 808 364 250 octets installés en 200 s
+font ~352 Mbit/s, contre ~675 Mbit/s la première fois. Or le gabarit est annoncé
+à 400 Mbit/s : **c'est la première session qui était l'anomalie**, en dépassement
+du nominal, et la seconde qui est au tarif. Attention toutefois, SteamCMD
+rapporte la taille *installée* et transfère du compressé ; ces chiffres majorent
+le débit réseau réel.
+
+**Conséquence pour l'interface, et elle est ferme.** On ne peut pas annoncer
+« prêt vers 20:18 » sur une durée qui varie de 5 à 8 minutes : l'annonce serait
+fausse de trois minutes une fois sur deux, et la contrainte du dossier de
+surface est que l'interface *libère* l'utilisateur — ce qu'une heure démentie ne
+fait pas.
+
+La note « Non tranché » du dossier de surface avait vu juste sans le savoir :
+*« cette ligne doit donner une fourchette ou disparaître »*. La mesure tranche
+pour la fourchette. **Cinq à huit minutes**, et deux mesures ne suffisent pas à
+la resserrer — il en faudra d'autres, que les vraies soirées fourniront.
+
+C'est aussi ce qui change la valeur du levier identifié plus haut : supprimer
+`cloud-init` et l'amorçage du conteneur par une image préparée ne ferait pas que
+raccourcir l'attente, **cela en supprimerait la moitié la plus variable**.
+
+### `terminate` emporte bien le volume, et le faucheur ne doit pas l'attendre
+
+Serveur `running` détruit par l'action `terminate` : l'inventaire revient à zéro
+sur les trois listes, **volume compris**. La question ouverte du §6 est fermée
+dans le bon sens — un serveur en marche meurt d'un seul appel, disque inclus.
+
+Mais l'appel a fait tomber un défaut du faucheur. `serverActionAndWait` interroge
+le serveur jusqu'à un état stable, et `terminate` le supprime : la boucle
+d'attente poursuit une ressource qui n'existe plus, reçoit un `404`, et **lève
+après une destruction réussie**. Sur un seul serveur c'est cosmétique ; sur deux,
+l'exception interrompt la boucle et **le second survit**. C'est exactement la
+panne que ce composant existe pour empêcher.
+
+Corrigé en `serverAction`, sans attente : la disparition se vérifie par
+`scw:inventory`, ce que le plan prescrivait déjà.
+
+### Le serveur brûle 2,6 cœurs **sans personne dessus**
+
+Trois relevés de `docker stats` à quatre secondes d'intervalle, table de session
+vide — le joueur s'était déconnecté :
+
+```text
+260.79%  1.184GiB / 7.75GiB
+262.77%  1.184GiB / 7.75GiB
+260.24%  1.185GiB / 7.75GiB
+load average: 4.28, 3.84, 2.55        sur 4 cœurs
+```
+
+**2,6 cœurs sur 4, à vide.** Enshrouded simule son monde qu'il y ait des joueurs
+ou non, et la couche Wine s'ajoute par-dessus. La charge à quatre joueurs reste à
+mesurer, mais elle ne peut qu'être supérieure.
+
+**Le doute du §2 sur les 2 vCPU est donc tranché, et par la négative :** un
+gabarit à 2 cœurs serait saturé avant le premier joueur. `DEV1-L` n'est plus
+seulement le seul disponible avec son disque, il est le bon calibre. Et le
+gabarit à 2 vCPU un tiers moins cher, qu'on regardait avec envie, n'aurait pas
+tenu — l'économie était illusoire.
+
+La question des quatre joueurs perd donc son enjeu de décision : elle affinera
+le dimensionnement, elle ne peut plus faire choisir moins.
+
+**La RAM, elle, n'est pas concluante.** 1,18 Gio consommés contre les ~4,4 Go que
+le spec annonce à vide — mais le monde tient en 5 Ko de sauvegarde, c'est-à-dire
+qu'il n'existe presque pas. Un monde joué serait plus lourd. 8 Gio reste le bon
+plancher, sans que cette mesure le confirme.
+
+### Le backup à la demande échoue, et il échoue en silence
+
+`supervisorctl start enshrouded-backup`, avec une vraie sauvegarde présente
+cette fois :
+
+```text
+enshrouded-backup zipnote error: Interrupted (aborting)
+enshrouded-backup WARN - Skipping cleanup - BACKUP_MAX_COUNT is not set or is 0
+enshrouded-backup INFO - enshrouded-backup complete
+exited: enshrouded-backup (exit status 0; expected)
+```
+
+`/opt/enshrouded/server/backups` **n'existe pas**, donc `zip` n'écrit nulle part.
+La cause est dans l'amorçage de l'image : `createFolders` ne crée ce répertoire
+que si `BACKUP_CRON` est renseigné. Sans cron, le répertoire n'existe pas, et le
+script de sauvegarde ne le crée pas lui-même.
+
+**Le pire n'est pas l'échec, c'est sa forme.** Le script journalise
+« enshrouded-backup complete » et **sort avec le code 0**. Un compagnon qui
+déclenche la sauvegarde et vérifie le code de retour conclurait qu'elle a
+réussi — et la §8 du spec fait de la perte d'une sauvegarde le seul échec grave
+du système.
+
+**Conséquence pour la tranche 3**, et elle est ferme : le compagnon ne peut pas
+se fier au code de retour de `enshrouded-backup`. Il lui faut soit renseigner
+`BACKUP_CRON` pour que le répertoire existe, soit le créer lui-même, et dans
+tous les cas **vérifier qu'un fichier est apparu** avant de considérer la
+sauvegarde faite. C'est cette vérification qui devient l'une des trois défenses
+de la règle d'or.
+
+Cela corrige aussi la section I plus bas, écrite d'après la lecture du script :
+le déclenchement à la demande fonctionne, mais il ne produit rien tant que le
+répertoire n'existe pas.
+
+**Le répertoire créé à la main, tout fonctionne**, et le format est celui que la
+section I annonçait :
+
+```text
+$ mkdir -p /opt/enshrouded/server/backups && chown 4711:4711 …
+$ supervisorctl start enshrouded-backup
+
+-rw-r--r-- enshrouded enshrouded 31374  2026-09-03_22-08-02-3ad85aea.zip
+
+Archive contains:
+  3ad85aea
+  3ad85aea-index
+Total 2 entries (31168 bytes)
+```
+
+Nom en `AAAA-MM-JJ_HH-MM-SS-<savefile>.zip`, deux entrées exactement — la
+sauvegarde et son index —, et l'entrée porte bien le nom canonique `3ad85aea`
+sans suffixe, `zipnote` ayant fait son travail de renommage. C'est ce que la
+tranche 3 poussera vers Object Storage, et ce qu'elle restaurera.
+
+Le correctif est donc minuscule : **créer le répertoire**, par `BACKUP_CRON` ou à
+la main. C'est le silence de l'échec qui coûtait cher, pas sa cause.
+
+### Une sauvegarde se restaure sur une machine neuve
+
+**Ce n'était pas au programme de la tranche 0**, qui exclut la restauration de
+save — mais elle en excluait la *construction*, pas la *vérification*. Or c'est
+l'hypothèse la plus risquée qui restait : le §8 fait de la perte d'une
+sauvegarde le seul échec grave du système, et le gate de la tranche 3 interdit
+d'y engager un monde auquel on tient avant que ce soit prouvé.
+
+Le protocole, le 2026-09-03 :
+
+1. archive de la session `s0002` rapatriée en local, empreinte relevée ;
+2. instance `s0002` détruite, inventaire à zéro ;
+3. instance `s0003` créée, **monde vierge généré** — `savegame/` était vide, le
+   serveur n'ayant encore rien écrit ;
+4. serveur arrêté, les deux fichiers de l'archive déposés dans `savegame/`,
+   propriétaire remis à `4711:4711`, serveur redémarré.
+
+**Résultat : le monde restauré est le bon.** L'autel de flamme posé pendant la
+session précédente est présent — et un monde généré à neuf ne contient aucune
+structure de joueur. La preuve ne dépend d'aucune interprétation.
+
+Trois observations qui serviront à la tranche 3 :
+
+- **Le serveur ne réécrit pas la sauvegarde qu'on lui pose.** Empreinte
+  identique avant et après chargement, `99a10d12…`.
+- **Le chargement se voit dans les journaux.** La phase `Load` a pris 5,27 s
+  contre 2,16 s pour un monde vierge. C'est un signal exploitable si le
+  compagnon veut vérifier qu'il a restauré et pas régénéré.
+- **Le retour à l'autel n'est pas un défaut de restauration.** Enshrouded fait
+  réapparaître le joueur à son autel de flamme, pas à sa position de
+  déconnexion. Vérifié deux fois. À ne pas lire comme un bug en tranche 3.
+
+**Ce que cela ne prouve pas.** Le monde tient en 31 Ko : la mécanique est
+validée, pas le passage à l'échelle d'un monde joué pendant des mois. Et la
+restauration a eu lieu **après** le démarrage du serveur, alors que le §6 la veut
+avant ; l'ordonnancement reste à la charge du compagnon, et c'est un problème de
+séquence, pas de moteur de jeu.
+
+### La première facture, et ce qu'elle a démenti
+
+Trois lignes au tableau de bord après la soirée : instance **0,13 €**, IP
+**0,05 €**, LocalSSD **0,02 €**.
+
+**Le disque n'est pas compris dans le prix de l'instance.** Les 0,13 € valent
+~3 h à 0,04284 €/h : la ligne d'instance seule fait le tarif catalogue, et
+`LocalSSD` s'ajoute. Le §2 avait d'abord écrit « disque inclus » d'après le champ
+`per_volume_constraint.l_ssd`, qui décrit ce qu'un gabarit **peut porter** et non
+ce qu'on paie. La grille publique le disait pourtant : les prix « excluent le
+stockage et les adresses IPv4 publiques ». Erreur de lecture, corrigée au §2 et
+au §11 — les 80 Go valent ~0,0067 €/h, déduits d'une facture arrondie au centime
+et donc à reprendre sur la facture du mois.
+
+**Et l'heure entamée est due.** La documentation Scaleway est explicite : les
+instances CPU se facturent *per hour of uptime*, avec un **minimum de 60
+minutes**, et **chaque ressource est facturée séparément**. L'IP flottante l'est
+de sa réservation à sa suppression, **même détachée** — ce qui explique le
+0,05 € : les IP de la sonde de tag ont vécu sans instance.
+
+Trois conséquences pour le produit :
+
+- **Une session ratée coûte une heure pleine**, sur les trois lignes à la fois.
+  Le §6 traite « création refusée » comme un incident banal ; il l'est
+  fonctionnellement, il ne l'est pas au budget. Une boucle de tentatives serait
+  chère.
+- **La prolongation d'une heure tombe juste** : le pas du produit coïncide avec
+  l'unité de facturation, ce qui n'était pas voulu mais tombe bien.
+- **Le §11 compte en heures facturées et non jouées.** Une soirée de 4 h plus son
+  démarrage se paie 5 h ; 32 h de jeu font ~40 h facturées.
+
+Cela répond aussi, par la documentation, à la question ouverte sur l'instance
+éteinte : *« any attached storage or flexible IPv4s continue to be billed even
+when powered off »*. Le calcul s'arrête, le disque et l'adresse continuent. Le §3
+tient — il n'existe pas d'état arrêté à coût nul — et par le mécanisme annoncé.
+
+### Le groupe de sécurité ne bloque rien en entrée
+
+Scaleway attache un groupe par défaut à toute instance, là où OVH n'en attachait
+aucun. Relevé sur l'instance de la session :
+
+```text
+=== Default security group ===
+  politique entrante   : accept
+  politique sortante   : accept
+  stateful             : true
+  règles (6) :
+    outbound drop TCP 25   depuis 0.0.0.0/0
+    outbound drop TCP 465  depuis 0.0.0.0/0
+    outbound drop TCP 587  depuis 0.0.0.0/0
+    ... les trois mêmes en IPv6
+```
+
+**La politique entrante est `accept`, et aucune règle ne restreint l'entrée.**
+Les six règles sont des blocages *sortants* sur les ports SMTP — de
+l'anti-spam, sans effet sur un serveur de jeu. `15637/udp` est donc joignable
+sans configuration, et **la tranche 2 n'a ni groupe à créer ni règle à poser**
+au provisionnement.
+
+Le groupe est `stateful` : le trafic de retour est autorisé d'office, ce qui
+compte pour de l'UDP.
+
 ## D · Les trois questions documentaires
 
 | Question du §12 | Réponse | Source |

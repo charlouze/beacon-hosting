@@ -44,7 +44,9 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com` | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. |
 | Conteneur du jeu | `mornedhels/enshrouded-server`, utilisée telle quelle | Gère déjà SteamCMD, Wine, supervisord, l'auto-update du jeu et des backups périodiques avec rotation. La forker nous priverait des mises à jour amont pour un bénéfice nul. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
-| Gabarit d'instance | `DEV1-L` (4 vCPU / 8 Go, 80 Go NVMe locaux) par défaut, repli `PRO2-XXS`, sélecteur réservé à l'admin | Enshrouded idle à ~4,4 Go et n'ajoute que ~100 Mo par joueur. `DEV1-L` lève le doute sur les 2 vCPU au lieu de le reconduire, coûte moins cher que le `b3-8` qu'il remplace, et **inclut son disque** : `PRO2-XXS` demanderait un volume bloc attaché, donc une troisième ressource à créer, réconcilier et détruire — un moyen de plus de laisser filer du budget, dans la partie du système où c'est le plus grave (§3). Son absence de SLA pèse peu sur une machine qui vit quatre heures et que le §6 sait déjà voir refuser. Disponibilité de la gamme à vérifier (§12). |
+| Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter à la fois le gabarit retenu et son repli, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
+| Gabarit d'instance | `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux), **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. C'est aussi le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture a montré et que le catalogue ne dit pas. |
+| Repli de gabarit | **Aucun équivalent, et c'est un risque à surveiller** | À 8 Gio, les seuls types disponibles hors `DEV1-L` sont en stockage bloc : `BASIC2-A4C-8G` à 0,0517 €/h en 4 vCPU, `BASIC2-A2C-8G` à 0,0345 en 2 vCPU. Basculer dessus n'est pas un changement de réglage : **le §5 gagne un `volumeId` à écrire, réconcilier et détruire**, le §6 une ligne de watchdog, et `scaleway-compute` une seconde API — le Block Storage est un produit distinct. Or `DEV1-L` est le dernier calibre survivant d'une gamme ancienne. Sa disparition est le seul événement qui rende ce travail obligatoire ; c'est donc lui qu'il faut surveiller, pas un retour de `BASIC1`. |
 
 ### Fournisseurs écartés, et pourquoi
 
@@ -70,7 +72,7 @@ et les listes se filtrent dessus côté serveur.
 
 *Le prix.* Au 1er octobre 2026, OVH sort l'IPv4 et le stockage local du prix de
 base : le `b3-8` passe de 37 à 45 €/mois, soit ~0,0616 €/h tout compris. Le
-`DEV1-L` retenu est à 0,04284 €/h, disque inclus. L'écart s'est non seulement
+`DEV1-L` retenu est à 0,04284 €/h hors disque. L'écart s'est non seulement
 effacé, il s'est inversé.
 
 Le détail des mesures est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md),
@@ -125,8 +127,21 @@ survit à la nuance, la formulation d'origine non : ce qui porte l'architecture
 n'est pas que l'arrêt coûte le prix plein, c'est qu'il coûte quelque chose sans
 rien rendre.
 
-Le détail — ce qui reste exactement facturé sur une instance éteinte chez
-Scaleway — se mesure en tranche 0 (§12) avant qu'on s'y fie.
+Le détail est documenté par Scaleway : *« any attached storage or flexible IPv4s
+continue to be billed even when powered off »*. Éteindre arrête le calcul et
+**laisse courir le disque et l'adresse**. La conclusion tient donc, et par le
+mécanisme annoncé : l'état « éteint mais conservé » coûte, sans rien rendre.
+
+**Et l'heure entamée est due.** Les instances CPU se facturent à l'heure
+d'*uptime*, minimum 60 minutes, **chaque ressource comptée séparément** —
+l'instance, son disque, son IP. Une session ratée au bout de cinq minutes coûte
+donc une heure pleine sur les trois lignes, et non cinq minutes. C'est une raison
+de plus de détruire vite plutôt que d'attendre : ce qui traîne se paie à l'heure
+ronde.
+
+Toute l'architecture en découle : la machine est strictement jetable, rien de
+précieux n'y réside plus de quelques minutes, et le composant le plus critique
+du système pour le budget est le processus qui garantit la destruction.
 
 Toute l'architecture en découle : la machine est strictement jetable, rien de
 précieux n'y réside plus de quelques minutes, et le composant le plus critique
@@ -866,13 +881,27 @@ cause, en confrontant ce que Scaleway déclare aux intentions de création
 enregistrées. Elle énumère par le tag d'appartenance et apparie par le tag de
 session (§5).
 
-**Elle balaie l'instance et l'IP flottante ; le volume en dépend.** Le gabarit
-retenu porte son disque, et l'action de destruction est censée l'emporter avec
-la machine. Si la sonde établit que non (§12), le volume est une troisième
-ressource facturée que ni cette table ni l'inventaire ne voient — et il faut
-alors une ligne de plus ici. C'est la ressource la plus silencieuse du système :
-elle n'apparaît dans aucune des deux listes que le watchdog consulte
-aujourd'hui.
+**Détruire une instance, c'est deux gestes différents selon son état, et le
+watchdog doit connaître les deux.** Mesuré en tranche 0 :
+
+| État de l'instance | Comment elle meurt | Ce qu'il reste |
+|---|---|---|
+| en marche | action `terminate` | rien, les volumes partent avec |
+| arrêtée, jamais démarrée | `terminate` **est refusé** ; suppression simple | **le volume survit**, détaché et facturé |
+
+C'est le cas dangereux, parce qu'il croise la ligne « `PROVISIONING` depuis plus
+de 15 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
+watchdog la supprime — et abandonne son disque. Le volume ne porte **aucun tag**,
+les étiquettes posées sur l'instance ne descendant pas dessus ; il n'apparaît
+donc ni dans la liste des instances, ni dans celle des IP, et rien ne le
+rattache à une session.
+
+La réconciliation balaie par conséquent **trois** listes et non deux, et la
+destruction d'une instance arrêtée supprime explicitement ses volumes. Un volume
+détaché dont on ne sait pas prouver l'origine est signalé, jamais détruit
+d'office : c'est la seule ressource du système qu'on ne peut pas rattacher, et
+supprimer le disque d'autrui n'est pas une erreur que le watchdog a le droit de
+commettre.
 
 ### Qui surveille le watchdog
 
@@ -1166,35 +1195,44 @@ après fusion, ou à la demande.
 
 | Poste | Mois sans jouer | Mois à 32 h |
 |---|---|---|
-| Instance `DEV1-L` (0,04284 €/h, disque inclus) | 0 € | ~1,37 € |
-| IPv4 flexible (0,005 €/h, détruite avec l'instance) | 0 € | ~0,16 € |
+| Instance `DEV1-L` (0,04284 €/h) | 0 € | ~1,71 € |
+| Ses 80 Go de disque local (~0,0067 €/h) | 0 € | ~0,27 € |
+| IPv4 flexible (0,005 €/h, facturée même détachée) | 0 € | ~0,20 € |
 | Object Storage (saves, 2-3 Go) | ~0,03 € | ~0,03 € |
 | Images Docker (amont + compagnon sur ghcr.io) | 0 € | 0 € |
 | DNS (DynHost) | 0 € | 0 € |
 | Firebase (Hosting, Auth, Firestore, Functions, Scheduler) | 0 € | 0 € |
 | Artifact Registry (images des Functions) | ~0,05 € | ~0,05 € |
-| **Total** | **~0,08 €** | **~1,61 €** |
+| **Total** | **~0,08 €** | **~2,26 €** |
 
-Référence à battre : 7,90 €/mois. Point d'équilibre : environ **163 h** de jeu
-par mois.
+Référence à battre : 7,90 €/mois. Point d'équilibre : environ **143 h
+facturées** par mois.
 
-Deux remarques sur ce tableau. Le gabarit **inclut son disque**, ce qui est
-pourquoi il n'y a pas de ligne de stockage bloc : avec `PRO2-XXS` il y en
-aurait une, et une ressource de plus à détruire (§2). Et le point d'équilibre
-est resté celui de la conception, à deux heures près, alors que le fournisseur
-a changé : `DEV1-L` plus son IP reviennent à ~0,0478 €/h, soit exactement le
-tarif sur lequel le pari initial était bâti. La hausse d'OVH du 1er octobre
-l'aurait, elle, ramené à ~127 h.
+**Facturées, et non jouées** : l'heure entamée est due, chaque ressource ayant
+son propre minimum de 60 minutes. Une soirée de 4 h plus ses cinq minutes de
+démarrage se paie 5 h. Les 32 h de jeu de la colonne ci-dessus valent donc
+**~40 h facturées** sur huit soirées, ce que le total reflète.
 
-Les deux tarifs Scaleway sont relevés le 2026-09-03 sur la grille publique —
-[instances](https://www.scaleway.com/en/pricing/virtual-instances/) et
-[réseau](https://www.scaleway.com/en/pricing/network/) — et non mesurés sur le
-compte : le §12 demande de les recouper avec le catalogue du projet, qui donne
-le prix réellement appliqué. Le coût du stockage objet reste à confirmer.
+Une remarque sur ce tableau. Le disque y a sa ligne parce **qu'aucun disque
+n'est compris dans un prix d'instance** chez Scaleway ; ce qui distingue le
+disque local du volume bloc n'est donc pas le tarif mais le cycle de vie — le
+local naît et meurt avec son instance, le bloc est une ressource indépendante à
+créer, réconcilier et détruire (§2).
 
-Cinq décimales ne font pas une mesure : tant que le catalogue du projet n'a pas
-parlé, ce tableau est une lecture de grille, et le §12 le dit.
+**Le tarif de l'instance est relevé sur le catalogue du projet**, le 2026-09-03,
+donc c'est le prix appliqué et non celui d'une page publique — laquelle vend
+d'ailleurs des gammes qu'aucune zone parisienne ne propose.
 
+**Mais un prix d'instance ne comprend pas son disque**, et le catalogue ne le dit
+pas. La première facture l'a montré : une ligne `LocalSSD` distincte de la ligne
+d'instance. Le champ `per_volume_constraint.l_ssd` du catalogue décrit ce qu'un
+gabarit *peut porter*, et se lit facilement comme « compris » — il ne l'est pas. La grille publique le disait pourtant : les prix « excluent le
+stockage et les adresses IPv4 publiques ».
+
+Les ~0,0067 €/h du disque sont **déduits d'une facture arrondie au centime**, pas
+relevés sur un tarif publié. À reprendre sur la facture du mois, avec l'egress
+objet et le prix du stockage — et avec la ligne IPv4, dont le montant observé
+sur une soirée dépasse ce que 0,005 €/h expliquerait.
 L'UI affiche le coût estimé de la session en cours et le cumul du mois, calculés
 à partir des heures écoulées et du `tariffPerHour` du gabarit lu dans
 `config/settings`. Le cumul se totalise par requête sur `events`, dont le TTL
@@ -1229,6 +1267,12 @@ qu'elles ont changé.
 | Tarif du `b3-8` après le 1er octobre 2026 | 45 €/mois tout compris, ~0,0616 €/h. Sans objet depuis la bascule, mais c'est le second motif du §2. |
 | Cloud Monitoring alerte-t-il sur l'**absence** d'exécution d'un job Scheduler, et à quel coût ? | **Oui**, fenêtre configurable jusqu'à 23,5 h, sans surcoût. **Mais l'alerte exige qu'au moins un point ait déjà été reçu** : elle détecte l'arrêt du watchdog, jamais son absence de départ. Le §6 en fait le seul garde-fou ; la première exécution se vérifie donc à la main, à la pose du job. |
 | Le déploiement Firebase accepte-t-il l'identité fédérée OIDC sans clé entreposée ? | **Oui**, via `google-github-actions/auth` et `GOOGLE_APPLICATION_CREDENTIALS` sur un fichier d'identifiants externes. |
+| Quels gabarits sont commandables, avec quel disque, à quel prix, et **réellement disponibles** ? | Le catalogue seul ne suffit pas : un type peut être listé, tarifé, non obsolète, et refuser d'être créé faute de capacité. `getServerTypesAvailability` le dit — toute la famille `BASIC1` est en `shortage` en `fr-par-1`. **`DEV1-L` est le seul type à 8 Gio à la fois `available` et livré avec son disque**, à 0,04284 €/h. `PRO2` n'existe pas dans la zone. Aucun type de la zone n'est `endOfService`. |
+| `tags` est-il rendu et filtrable en vivo, et avec quelle sémantique ? | **Oui sur l'instance comme sur l'IP flottante**, à la création et à la relecture. **Le filtre est exact, pas par préfixe** : `tags=session:` rend une liste vide là où `tags=session:probe0001` rend la ressource. C'est ce qui rend le tag d'appartenance du §5 nécessaire et non redondant. |
+| La destruction d'une instance emporte-t-elle son volume ? | **Seulement si elle tourne**, et les deux cas sont vérifiés en vivo. `terminate` sur une instance en marche emporte le volume ; il est refusé sur une instance arrêtée, qui meurt par une suppression simple laissant son disque détaché et facturé. Le volume ne porte aucun tag. Voir §6, la réconciliation balaie trois listes. |
+| Scaleway propose-t-il une alerte de budget ? | **Oui**, alerte de consommation posée à 5 €/mois le 2026-09-03, avant toute création facturée. Le garde-fou de dernier recours du §7 existe. |
+| Le groupe de sécurité laisse-t-il passer `15637/udp` sans configuration ? | **Oui.** Scaleway attache un groupe par défaut, mais sa politique entrante est `accept` et ses seules règles bloquent le SMTP **sortant**. Il est `stateful`, donc le retour UDP est autorisé d'office. La tranche 2 n'a ni groupe à créer ni règle à poser. |
+| Que reste-t-il facturé sur une instance éteinte, et à quelle granularité ? | **Le disque et l'IP continuent**, le calcul s'arrête. Et **l'heure entamée est due** : facturation à l'heure d'uptime, minimum 60 minutes, chaque ressource comptée à part. Une session ratée à cinq minutes coûte une heure sur trois lignes. Le §3 tient, et le §11 compte désormais en heures facturées. |
 | Ports UDP du serveur Enshrouded | **Un seul, `15637`.** `15636` n'est jamais lié par l'image. Le spec en supposait deux. |
 | Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
 
@@ -1238,29 +1282,6 @@ Toutes sont nées de la bascule vers Scaleway et n'ont pas d'équivalent dans la
 conception. Aucune ne se devine : la leçon de la question du tag est qu'un
 fournisseur ne fait pas ce qu'on suppose.
 
-- **Que `tags` soit bien rendu et filtrable en vivo**, sur le serveur comme sur
-  l'IP flottante. Et **avec quelle sémantique** : le filtre `tags=` est-il exact
-  ou par préfixe, et que fait-il quand plusieurs tags sont demandés ? Le schéma
-  à deux tags du §5 existe parce qu'on le suppose exact ; s'il accepte les
-  préfixes, le tag d'appartenance devient facultatif. La documentation dit qu'il
-  est rendu et filtrable, elle ne dit pas comment.
-- **La gamme `DEV1` est-elle encore commandable**, `DEV1-L` inclut-il bien 80 Go
-  de NVMe local sans volume attaché, et **à quel prix horaire réel** dans le
-  catalogue du projet ? Si le disque n'est pas inclus, le §2 bascule sur
-  `PRO2-XXS` et le §5 gagne un `volumeId` à écrire, réconcilier et détruire.
-- **La destruction du serveur emporte-t-elle son volume local ?** Question
-  distincte de la précédente, et plus grave : un volume orphelin se facture
-  comme une IP orpheline, et n'apparaît dans aucune des deux listes que le
-  watchdog du §6 consulte. Si la réponse est non, il lui faut une ligne de plus.
-- **Que reste-t-il exactement facturé sur une instance Scaleway éteinte ?** Le
-  §3 pose qu'aucun état arrêté n'est à coût nul ; c'est le détail qui le
-  confirme ou l'infirme, et c'est la prémisse de toute l'architecture.
-- **Le groupe de sécurité Scaleway laisse-t-il passer `15637/udp`** sans
-  configuration, ou faut-il l'ouvrir au provisionnement ? Scaleway en attache un
-  par défaut, là où OVH n'en attachait aucun.
-- **Scaleway propose-t-il une alerte de budget ?** Le §7 en fait le garde-fou
-  humain de dernier recours. S'il n'en propose pas, le §7 doit en nommer un
-  autre.
 - **Le trafic Object Storage vers une instance de la même région est-il
   facturé**, et à quel prix les 2-3 Go de saves ?
 - **Le débit réel de SteamCMD depuis `fr-par`**, qui détermine la durée de
