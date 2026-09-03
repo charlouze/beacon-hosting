@@ -83,6 +83,333 @@ tranche 4.
 `server/current` reste un document unique, dont la propriété des champs est
 portée par `affectedKeys().hasOnly([...])`.
 
+## T · Le tag sur l'instance et sur l'IP flottante
+
+Question du §12 : l'API OVH accepte-t-elle des métadonnées libres sur
+l'instance **et** sur l'IP flottante, et sait-elle les lister ? Toute la
+réconciliation du watchdog en dépend.
+
+**Répondue à moitié, et sans un centime.** Le plan mettait la lecture du schéma
+en premier en pariant qu'elle pouvait trancher sans allumer de machine. Elle
+tranche : le mécanisme 1 est mort, et l'instance facturée que la tâche 3 prévoyait
+pour le vérifier n'a plus lieu d'être.
+
+Commandes, le 2026-09-03, sur le schéma public `https://eu.api.ovh.com/1.0/cloud.json`,
+sans authentification et sans projet :
+
+```bash
+npm --prefix probe run ovh:schema -- floatingip
+npm --prefix probe run ovh:schema -- metadata
+npm --prefix probe run ovh:schema -- monthlybilling   # isole la creation d'instance
+npm --prefix probe run ovh:schema -- openstack
+npm --prefix probe run ovh:schema -- instancegroup
+```
+
+| Ressource | Métadonnée à la création | Rendue par la liste | Filtrable |
+|---|---|---|---|
+| instance, API v1 | **non** | — | — |
+| IP flottante, API v1 | **non** | — | — |
+| instance, OpenStack | non mesuré — demande un projet | | |
+| IP flottante, OpenStack | non mesuré — demande un projet | | |
+
+Ce que disent les modèles, mot pour mot :
+
+- `cloud.ProjectInstanceCreation` : `autobackup`, `availabilityZone`, `flavorId`,
+  `groupId`, `imageId`, `monthlyBilling`, `name`, `networks`, `region`,
+  `sshKeyId`, `userData`, `volumeId`. **Pas de `metadata`.**
+- `cloud.instance.Instance`, en lecture : mêmes champs plus `created`,
+  `ipAddresses`, `status`, `planCode`… **Pas de `metadata`.** Le seul champ
+  libre est `name`.
+- `cloud.project.FloatingIp` : `associatedEntity`, `id`, `ip`, `networkId`,
+  `region`, `status`. **Six champs, aucun libre** — pas même un `name`.
+- `cloud.instance.AssociateFloatingIp` : `floatingIpId`, `gateway`, `ip`. Rien
+  d'autre ne peut être posé à l'attachement.
+- Aucun chemin de l'API ne contient « metadata ». Les seuls modèles qui en
+  portent sont ceux de Kubernetes et `iam.ResourceMetadata`, qui décrit des
+  ressources IAM, pas des instances.
+
+Un `POST` peut toujours accepter en silence un champ que le schéma ignore, et
+c'est l'un des trois résultats que le plan envisageait. Mais cela ne changerait
+rien : **aucun modèle de lecture ne rend de métadonnée**, donc rien de ce qu'on
+poserait ne pourrait être relu, listé ni filtré. Le mécanisme du §5 a besoin de
+retrouver le tag, pas de l'écrire. C'est pour cela que la réponse est « non »
+sans avoir à créer l'instance.
+
+**Deux pistes explorées et écartées :**
+
+- **Les groupes d'instances.** `cloud.instancegroup.InstanceGroup` n'a que
+  `id`, `instance_ids`, `name`, `region`, `type` — et `type` vaut `affinity` ou
+  `anti-affinity`. C'est un mécanisme de placement, il ne contient que des
+  instances, jamais une IP flottante.
+- **Le tag IAM.** `iam.ResourceMetadata` porte bien `tags: map[string]string`,
+  mais il décrit le projet (`cloud.ProjectWithIAM`), pas les ressources qu'il
+  contient.
+
+**Erreur du plan, corrigée ici :** la route d'attachement n'est pas
+`.../instance/{instanceId}/attachFloatingIp` mais
+`.../instance/{instanceId}/associateFloatingIp`. Les routes réelles sont :
+
+```text
+GET    /cloud/project/{sn}/region/{r}/floatingip
+GET    /cloud/project/{sn}/region/{r}/floatingip/{id}
+DELETE /cloud/project/{sn}/region/{r}/floatingip/{id}
+POST   /cloud/project/{sn}/region/{r}/floatingip/{id}/detach
+POST   /cloud/project/{sn}/region/{r}/instance/{id}/associateFloatingIp
+POST   /cloud/project/{sn}/region/{r}/instance/{id}/floatingIp
+```
+
+L'inventaire et le faucheur de la tâche 2 emploient déjà les bonnes.
+
+**Ce qui reste à mesurer, et qui demande un projet Public Cloud :**
+
+- **Le mécanisme 2, OpenStack.** La route existe :
+  `POST /cloud/project/{sn}/user/{userId}/token`, corps
+  `cloud.ProjectUserTokenCreation { password }`, réponse
+  `cloud.authentication.Token { X-Auth-Token, token }`. C'est par là qu'on
+  atteint Nova et Neutron, où les métadonnées sont natives. Non essayé.
+- **Le repli, mécanisme 3.** Sa forme est confirmée par le schéma :
+  `cloud.project.FloatingIp.associatedEntity` porte `{ gatewayId, id, ip, type }`
+  et `type` vaut `dhcp | instance | loadbalancer | routerInterface | unknown`.
+  Une IP attachée se rapproche donc de son instance, et l'instance porte le
+  `name` libre. Reste à observer **ce que devient `associatedEntity` sur une IP
+  détachée** — c'est ce qui décide si une IP orpheline reste rattachable à une
+  session.
+
+**Conséquence pour le spec, écrite le 2026-09-03 avant la décision :** le §5 et
+le §6 ne peuvent pas tenir tels quels. Ils font reposer la réconciliation sur
+une métadonnée `beacon:{sessionId}` posée sur l'instance **et** sur l'IP
+flottante ; l'API v1 ne sait poser ni l'une ni l'autre. Soit l'adapter parle à
+OpenStack — et ce n'est plus un détail d'implémentation mais une dépendance du
+spec —, soit la réconciliation passe par le `name` de l'instance et
+l'attachement de l'IP.
+
+### Ce qui a été décidé, le 2026-09-03
+
+**Ni l'un ni l'autre : le projet a changé d'hébergeur.** OpenStack n'a pas été
+essayé, et ne le sera pas. Le §2 du spec porte la décision et son motif ;
+Scaleway a `tags` en natif sur le serveur **et** sur l'IP flottante, ce que le
+§5 demandait depuis le début.
+
+Les deux mécanismes de repli ci-dessus sont donc caducs. Ils restent écrits
+parce qu'ils disent ce qui a été mesuré, et que la mesure ne se retouche pas —
+mais **ce n'est plus la piste à suivre**. Ce qui reste à faire est la
+vérification en vivo du tag Scaleway, décrite à la tâche 3 du plan de la
+tranche 0, et son résultat s'écrira ci-dessous.
+
+**Mécanisme retenu pour la tranche 1 :** deux tags Scaleway — `beacon` constant
+pour énumérer, `session:{sessionId}` pour apparier. Le tag constant n'est pas
+une redondance : le filtre `tags=` de Scaleway est exact, et la réconciliation
+interroge sur des sessions dont elle ignore l'identifiant. Voir §5 du spec.
+
+### Vérification en vivo chez Scaleway
+
+Ligne de base de l'inventaire, `npm --prefix probe run scw:inventory`, le
+2026-09-03 : **projet vide** — zéro serveur, zéro IP flottante, zéro volume en
+`fr-par-1`. C'est l'état auquel la tranche doit revenir. Le faucheur à vide
+répond `dry run` et ne liste rien.
+
+Alerte de consommation posée à **5 €/mois** dans la console, avant toute
+création facturée. Le plan visait 2 € ; 5 € reste très au-dessus des ~0,20 €
+attendus pour la tranche entière, donc le garde-fou joue son rôle.
+
+| Ressource | Tag à la création | Rendu à la relecture | Filtrable par `tags=` |
+|---|---|---|---|
+| IP flottante | **oui** | **oui** | **oui** |
+| serveur | **oui** | **oui** | **oui** |
+
+Mesuré le 2026-09-03 par `npm --prefix probe run scw:tag`, sur une IP créée puis
+détruite. Les deux tags posés — `beacon-probe` et `session:probe0001` — sont
+rendus tels quels par l'appel de création **et** par la relecture unitaire, et
+chacun retrouve l'IP par `listIps({ tags: [...] })`.
+
+**Le filtre est exact, pas préfixe.** `tags=['session:']` rend une liste vide
+alors que `tags=['session:probe0001']` rend l'IP. C'est la mesure qui justifie
+le schéma à deux tags du §5 : sans un tag constant, le watchdog n'aurait rien à
+demander à l'API pour énumérer des ressources dont il ignore le `sessionId`. La
+correction faite après la relecture était la bonne, et elle n'était pas
+optionnelle.
+
+**Une IP non attachée rend `server: null`.** Le SDK type le champ
+`server?: ServerSummary`, donc *absent* ; l'API rend *nul*. Les deux formes
+existent selon le chemin, et c'est pourquoi la règle du faucheur teste
+`server?.id != null` plutôt que l'une des deux — le test de régression qui garde
+cette forme n'est pas décoratif.
+
+**Le faucheur a été éprouvé en vrai, sur les IP.** Deux IP taguées créées par
+deux passages de la sonde, listées puis détruites par
+`scw:reap -- --yes`, inventaire revenu à zéro. Le filtre par tag ramène bien un
+ensemble et non le dernier créé : les deux apparaissaient dans la même réponse.
+
+**Le quota bloque la création de serveur.** `createServer` rend
+`403 quotas_exceeded` sur un compte créé le jour même, alors que les IP passent.
+La cause probable — un compte non encore validé, sans moyen de paiement
+enregistré — reste à confirmer ; le détail renvoyé par Scaleway est désormais
+affiché par la sonde, qui l'avalait.
+
+#### `terminate` refuse un serveur qui n'a jamais démarré
+
+C'est le trou le plus discret de la journée, et il visait le watchdog.
+
+```text
+PreconditionFailedError: precondition failed: resource_not_usable,
+invalid state 'stopped' for the action 'terminate'
+```
+
+`terminate` prend le serveur **et ses volumes** en un appel, mais l'API le refuse
+sur tout ce qui ne tourne pas. Une machine jamais allumée meurt par
+`deleteServer` — **qui laisse ses disques derrière**, facturés, détachés, et
+absents de la liste des serveurs.
+
+Or c'est exactement le cas que le §6 prévoit déjà : *« `PROVISIONING` depuis plus
+de 15 min → destruction »*. Une instance dont le boot a échoué est `stopped`.
+**Le watchdog de la tranche 1 aurait abandonné un volume de 80 Go à chaque
+provisionnement raté**, sans que rien ne le signale — ni le §5, ni l'inventaire,
+ni l'alerte de budget avant longtemps.
+
+Le faucheur applique désormais les deux chemins, et la politique porte la
+décision plutôt que le script : `DoomedServer.terminable` dit lequel, et
+`volumeIds` liste ce qu'il faudra effacer soi-même. Deux cas de test la
+couvrent. **La tranche 1 doit reprendre cette distinction telle quelle.**
+
+Vérifié de bout en bout le 2026-09-03 : serveur `stopped` supprimé, son volume
+de 80 Go supprimé dans la foulée, inventaire revenu à zéro sur les trois listes.
+
+#### Le disque de `DEV1-L` est une ressource, pas une abstraction
+
+Créé avec le serveur, listé à part sous le nom `Ubuntu 24.04 Noble Numbat`,
+80 Go, attaché. **Il ne porte aucun tag** — ceux posés sur le serveur ne
+descendent pas sur son volume. C'est ce qui justifie la règle du faucheur : un
+volume détaché est signalé, jamais détruit d'autorité, parce que rien ne permet
+de prouver qu'il est à nous.
+
+#### Le catalogue des gabarits, `fr-par-1`
+
+`npm --prefix probe run scw:products` — lecture seule, aucune ressource créée.
+Cinquante types commercialisés dans la zone. Ceux à 8 Gio de RAM :
+
+| Gabarit | vCPU | Stockage local | €/h |
+|---|---|---|---|
+| `BASIC1-X2C-8G` | 2 | 40 Go | **0,0286** |
+| `BASIC2-A2C-8G` | 2 | aucun, volume bloc | 0,0345 |
+| `BASIC1-X4C-8G` | 4 | **100 Go** | **0,0428** |
+| `DEV1-L` | 4 | 80 Go | 0,04284 |
+| `BASIC2-A4C-8G` | 4 | aucun, volume bloc | 0,0517 |
+| `BASIC3-X2C-8G` | 2 | aucun, volume bloc | 0,059225 |
+| `BASIC3-X4C-8G` | 4 | aucun, volume bloc | 0,079001 |
+| `COMPUTE3-X4C-8G` | 4 | aucun, volume bloc | 0,117 |
+
+**`DEV1-L` est confirmé** : commandable, 4 vCPU, 8 Gio, jusqu'à 80 Go de volume
+local inclus, 0,04284 €/h — exactement ce que le §2 supposait, et le tarif
+relevé sur la grille publique est le tarif appliqué au projet.
+
+**`PRO2` n'existe pas en `fr-par-1`.** Le repli nommé au §2 n'est pas
+commandable dans la zone où l'on déploie. Le catalogue ne le rend pour aucune
+recherche.
+
+**`BASIC1-X4C-8G` a semblé meilleur, et ne l'est pas.** Mêmes 4 vCPU et 8 Gio
+que `DEV1-L`, 100 Go de local au lieu de 80, à quatre cent-millièmes d'euro de
+l'heure près. Il est devenu le défaut du §2 pendant une heure — puis la
+création a rendu `403`, et la raison est plus bas.
+
+> **Ce relevé a été fait avec l'appel REST `/products/servers`, et il est
+> incomplet.** Le `listServersTypes` du SDK rend 100 types là où celui-ci en
+> rendait 50, dont `POP2`, `PLAY2`, `MEMORY3` et `GP1`. L'affirmation « `PLAY2`
+> et `STANDARD2` ne sont commandables dans aucune zone parisienne » était donc
+> fausse : elle mesurait le silence d'un endpoint, pas l'absence d'une gamme.
+> Seul `PRO2` reste absent, confirmé par les deux appels. Le tableau ci-dessous
+> le remplace.
+
+`DEV1-S` **n'existe pas** : de la gamme `DEV1`, seul le `L` subsiste ici. Le
+plan de la tâche 3 le prenait comme gabarit jetable pour la sonde de tag ;
+l'appel aurait rendu un 400 après la création de l'IP facturée. Corrigé en
+`BASIC1-X1C-2G`, **0,0068 €/h**, le moins cher de la zone.
+
+#### Le catalogue dépend de la zone, et contredit la grille publique
+
+| | `fr-par-1` | `fr-par-2` | `fr-par-3` |
+|---|---|---|---|
+| `DEV1-L` | 0,04284 | absent | absent |
+| `BASIC1-X4C-8G` | 0,0428 | 0,0428 | 0,0642 |
+| gammes propres | `BASIC1/2/3`, `COMPUTE3`, `DEV1` | idem sans `DEV1` | `BASIC1`, `POP2`, `GP1` |
+
+Deux constats qui valent au-delà du choix de gabarit :
+
+- **`PRO2`, `PLAY2` et `STANDARD2` sont vendus sur la grille publique et
+  commandables dans aucune zone parisienne.** Le §2 nommait `PRO2-XXS` en repli ;
+  il n'aurait pas pu être commandé.
+- **`BASIC1` est commandable et facturé sans figurer à la grille publique.** La
+  page tarifaire et le catalogue du projet se contredisent dans les deux sens ;
+  c'est le catalogue qui facture, donc c'est lui qui fait foi. Ni `BASIC1` ni
+  `DEV1` ne figure parmi les
+  [offres historiques](https://raw.githubusercontent.com/scaleway/docs-content/main/pages/instances/reference-content/historical-offers.mdx)
+  de Scaleway, qui ne liste que `COPARM1`, `ENT1`, `VC1`, `X64` et `START1`.
+
+**La zone est donc une décision, et elle ne l'était pas.** `fr-par-1` était une
+valeur par défaut posée dans `.env.example` sans vérification. Le §2 l'acte
+désormais.
+
+#### Un catalogue ne dit pas ce qu'on peut créer
+
+C'est la leçon de la séance, et elle a coûté une décision fausse. Un type peut
+être **listé, tarifé, non obsolète — et refuser d'être créé faute de capacité
+dans la zone**. `createServer` rend alors `403 quotas_exceeded`, dont le libellé
+oriente vers un quota de compte qui n'a rien à voir.
+
+`getServerTypesAvailability` est ce qui le dit, et rend `available`, `scarce`
+ou `shortage`. Relevé le 2026-09-03, à 8 Gio :
+
+| Gabarit | vCPU | Disque | €/h | Disponibilité |
+|---|---|---|---|---|
+| `BASIC1-X2C-8G` | 2 | 40 Go locaux | 0,0286 | **shortage** |
+| `BASIC2-A2C-8G` | 2 | bloc | 0,0345 | available |
+| `BASIC1-X4C-8G` | 4 | 100 Go locaux | 0,0428 | **shortage** |
+| **`DEV1-L`** | **4** | **80 Go locaux** | **0,04284** | **available** |
+| `BASIC2-A4C-8G` | 4 | bloc | 0,0517 | available |
+| `PLAY2-MICRO` | 4 | bloc | 0,05508 | scarce |
+| `BASIC3-X4C-8G` | 4 | bloc | 0,079001 | available |
+| `POP2-HC-4C-8G` | 4 | bloc | 0,1064 | available |
+
+**Toute la famille `BASIC1` est en pénurie**, et c'est la seule autre à porter du
+stockage local. `DEV1-L` est donc le seul gabarit à 8 Gio qui soit à la fois
+disponible et livré avec son disque — il est le défaut du §2 non par préférence
+mais faute d'alternative.
+
+**`BASIC1` ne doit pas être traité comme une option en attente.** Une gamme
+entière en pénurie sur tous ses calibres, et absente de la grille tarifaire
+publique, est une gamme retirée dont les drapeaux n'ont pas suivi : aucun de ses
+types n'est marqué `endOfService`, et elle n'apparaît pas non plus dans les
+offres historiques de Scaleway. Les deux champs disent « vivante », la capacité
+dit le contraire, et c'est la capacité qui décide. Ne pas la reconsidérer.
+
+**Ce qui laisse le défaut du §2 sans équivalent, et c'est le vrai risque.**
+`DEV1-L` appartient lui aussi à une gamme ancienne, dont il est le seul calibre
+survivant en `fr-par-1` — `DEV1-S`, `DEV1-M` et `DEV1-XL` ont déjà disparu du
+catalogue. S'il suit `BASIC1`, il n'y a pas de repli à disque local : **tout
+substitut à 8 Gio est en stockage bloc.**
+
+Le travail que cela déclencherait est connu et chiffré :
+
+- le §5 gagne un `volumeId` à écrire, réconcilier et détruire ;
+- le §6 gagne une ligne de watchdog ;
+- `scaleway-compute` doit parler une **seconde API**, le Block Storage étant un
+  produit distinct — les types de volumes de l'API Instance en `fr-par-1` sont
+  `l_ssd` et `scratch`, pas de bloc.
+
+Ce n'est donc pas « non, jamais » mais « pas maintenant, et voici le
+déclencheur ». La tranche 1 gagnerait à surveiller la disponibilité de `DEV1-L`,
+puisque sa disparition est le seul événement qui rende ce travail obligatoire.
+
+**La disponibilité est une donnée d'exécution, pas de conception.** Le §6 traite
+« création refusée » comme un incident banal ; il l'est, mais la tranche 2
+gagnerait à lire `getServerTypesAvailability` avant de créer, et à dire à
+l'utilisateur « pas de capacité ce soir » plutôt que « échec ».
+
+`BASIC1-X2C-8G`, à 0,0286 €/h avec 2 vCPU et 40 Go de local, aurait été le tiers
+moins cher. Il ne l'est pas : toute sa famille est en pénurie, voir plus bas.
+
+Le prix de l'IPv4 n'est pas dans ce catalogue : il se lit sur la grille réseau,
+0,005 €/h, et reste à recouper sur une facture.
+
 ## I · Le conteneur amont `mornedhels/enshrouded-server`
 
 Questions du §12 : ports UDP, emplacement et format des backups, variables

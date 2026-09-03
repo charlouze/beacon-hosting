@@ -11,7 +11,7 @@ App : `beacon.charlouze.com` · serveurs de jeu : `<jeu>.beacon.charlouze.com`
 ## Stack
 
 Application **Angular** sur monorepo **Nx**, plan de contrôle **Firebase**,
-serveur de jeu chez **OVH**. Choisie par le commanditaire, pas déléguée.
+serveur de jeu chez **Scaleway**. Choisie par le commanditaire, pas déléguée.
 
 C'est tout ce que ce fichier en dit, et c'est voulu. **Toute autre brique —
 bibliothèque, outillage, runner de tests, générateur, service — s'écrit dans
@@ -43,20 +43,19 @@ dépendance externe, elles s'ouvrent dans un navigateur telles quelles.
 
 ## Où en est le projet
 
-Aucun code. **Le spec est validé** par le commanditaire le 2026-09-03, après
-quatre relectures d'architecture dont les corrections sont intégrées. Le
-lotissement, lui, reste marqué *proposé* : il n'a pas été validé explicitement.
+**La tranche 0 est en cours** : c'est une sonde, elle répond aux questions
+ouvertes du §12 du spec par la mesure. Son plan et son état sont dans
+`docs/superpowers/plans/2026-09-03-tranche-0-sonder.md`, ses mesures dans
+`probe/RESULTS.md`. Le lotissement reste marqué *proposé* : il n'a pas été
+validé explicitement.
 
-Il ne s'implémente pas d'un bloc. **La prochaine chose à écrire est le plan de la
-tranche 0**, avec `superpowers:writing-plans` — pas du code.
-
-Et la tranche 0 est une sonde : elle répond aux questions ouvertes du §12, dont
-deux peuvent encore déplacer l'architecture. Si `affectedKeys().hasOnly()` ne
-restreint pas champ par champ, `server/current` se scinde en deux documents ; si
-l'API OVH n'accepte pas de métadonnée sur l'IP flottante, toute la
-réconciliation change de mécanisme. **Un spec validé n'est pas un spec vérifié** :
-si la sonde invalide une hypothèse, le spec se corrige avant que le plan de la
-tranche 1 s'écrive.
+**Un spec validé n'est pas un spec vérifié.** Le spec l'a été le 2026-09-03, et
+la sonde a fait tomber une hypothèse le jour même : l'API OVH ne portait de tag
+ni sur l'instance ni sur l'IP flottante, ce dont dépendait toute la
+réconciliation. Le projet a changé d'hébergeur avant d'écrire une ligne
+d'adapter. C'est la règle à retenir plus que l'anecdote — si la sonde invalide
+une hypothèse, le spec se corrige **avant** que le plan de la tranche suivante
+s'écrive.
 
 ## Les skills ne sont pas optionnelles
 
@@ -126,7 +125,7 @@ Types : `feat` `fix` `refactor` `perf` `test` `docs` `build` `ci` `chore`, plus
 `type!:` ou un pied `BREAKING CHANGE:` quand un contrat casse.
 
 **La portée est le projet Nx touché** — `session`, `session-record`, `saves`,
-`ovh-compute`, `web`, `functions`, `rules`… Pour ce qui n'est pas du code, elle
+`scaleway-compute`, `web`, `functions`, `rules`… Pour ce qui n'est pas du code, elle
 nomme l'artefact : `spec`, `product`, `plan`, `design`, `agent`. Un commit qui
 peine à tenir dans une seule portée en fait probablement deux.
 
@@ -164,8 +163,9 @@ fichiers, extrait de terminal, format de message.
 
 ## La production, tu n'y touches pas
 
-Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte OVH**. Pas de
-préproduction : la base que tu déploierais est celle où les joueurs jouent, et
+Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte d'hébergement** —
+Scaleway pour le calcul et le stockage, OVH pour le domaine et son DynHost. Pas
+de préproduction : la base que tu déploierais est celle où les joueurs jouent, et
 les ressources que tu créerais sont facturées à quelqu'un.
 
 Le déploiement se fait de deux façons, et tu n'es ni l'une ni l'autre : **par la
@@ -177,7 +177,10 @@ Donc jamais, quelle que soit la raison :
 - **fusionner dans `main`** — la fusion *est* la mise en production
 - `firebase deploy`, sous aucune forme — règles, index, Functions, Hosting
 - une écriture dans le Firestore de production, y compris un semis
-- un appel à l'API OVH qui crée, modifie ou détruit une ressource réelle
+- **un appel à l'API d'un fournisseur qui crée, modifie ou détruit une ressource
+  facturée** — Scaleway, OVH, ou celui qui les remplacera. La règle porte sur le
+  geste, jamais sur le nom : ce qui l'a déclenchée une fois, c'est qu'on change
+  d'hébergeur sans y penser
 - le déclenchement d'un workflow de déploiement, ou la pose d'un tag git qui
   publie une image
 

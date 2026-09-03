@@ -53,8 +53,11 @@ Elles valent pour toute la suite du projet, pas seulement pour cet écran.
 1. **Rien de sombre.** Aucune surface sombre, nulle part.
 2. **Jamais une console cloud** : ni pastille de statut, ni identifiant
    d'instance mis en avant, ni jargon d'infrastructure.
-3. **Pendant les quatre minutes de démarrage, l'interface libère** : elle annonce
-   l'heure de disponibilité et rend l'utilisateur à sa soirée.
+3. **Pendant l'attente de démarrage, l'interface libère** : elle annonce
+   l'heure de disponibilité et rend l'utilisateur à sa soirée. La durée de cette
+   attente n'est pas mesurée — l'estimation de quatre minutes précède le
+   changement d'hébergeur du 2026-09-03 et n'a jamais rencontré une vraie
+   session. La contrainte porte sur le comportement, pas sur le nombre.
 4. **Le coût ne se compare jamais** au tarif du serveur dédié précédent, et
    aucune économie réalisée n'est affichée.
 5. **L'état mène**, les actions disponibles découlent de l'état lu.

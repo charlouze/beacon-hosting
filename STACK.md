@@ -24,19 +24,25 @@ déployer les règles touche directement la base que les joueurs utilisent — e
 c'est la raison pour laquelle leurs tests de refus sont une barrière de
 déploiement.
 
-**Serveur de jeu** — OVH, région GRA (Gravelines) : Public Cloud pour le calcul
-(`b3-8` par défaut, sélecteur réservé à l'admin), Object Storage pour les
-sauvegardes, DynHost pour le DNS. Trois services, trois protocoles, trois jeux
-d'identifiants — donc trois adapters, `ovh-compute`, `ovh-storage`, `ovh-dns`.
+**Serveur de jeu** — **Scaleway**, région `fr-par` (Paris) : Instances pour le
+calcul (`DEV1-L` par défaut, repli `PRO2-XXS`, sélecteur réservé à l'admin),
+Object Storage pour les sauvegardes. Le **DNS reste chez OVH**, en DynHost : le
+domaine y est, et un enregistrement A pointe où l'on veut.
+
+Trois services, trois protocoles, trois jeux d'identifiants — donc trois
+adapters, `scaleway-compute`, `scaleway-storage`, `ovh-dns`. Ils sont nommés par
+port et non par fournisseur, et la bascule du 2026-09-03 l'a démontré : le
+calcul a changé d'hébergeur, le stockage l'a suivi pour une raison qui lui est
+propre, le DNS n'a pas bougé.
 
 L'arborescence du monorepo et le rôle de chaque `libs/*` sont au §4 du spec.
 
 ## Tests
 
 **Vitest** pour tout l'unitaire. Le gros de l'effort porte sur `libs/session`,
-en tests purs avec un `Clock` bouchonné : ils n'instancient ni Firestore ni OVH,
-et le jour où l'un d'eux en a besoin, c'est le noyau de décision qui a laissé
-fuir une dépendance.
+en tests purs avec un `Clock` bouchonné : ils n'instancient ni Firestore ni l'API
+d'un hébergeur, et le jour où l'un d'eux en a besoin, c'est le noyau de décision
+qui a laissé fuir une dépendance.
 
 **Playwright** pour le bout en bout de `apps/web`.
 
@@ -47,8 +53,8 @@ Deux familles échappent à ces deux-là, et le spec les pose nommément au §9 
 - le **test de fumée `docker-compose`** est en shell, dans GitHub Actions. C'est
   le seul endroit du système où un bug détruit des données irremplaçables.
 
-Les tests de contrat de l'adapter OVH se lancent à la demande contre le compte
-réel, jamais en intégration continue — voir les identifiants, plus bas.
+Les tests de contrat de l'adapter Scaleway se lancent à la demande contre le
+compte réel, jamais en intégration continue — voir les identifiants, plus bas.
 
 ## Conteneurs
 
@@ -66,11 +72,16 @@ testée. Changer de version est un commit, pas un effet de bord.
 
 ## Identifiants
 
-**Les identifiants OVH n'entrent pas dans GitHub.** Ils vivent dans Secret
+**Aucun identifiant d'hébergeur n'entre dans GitHub** — ni la clé secrète
+Scaleway, ni les clés S3 du bucket, ni le couple DynHost. Ils vivent dans Secret
 Manager ; les tests de contrat contre le compte réel se lancent depuis la
 machine du développeur, jamais depuis un runner. Une copie dans les secrets
 GitHub en ferait un second dépôt à protéger, avec un modèle de menace différent
 et une surface plus large.
+
+Le calcul n'en demande qu'un seul : l'API Scaleway s'authentifie par un en-tête
+`X-Auth-Token`, là où l'API OVH réclamait trois valeurs et une signature à
+recalculer à chaque appel.
 
 Le déploiement Firebase, lui, s'authentifie par **identité fédérée GitHub
 (OIDC)** vers un compte de service dédié — aucune clé de longue durée
@@ -78,9 +89,13 @@ entreposée.
 
 ## Ce qui a été écarté, et ce qui reste en repli
 
-**Scaleway** est le repli naturel si l'API OpenStack d'OVH s'avère pénible. Il
-ne concerne que le **calcul** : Object Storage et DynHost ne bougent pas. Coût
-de l'échange : ~0,082 €/h contre ~0,047 €/h, plus une IPv4 facturée à part.
+**OVH** a été le choix initial, écarté le 2026-09-03 pour le calcul et le
+stockage. Son API v1 ne porte de tag ni sur l'instance ni sur l'IP flottante et
+n'en rend aucun en lecture, alors que toute la réconciliation du watchdog en
+dépend ; il aurait fallu passer à OpenStack, donc à une seconde API. Et sa
+hausse du 1er octobre 2026 a effacé l'écart de prix qui justifiait le choix.
+Le domaine et son DynHost y restent. Le détail des mesures est dans
+`probe/RESULTS.md`, section T.
 
 **GCP** est écarté pour le serveur de jeu : il facture l'egress, et Enshrouded
 sort ~14 Go par session de 4 h à quatre joueurs. Cela reviendrait plus cher que
