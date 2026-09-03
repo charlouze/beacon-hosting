@@ -45,8 +45,8 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Conteneur du jeu | `mornedhels/enshrouded-server`, utilisée telle quelle | Gère déjà SteamCMD, Wine, supervisord, l'auto-update du jeu et des backups périodiques avec rotation. La forker nous priverait des mises à jour amont pour un bénéfice nul. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
 | Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter à la fois le gabarit retenu et son repli, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
-| Gabarit d'instance | `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux), **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. C'est aussi le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture a montré et que le catalogue ne dit pas. |
-| Repli de gabarit | **Aucun équivalent, et c'est un risque à surveiller** | À 8 Gio, les seuls types disponibles hors `DEV1-L` sont en stockage bloc : `BASIC2-A4C-8G` à 0,0517 €/h en 4 vCPU, `BASIC2-A2C-8G` à 0,0345 en 2 vCPU. Basculer dessus n'est pas un changement de réglage : **le §5 gagne un `volumeId` à écrire, réconcilier et détruire**, le §6 une ligne de watchdog, et `scaleway-compute` une seconde API — le Block Storage est un produit distinct. Or `DEV1-L` est le dernier calibre survivant d'une gamme ancienne. Sa disparition est le seul événement qui rende ce travail obligatoire ; c'est donc lui qu'il faut surveiller, pas un retour de `BASIC1`. |
+| Gabarit d'instance | **Libre**, sélecteur réservé à l'admin. `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux) en v1, **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. `DEV1-L` est aussi, au 2026-09-03, le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture réelle a montré et que le catalogue ne dit pas. |
+| Modes de stockage | **Les deux**, disque local et volume bloc | Le gabarit ne serait pas vraiment libre si le système n'acceptait qu'une famille : à 8 Gio, tout calibre autre que `DEV1-L` demande un volume bloc attaché. La différence n'est d'ailleurs pas tarifaire — **aucun disque n'est compris dans un prix d'instance chez Scaleway**, local ou bloc — mais structurelle : un volume local naît et meurt avec son instance, un volume bloc est une ressource indépendante à créer, réconcilier et détruire. Le coût est contenu par le §4 : `ServerHost` ouvre et ferme *un serveur*, pas des ressources, et la fermeture se dit par le tag. **La v1 n'implémente que le disque local.** |
 
 ### Fournisseurs écartés, et pourquoi
 
@@ -72,7 +72,7 @@ et les listes se filtrent dessus côté serveur.
 
 *Le prix.* Au 1er octobre 2026, OVH sort l'IPv4 et le stockage local du prix de
 base : le `b3-8` passe de 37 à 45 €/mois, soit ~0,0616 €/h tout compris. Le
-`DEV1-L` retenu est à 0,04284 €/h hors disque. L'écart s'est non seulement
+`DEV1-L` retenu revient à ~0,0495 €/h, disque compris. L'écart s'est non seulement
 effacé, il s'est inversé.
 
 Le détail des mesures est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md),
@@ -138,10 +138,6 @@ l'instance, son disque, son IP. Une session ratée au bout de cinq minutes coût
 donc une heure pleine sur les trois lignes, et non cinq minutes. C'est une raison
 de plus de détruire vite plutôt que d'attendre : ce qui traîne se paie à l'heure
 ronde.
-
-Toute l'architecture en découle : la machine est strictement jetable, rien de
-précieux n'y réside plus de quelques minutes, et le composant le plus critique
-du système pour le budget est le processus qui garantit la destruction.
 
 Toute l'architecture en découle : la machine est strictement jetable, rien de
 précieux n'y réside plus de quelques minutes, et le composant le plus critique
@@ -349,13 +345,37 @@ l'implémente :
 
 | Port | Déclaré dans | Rôle |
 |---|---|---|
-| `ServerHost` | `session` | créer, détruire, décrire une instance et son IP |
+| `ServerHost` | `session` | ouvrir, fermer et décrire **un serveur de jeu**, désigné par le tag de sa session |
 | `DnsUpdater` | `session` | pointer un enregistrement A vers une IP |
 | `Clock` | `session` | fournir l'instant courant |
 | `SaveStore` | `session`, module `saves` | lister, lire, écrire les sauvegardes |
 
 `Clock` est un port parce que tout le système tourne autour d'échéances :
 sans lui, tester la fenêtre de prolongation demanderait d'attendre 3 h 30.
+
+**`ServerHost` ouvre et ferme un serveur, pas des ressources.** C'est ce qui
+laisse le gabarit libre. Selon le calibre choisi, ouvrir un serveur crée une
+instance et une IP, ou une instance, une IP **et un volume** ; `session` n'en
+sait rien et n'a pas à le savoir. Le port parle d'un serveur de jeu, l'adapter
+sait combien d'objets cela représente chez le fournisseur.
+
+**Fermer se dit par le tag, jamais par une liste.** `ServerHost` détruit tout ce
+qui porte `session:{sessionId}`, et c'est l'adapter qui sait descendre aux
+dépendances muettes — un volume Scaleway ne porte aucune étiquette, il se
+retrouve par l'instance à laquelle il est attaché, et seulement si l'instance
+existe encore.
+
+La différence n'est pas cosmétique. Si la fermeture consommait la liste des
+identifiants enregistrés au §5, alors une panne entre la création d'une
+ressource et son enregistrement laisserait cette ressource introuvable et
+facturée. En interrogeant le fournisseur par le tag, **la destruction ne dépend
+d'aucun enregistrement** : ce que le §5 note sert à décider *s'il faut*
+détruire, jamais à savoir *quoi* détruire.
+
+C'est cette séparation qui rend le gabarit configurable sans toucher au domaine.
+Ajouter demain un calibre à stockage bloc coûte une branche dans
+`scaleway-compute` et rien ailleurs — ni champ dans `server/current`, ni ligne
+dans le watchdog, ni cas dans `libs/session`.
 
 Les trois adapters sont les couches anticorruption vers les fournisseurs : le
 modèle Scaleway, le format S3 et le protocole DynHost s'arrêtent à leur
@@ -794,7 +814,28 @@ jamais bloqué ».
    configuration dans les variables d'environnement, et le compagnon, qui
    restaure la save depuis Object Storage **avant** que le serveur démarre, puis
    synchronise vers le bucket les backups produits par l'image amont.
-7. L'agent appelle `agentReport({phase: 'ready', ip})`. La Function met à jour
+7. **L'agent sait que le serveur est prêt en l'interrogeant en A2S** sur le port
+   de requête, toutes les 30 s pendant le démarrage. C'est le protocole que le
+   client d'un joueur emploie : il teste ce qui compte — « quelqu'un peut-il se
+   connecter » — et non un intermédiaire comme la présence du processus ou
+   l'ouverture du port. La bibliothèque est déjà installée par le conteneur
+   amont, qui s'en sert pour compter les joueurs avant une mise à jour.
+
+   **Prêt veut dire « le serveur répond *et* c'est le bon monde ».** Le serveur
+   de jeu ne démarre qu'une fois la sauvegarde restaurée (étape 6), et c'est une
+   protection avant d'être une commodité : un serveur qui répondrait avant la
+   restauration laisserait quelqu'un se connecter, jouer dans un monde vierge,
+   et **cette partie-là serait sauvegardée par-dessus la vraie**. Le §8 fait de
+   la perte d'une sauvegarde le seul échec grave du système ; c'est ici qu'elle
+   se produirait.
+
+   L'ordre se tient donc dans le `docker-compose`, pas dans une convention : le
+   conteneur de jeu attend que le compagnon ait fini sa restauration. Tant qu'il
+   ne démarre pas, aucun client ne peut se connecter, et la fenêtre n'existe
+   pas. C'est le travail de la tranche 3, et le `deploy/docker-compose.yml`
+   d'aujourd'hui ne le fait pas — il n'a pas encore de compagnon à attendre.
+
+   L'agent appelle alors `agentReport({phase: 'ready', ip})`. La Function met à jour
    DynHost **depuis l'`ip` de `provisioning/{sessionId}`, pas depuis celle que
    l'agent déclare** : c'est elle qui a réservé l'adresse à l'étape 5, et le §7
    fait de la VM l'élément le moins fiable du système. L'`ip` du rapport ne sert
@@ -896,12 +937,20 @@ les étiquettes posées sur l'instance ne descendant pas dessus ; il n'apparaît
 donc ni dans la liste des instances, ni dans celle des IP, et rien ne le
 rattache à une session.
 
-La réconciliation balaie par conséquent **trois** listes et non deux, et la
-destruction d'une instance arrêtée supprime explicitement ses volumes. Un volume
-détaché dont on ne sait pas prouver l'origine est signalé, jamais détruit
-d'office : c'est la seule ressource du système qu'on ne peut pas rattacher, et
-supprimer le disque d'autrui n'est pas une erreur que le watchdog a le droit de
-commettre.
+La destruction d'une instance arrêtée supprime donc explicitement ses volumes, et
+la réconciliation balaie **trois** listes et non deux.
+
+Cette énumération est le travail de `scaleway-compute`, pas du watchdog. Le
+watchdog demande la fermeture d'un serveur en donnant le tag de sa session ;
+combien d'objets cela représente, et dans quel ordre les défaire, appartient à
+l'adapter (§4). C'est ce qui permet au §2 de laisser le gabarit libre : un
+calibre à volume bloc ajoutera une ressource à démonter dans l'adapter, et rien
+ici.
+
+Un volume détaché dont on ne sait pas prouver l'origine est signalé, jamais
+détruit d'office : c'est la seule ressource du système qu'on ne peut pas
+rattacher — elle ne porte aucun tag — et supprimer le disque d'autrui n'est pas
+une erreur que le watchdog a le droit de commettre.
 
 ### Qui surveille le watchdog
 
@@ -1233,6 +1282,7 @@ Les ~0,0067 €/h du disque sont **déduits d'une facture arrondie au centime**,
 relevés sur un tarif publié. À reprendre sur la facture du mois, avec l'egress
 objet et le prix du stockage — et avec la ligne IPv4, dont le montant observé
 sur une soirée dépasse ce que 0,005 €/h expliquerait.
+
 L'UI affiche le coût estimé de la session en cours et le cumul du mois, calculés
 à partir des heures écoulées et du `tariffPerHour` du gabarit lu dans
 `config/settings`. Le cumul se totalise par requête sur `events`, dont le TTL
