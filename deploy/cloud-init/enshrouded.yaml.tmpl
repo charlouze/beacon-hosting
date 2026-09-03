@@ -1,0 +1,22 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+
+write_files:
+  - path: /opt/beacon/docker-compose.yml
+    permissions: "0644"
+    content: |
+      __DOCKER_COMPOSE__
+  - path: /opt/beacon/.env
+    permissions: "0600"
+    content: |
+      SERVER_NAME=__SERVER_NAME__
+      SERVER_PASSWORD=__SERVER_PASSWORD__
+      SERVER_SLOT_COUNT=4
+
+runcmd:
+  - [ systemctl, enable, --now, docker ]
+  - [ mkdir, -p, /opt/beacon/data ]
+  - [ docker, compose, -f, /opt/beacon/docker-compose.yml, --env-file, /opt/beacon/.env, up, -d ]
