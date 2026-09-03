@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMember() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+
+    function touchesOnlyRequestedFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['state', 'sessionId', 'startedBy', 'startedAt', 'deadline']);
+    }
+
+    function assertsNoServerOnlyState() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['state'])
+        || request.resource.data.state in ['PROVISIONING', 'STOPPING'];
+    }
+
+    match /server/current {
+      allow read: if isMember();
+      allow create, delete: if false;
+      allow update: if isMember() && touchesOnlyRequestedFields() && assertsNoServerOnlyState();
+    }
+
+    match /members/{uid} {
+      allow read: if isMember();
+      allow write: if false;
+    }
+  }
+}
