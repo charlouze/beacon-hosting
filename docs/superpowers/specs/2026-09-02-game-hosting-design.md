@@ -1323,6 +1323,9 @@ qu'elles ont changé.
 | Scaleway propose-t-il une alerte de budget ? | **Oui**, alerte de consommation posée à 5 €/mois le 2026-09-03, avant toute création facturée. Le garde-fou de dernier recours du §7 existe. |
 | Le groupe de sécurité laisse-t-il passer `15637/udp` sans configuration ? | **Oui.** Scaleway attache un groupe par défaut, mais sa politique entrante est `accept` et ses seules règles bloquent le SMTP **sortant**. Il est `stateful`, donc le retour UDP est autorisé d'office. La tranche 2 n'a ni groupe à créer ni règle à poser. |
 | Que reste-t-il facturé sur une instance éteinte, et à quelle granularité ? | **Le disque et l'IP continuent**, le calcul s'arrête. Et **l'heure entamée est due** : facturation à l'heure d'uptime, minimum 60 minutes, chaque ressource comptée à part. Une session ratée à cinq minutes coûte une heure sur trois lignes. Le §3 tient, et le §11 compte désormais en heures facturées. |
+| Combien de temps du clic au serveur jouable ? | **Cinq à huit minutes, et c'est variable** — 4 min 49 et 7 min 58 sur deux sessions identiques à une heure d'écart. Aucun segment ne domine ; ce sont les deux postes réseau qui doublent. L'interface annonce donc une fourchette, jamais une heure. |
+| Deux vCPU auraient-ils suffi ? | **Non.** Le serveur brûle 2,6 cœurs sur 4 **sans personne connecté** : Enshrouded simule son monde en permanence et Wine s'ajoute. Le doute du §2 est tranché sans avoir eu besoin de quatre joueurs, et par la négative. |
+| Une sauvegarde se restaure-t-elle sur une machine neuve ? | **Oui**, vérifié de bout en bout : archive rapatriée, instance détruite, instance vierge, fichiers déposés — l'autel de flamme de la session précédente est là, et un monde généré à neuf ne contient aucune structure de joueur. Le gate de la tranche 3 ne repose plus sur un pari. |
 | Ports UDP du serveur Enshrouded | **Un seul, `15637`.** `15636` n'est jamais lié par l'image. Le spec en supposait deux. |
 | Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
 
@@ -1334,9 +1337,9 @@ fournisseur ne fait pas ce qu'on suppose.
 
 - **Le trafic Object Storage vers une instance de la même région est-il
   facturé**, et à quel prix les 2-3 Go de saves ?
-- **Le débit réel de SteamCMD depuis `fr-par`**, qui détermine la durée de
-  démarrage annoncée aux utilisateurs. La tâche 4 a mesuré 8,9 Go installés ;
-  ce qui transite est moindre, et inconnu.
+- **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
+  Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
+  tout gabarit à 2 vCPU — mais elle affinera le dimensionnement.
 
 ## 13. Hors périmètre v1
 
