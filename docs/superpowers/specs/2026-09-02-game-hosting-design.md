@@ -79,6 +79,51 @@ Le détail des mesures est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md),
 sections T et D. Le domaine et son DynHost restent chez OVH : c'est un
 enregistrement A, il pointe où l'on veut.
 
+**Les hébergeurs non français ne sont pas comparés**, parce que la souveraineté
+est une contrainte du commanditaire et non un critère à optimiser. La question
+s'est posée le 2026-09-04 ; voici ce qu'elle a donné, pour ne pas la refaire.
+
+Le candidat serait **Hetzner**. Son `CPX31` — 4 vCPU, 8 Go, **160 Go de NVMe
+inclus**, zones Falkenstein, Nuremberg et Helsinki — est plus généreux que le
+`DEV1-L` retenu, et son API a des `label_selector` avec un vrai langage
+d'expression : y sélectionner par la seule présence d'une clé est possible, ce
+qui **rendrait le schéma à deux tags du §5 inutile**. Sur les trois points qui
+ont occupé la tranche 0 — prix, disque, réconciliation — il serait
+techniquement meilleur.
+
+**Et il est plus cher, relevé à la source le 2026-09-04 : 0,1211 €/h**, contre
+~0,0495 €/h pour le `DEV1-L` disque compris. **Deux fois et demie le prix.** Sur
+quarante heures facturées par mois, 4,84 € contre 1,98 €.
+
+C'est l'inverse de ce que laissaient croire les agrégateurs tiers, qui
+annonçaient 16,49 €/mois — des chiffres d'avant la hausse Hetzner de juin 2026.
+
+Le catalogue affiche bien un `CX33` à **0,0173 €/h** pour les mêmes 4 vCPU et
+8 Go, soit trois fois moins que Scaleway. Il est marqué **indisponible**. C'est
+le second fournisseur de la journée à afficher un tarif alléchant sur un type
+qu'on ne peut pas commander, après la famille `BASIC1` de Scaleway : **un prix
+au catalogue n'est une option que si le type est disponible**, et les deux
+informations ne se lisent pas au même endroit.
+
+Enfin, les gammes ARM — les moins chères chez tous les fournisseurs — sont
+**exclues par construction** : le serveur Enshrouded est un binaire Windows
+x86-64 exécuté sous Wine, et l'image amont est `x86_64`. Aucune comparaison
+future n'a besoin de les examiner.
+
+L'explication tient au modèle : un tarif horaire élevé plafonné par un forfait
+mensuel avantage ce qui tourne en permanence. **C'est exactement le contraire de
+ce produit**, qui paie à l'heure une quarantaine d'heures par mois et
+n'approchera jamais le plafond. Hetzner est optimisé pour la chose qu'on
+remplace.
+
+**La souveraineté ne coûte donc rien ici** — elle rapporte. La question est
+close, et pas par principe : par la mesure. Elle ne mérite d'être rouverte que
+si Scaleway déçoit, et il faudra alors comparer sur un usage horaire et non sur
+des forfaits mensuels.
+
+Lever la souveraineté rouvrirait en revanche Cloudflare R2 pour les saves, juste
+en dessous — un poste bien plus petit, et le seul où le calcul reste favorable.
+
 **Cloudflare R2 pour les saves.** 10 Go gratuits en permanence et egress gratuit
 illimité, donc le meilleur choix économique, mais Cloudflare est une société
 américaine et les saves sont des données de jeu couvertes par la contrainte
