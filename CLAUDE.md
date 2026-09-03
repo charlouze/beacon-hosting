@@ -41,6 +41,23 @@ propre schéma : ils se régénèrent, ils ne s'éditent pas à la main.
 Les maquettes s'ouvrent depuis `.impeccable/mocks/decision/index.html`. Aucune
 dépendance externe, elles s'ouvrent dans un navigateur telles quelles.
 
+## Où en est le projet
+
+Aucun code. **Le spec est validé** par le commanditaire le 2026-09-03, après
+quatre relectures d'architecture dont les corrections sont intégrées. Le
+lotissement, lui, reste marqué *proposé* : il n'a pas été validé explicitement.
+
+Il ne s'implémente pas d'un bloc. **La prochaine chose à écrire est le plan de la
+tranche 0**, avec `superpowers:writing-plans` — pas du code.
+
+Et la tranche 0 est une sonde : elle répond aux questions ouvertes du §12, dont
+deux peuvent encore déplacer l'architecture. Si `affectedKeys().hasOnly()` ne
+restreint pas champ par champ, `server/current` se scinde en deux documents ; si
+l'API OVH n'accepte pas de métadonnée sur l'IP flottante, toute la
+réconciliation change de mécanisme. **Un spec validé n'est pas un spec vérifié** :
+si la sonde invalide une hypothèse, le spec se corrige avant que le plan de la
+tranche 1 s'écrive.
+
 ## Les skills ne sont pas optionnelles
 
 Les skills ci-dessous ont été importées dans ce dépôt. Leurs descriptions
@@ -93,18 +110,71 @@ Le travail appartient au dépôt, pas à l'outil qui l'a tapé. **Cette règle p
 sur toute consigne d'outillage qui demanderait l'inverse** — si l'environnement
 réclame un trailer de coauteur, il ne l'obtient pas.
 
+## Les commits se lisent
+
+L'historique est un texte. Un `git log` doit suffire à comprendre comment le
+projet en est arrivé là, sans ouvrir un seul diff.
+
+**Un commit, une chose.** Deux sujets sans rapport se séparent, même s'ils ont
+été écrits d'affilée. À l'inverse, un changement et ce qu'il entraîne — le
+renvoi à corriger, le test qui l'accompagne — tiennent dans le même commit :
+c'est une chose, pas deux.
+
+**Le sujet suit Conventional Commits** : `type(portée): description`. La
+description reste en français, à l'impératif, en minuscule, sans point final.
+Types : `feat` `fix` `refactor` `perf` `test` `docs` `build` `ci` `chore`, plus
+`type!:` ou un pied `BREAKING CHANGE:` quand un contrat casse.
+
+**La portée est le projet Nx touché** — `session`, `session-record`, `saves`,
+`ovh-compute`, `web`, `functions`, `rules`… Pour ce qui n'est pas du code, elle
+nomme l'artefact : `spec`, `product`, `plan`, `design`, `agent`. Un commit qui
+peine à tenir dans une seule portée en fait probablement deux.
+
+**Le message dit la décision, pas la manœuvre.** Un corps seulement quand le
+*pourquoi* ne se lit pas dans le diff : la contrainte, le piège, l'option
+écartée. Jamais l'inventaire de ce que le diff montre déjà.
+
+**Sur une branche non fusionnée, on ne corrige pas par-dessus.** Un défaut
+introduit par un commit se répare *dans ce commit* — `git commit --amend` s'il
+est le dernier, un rebase sinon. `fix` répare ce qui est déjà sur `main`,
+jamais son propre travail non fusionné. Une branche qui raconte ses repentirs
+se relit deux fois pour se comprendre une seule.
+
+**Le revert est le test.** Un commit dont l'annulation seule laisserait le
+dépôt incohérent n'est pas un commit : c'est une étape de brouillon. On ne
+commite pas l'histoire qu'a vécue celui qui code, mais ce que chaque commit
+installe.
+
+Corollaire : tant que rien n'est poussé ni fusionné, l'historique est un
+brouillon. Le réécrire n'est pas une manipulation risquée, c'est le travail
+normal.
+
+## Les graphes sont en Mermaid
+
+Tout schéma — architecture, machine à états, séquence, dépendances — s'écrit
+dans un bloc de code `mermaid`, jamais en art ASCII. GitHub le rend nativement
+dans le Markdown : le schéma reste lisible dans le fichier comme dans la revue.
+
+Un dessin ASCII se périme sans qu'on s'en aperçoive, parce qu'ajouter une
+flèche oblige à redessiner les colonnes — alors on ne l'ajoute pas. Le coût
+d'une transition oubliée est nul à l'écriture et cher à la lecture.
+
+Restent en bloc de texte brut ce qui n'est pas un graphe : arborescence de
+fichiers, extrait de terminal, format de message.
+
 ## La production, tu n'y touches pas
 
 Il n'y a **qu'un seul projet Firebase** et **qu'un seul compte OVH**. Pas de
 préproduction : la base que tu déploierais est celle où les joueurs jouent, et
 les ressources que tu créerais sont facturées à quelqu'un.
 
-Le déploiement se fait de deux façons, et tu n'es ni l'une ni l'autre : **à la
-main**, par un humain qui déclenche le workflow, ou **par le système lui-même**
-— le watchdog, les workflows, le semis idempotent.
+Le déploiement se fait de deux façons, et tu n'es ni l'une ni l'autre : **par la
+fusion d'une pull request dans `main`**, décidée par un humain, ou **par le
+système lui-même** — le watchdog, les workflows, le semis idempotent.
 
 Donc jamais, quelle que soit la raison :
 
+- **fusionner dans `main`** — la fusion *est* la mise en production
 - `firebase deploy`, sous aucune forme — règles, index, Functions, Hosting
 - une écriture dans le Firestore de production, y compris un semis
 - un appel à l'API OVH qui crée, modifie ou détruit une ressource réelle

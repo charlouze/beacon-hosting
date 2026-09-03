@@ -1,0 +1,370 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — Call Board vs Watch Roster</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { color-scheme:light; }
+  body {
+    background:#e7e4dc; color:#16181b;
+    font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:0 0 72px;
+  }
+  .note { padding:26px 30px 6px; font-size:14px; color:#4d4a44; }
+  .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:#16181b; }
+  .note p { max-width:78ch; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:22px; padding:20px 30px; align-items:start; }
+  .pair.solo { grid-template-columns:1fr; }
+  .pair.solo .col.hide { display:none; }
+  .col > h2 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin:0 0 3px; }
+  .col > .lin { font-size:12.5px; color:#56524b; margin-bottom:12px; }
+  .fit { position:relative; overflow:hidden; cursor:zoom-in;
+         box-shadow:0 1px 2px rgba(0,0,0,.14), 0 16px 40px rgba(0,0,0,.16); }
+  .pair.solo .fit { cursor:zoom-out; }
+  .art { width:1440px; transform-origin:0 0; }
+  .cap { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#6b6f75; margin-top:9px; }
+  .tip { padding:0 30px; font-size:12.5px; color:#6b6f75; }
+
+  /* ======================= CALL BOARD ======================= */
+  .call {
+    background:#e9e3d6; color:#1a1714; min-height:820px;
+    font-family:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+    padding:40px 60px 36px; display:flex; flex-direction:column; position:relative;
+  }
+  .call .kk { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#6a6459; display:block; }
+  .call .top { display:flex; justify-content:space-between; align-items:baseline; }
+  .call .ttl { font-size:16px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; }
+  .call .ttl b { font-weight:700; }
+  .call .ttl span { color:#6a6459; font-weight:400; }
+  .call .date { font-size:13px; color:#6a6459; letter-spacing:.1em; }
+  .cstamp {
+    position:absolute; right:56px; top:96px; z-index:2;
+    border:3px solid #b33a1e; color:#b33a1e; opacity:.88; mix-blend-mode:multiply;
+    padding:10px 20px; transform:rotate(-5deg);
+    font:800 26px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em;
+    box-shadow:inset 0 0 0 1.5px rgba(179,58,30,.4);
+  }
+  .cstamp.off { border-color:#6a6459; color:#6a6459; }
+  .call .rule { border-top:3px solid #1a1714; margin-top:20px; }
+  .call .rule.dash { border-top:1px dashed #8d867a; }
+  .call .body { display:grid; grid-template-columns:1fr 1.05fr; gap:56px; padding:36px 0 30px; }
+  .call .clock { font:800 150px/0.82 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.045em; margin-top:14px; }
+  .call .clock .s { color:#b33a1e; }
+  .call .curtain { margin-top:26px; }
+  .call .curtain .v { font:700 30px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:8px; }
+  .calls { border-top:1px dashed #8d867a; }
+  .calls .c { display:flex; gap:18px; align-items:baseline; padding:14px 2px; border-bottom:1px dashed #8d867a; font-size:15px; }
+  .calls .c .t { width:60px; flex:none; font-weight:700; font-variant-numeric:tabular-nums; }
+  .calls .c .n { flex:1; letter-spacing:.08em; text-transform:uppercase; font-size:13.5px; }
+  .calls .c .w { font-size:12px; color:#3a4a3f; letter-spacing:.06em; }
+  .calls .c.done { color:#9a9285; }
+  .calls .c.done .w { color:#9a9285; }
+  .calls .c.next .n { color:#b33a1e; font-weight:700; }
+  .calls .c.next .t { color:#b33a1e; }
+  .call .cols { display:grid; grid-template-columns:repeat(3,1fr); }
+  .call .cols > div { padding:18px 26px 20px; border-left:1px dashed #8d867a; }
+  .call .cols > div:first-child { padding-left:0; border-left:0; }
+  .call .cols .v { font-size:15px; margin-top:9px; word-break:break-all; }
+  .call .cols .v.g { color:#3a4a3f; font-weight:700; }
+  .call .foot { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-top:26px; margin-top:auto; }
+  .call .money { display:flex; gap:52px; }
+  .call .money .v { font:700 24px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:9px; }
+  .call .btn {
+    padding:21px 38px; border:2px solid #1a1714; background:#1a1714; color:#e9e3d6;
+    font:700 13px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.18em; text-transform:uppercase;
+  }
+  .call .btn.ghost { background:transparent; color:#1a1714; }
+  .call .btn.off { border-color:#c0b8a8; color:#b0a898; background:transparent; }
+  .call .acts { display:flex; gap:12px; }
+  .call .hint { font:12.5px/1 ui-sans-serif,system-ui,sans-serif; color:#b33a1e; margin-top:11px; text-align:right; }
+  .call .hint.g { color:#6a6459; }
+  .call .empty { padding:52px 0 44px; }
+  .call .empty .big { font:800 68px/1.04 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.03em; max-width:13ch; }
+  .call .empty .sub { margin-top:20px; font-size:17px; color:#6a6459; max-width:40ch; line-height:1.55; font-family:ui-sans-serif,system-ui,sans-serif; }
+
+  /* ======================= WATCH ROSTER ======================= */
+  .watch {
+    background:#f0ede4; color:#141c24; min-height:820px;
+    font-family:Georgia,"Iowan Old Style","Times New Roman",serif;
+    padding:40px 60px 36px; display:flex; flex-direction:column; position:relative;
+  }
+  .watch .marg { position:absolute; top:0; bottom:0; left:44px; width:1px; background:rgba(166,50,31,.45); }
+  .watch .kk { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#5b6b63; display:block; }
+  .watch .top { display:flex; justify-content:space-between; align-items:baseline; }
+  .watch .ttl { font-size:24px; font-weight:700; letter-spacing:.01em; }
+  .watch .ttl span { color:#5b6b63; font-weight:400; }
+  .wstamp {
+    position:absolute; right:56px; top:92px; z-index:2;
+    border:3px solid #a6321f; color:#a6321f; opacity:.85; mix-blend-mode:multiply;
+    padding:9px 18px; transform:rotate(5deg);
+    font:800 22px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.16em;
+  }
+  .wstamp.off { border-color:#5b6b63; color:#5b6b63; }
+  .watch .rule { border-top:3px solid #141c24; margin-top:20px; }
+  .watch .rule.thin { border-top:1px solid rgba(46,94,78,.4); }
+  .watch .open {
+    display:flex; align-items:flex-end; justify-content:space-between; gap:56px; padding:34px 0 30px;
+  }
+  .watch .clock { font:800 150px/0.82 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.045em; margin-top:14px; }
+  .watch .clock .s { color:#a6321f; }
+  .watch .side { text-align:right; display:flex; flex-direction:column; gap:20px; padding-bottom:10px; }
+  .watch .side .v { font:700 28px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:8px; }
+  .watch .side .v.sm { font:600 16px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; }
+  .watch .side .v.sm b { color:#2e5e4e; font-weight:700; }
+  .ledger { font-size:16px; }
+  .ledger .hd, .ledger .r {
+    display:grid; grid-template-columns:92px 1fr 96px 96px 88px 92px; gap:14px; align-items:baseline;
+    height:38px; border-bottom:1px solid rgba(46,94,78,.4);
+  }
+  .ledger .hd { font:700 10.5px/38px ui-sans-serif,system-ui,sans-serif; letter-spacing:.2em; text-transform:uppercase; color:#5b6b63; border-bottom-width:2px; border-bottom-color:#141c24; }
+  .ledger .r { line-height:38px; }
+  .ledger .r .n { font-variant-numeric:tabular-nums; }
+  .ledger .r .rt { text-align:right; font-variant-numeric:tabular-nums; }
+  .ledger .r.now { font-weight:700; }
+  .ledger .r.now .live { color:#a6321f; font-style:italic; font-weight:400; }
+  .nib { display:inline-block; width:9px; height:16px; margin-left:5px; vertical-align:-2px;
+         background:#141c24; clip-path:polygon(0 0,100% 0,50% 100%); animation:blink 1.7s steps(1) infinite; }
+  @keyframes blink { 0%,55%{opacity:1} 56%,100%{opacity:.2} }
+  .watch .foot { display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-top:26px; margin-top:auto; }
+  .watch .money { display:flex; gap:52px; }
+  .watch .money .v { font:700 24px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:9px; }
+  .watch .btn {
+    padding:21px 38px; border:2px solid #141c24; background:#141c24; color:#f0ede4;
+    font:700 13px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.18em; text-transform:uppercase;
+  }
+  .watch .btn.ghost { background:transparent; color:#141c24; }
+  .watch .btn.off { border-color:#bcc3bc; color:#aeb5ae; background:transparent; }
+  .watch .acts { display:flex; gap:12px; }
+  .watch .hint { font:12.5px/1 ui-sans-serif,system-ui,sans-serif; color:#a6321f; margin-top:11px; text-align:right; }
+  .watch .hint.g { color:#5b6b63; }
+  .watch .empty { padding:44px 0 34px; display:flex; justify-content:space-between; align-items:flex-start; gap:60px; }
+  .watch .empty .big { font:800 66px/1.05 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.03em; max-width:12ch; }
+  .watch .empty .sub { margin-top:20px; font-size:17px; color:#5b6b63; max-width:38ch; line-height:1.55; font-family:ui-sans-serif,system-ui,sans-serif; }
+</style>
+
+<div class="note">
+  <h1>Beacon — les deux mondes restants, en large</h1>
+  <p>Même donnée que la direction 1, même échelle, même contrainte : rien de sombre, aucun objet dessiné,
+  le coût comme fait et jamais comme comparaison. Les maquettes sont en français pour que tu juges vite —
+  l'interface finale sera en anglais, comme acté. <b>Clique une planche pour l'agrandir en pleine largeur</b> :
+  à deux colonnes, les petits labels ne sont pas lisibles.</p>
+</div>
+<p class="tip">En service en haut, hors service en dessous.</p>
+
+<div class="pair" id="pair">
+
+  <!-- ===================== CALL BOARD ===================== -->
+  <div class="col" data-k="call">
+    <h2>2 — The Call Board</h2>
+    <p class="lin">Feuille d'appel de régie. La soirée est une suite d'appels nommés ; l'appel des 30 minutes <i>est</i> la fenêtre de prolongation.</p>
+
+    <div class="fit"><div class="art">
+      <div class="call">
+        <div class="cstamp">EN SCÈNE</div>
+        <div class="top">
+          <div class="ttl"><b>Beacon</b> <span>· Enshrouded · feuille d'appel</span></div>
+          <div class="date">mardi 2 septembre</div>
+        </div>
+        <div class="rule"></div>
+        <div class="body">
+          <div>
+            <span class="kk">Avant le rideau</span>
+            <div class="clock" data-clock>2:47<span class="s">:12</span></div>
+            <div class="curtain"><span class="kk">Rideau à</span><div class="v">00:30</div></div>
+          </div>
+          <div>
+            <span class="kk" style="margin-bottom:12px">Appels du soir</span>
+            <div class="calls">
+              <div class="c done"><span class="t">20:14</span><span class="n">Lever de rideau</span><span class="w">Charlouze</span></div>
+              <div class="c done"><span class="t">20:18</span><span class="n">Tous en place</span><span class="w">4 en salle</span></div>
+              <div class="c next"><span class="t">00:00</span><span class="n">Appel des trente minutes</span><span class="w">prolongation possible</span></div>
+              <div class="c"><span class="t">00:30</span><span class="n">Rideau</span><span class="w">automatique</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rule dash"></div>
+        <div class="cols">
+          <div><span class="kk">Adresse</span><div class="v g">enshrouded.beacon.charlouze.com</div></div>
+          <div><span class="kk">IP</span><div class="v">51.83.42.117</div></div>
+          <div><span class="kk">Machine</span><div class="v">Gravelines · GRA · b3-8</div></div>
+        </div>
+        <div class="rule dash"></div>
+        <div class="foot">
+          <div class="money">
+            <div><span class="kk">Cette session</span><div class="v">0,13 €</div></div>
+            <div><span class="kk">Ce mois</span><div class="v">1,42 €</div></div>
+          </div>
+          <div>
+            <div class="acts"><div class="btn off">+ 1 heure</div><div class="btn ghost">Rideau</div></div>
+            <div class="hint">L'appel des trente minutes sonne à 00:00.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="cap">En service</p>
+
+    <div class="fit" style="margin-top:22px"><div class="art">
+      <div class="call">
+        <div class="cstamp off">PLATEAU VIDE</div>
+        <div class="top">
+          <div class="ttl"><b>Beacon</b> <span>· Enshrouded · feuille d'appel</span></div>
+          <div class="date">mardi 2 septembre</div>
+        </div>
+        <div class="rule"></div>
+        <div class="empty">
+          <div class="big">Aucun appel ce soir.</div>
+          <div class="sub">Le plateau est vide depuis 14 h. La dernière soirée s'est terminée hier à 00:30, rideau automatique, sans que personne ait eu à y penser.</div>
+        </div>
+        <div class="rule dash"></div>
+        <div class="cols">
+          <div><span class="kk">Prochaine soirée</span><div class="v">4 h · rideau à 00:14</div></div>
+          <div><span class="kk">Dernière sauvegarde</span><div class="v">hier 00:29 · 412 Mo</div></div>
+          <div><span class="kk">Machine</span><div class="v">Gravelines · GRA · b3-8</div></div>
+        </div>
+        <div class="rule dash"></div>
+        <div class="foot">
+          <div class="money">
+            <div><span class="kk">Ce mois</span><div class="v">1,42 €</div></div>
+            <div><span class="kk">Joué</span><div class="v">18 h</div></div>
+            <div><span class="kk">Soirées</span><div class="v">6</div></div>
+          </div>
+          <div>
+            <div class="acts"><div class="btn">Appeler la soirée</div></div>
+            <div class="hint g">Environ quatre minutes. On t'annoncera l'heure du lever.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="cap">Hors service</p>
+  </div>
+
+  <!-- ===================== WATCH ROSTER ===================== -->
+  <div class="col" data-k="watch">
+    <h2>3 — The Watch Roster</h2>
+    <p class="lin">Registre de veille. Le journal d'audit <i>est</i> l'interface — qui a ouvert, qui a relevé, ce que la nuit a coûté.</p>
+
+    <div class="fit"><div class="art">
+      <div class="watch">
+        <div class="marg"></div>
+        <div class="wstamp">DE VEILLE</div>
+        <div class="top">
+          <div class="ttl">Beacon <span>· Enshrouded · registre de veille</span></div>
+          <div class="kk">Reg. 09 · sept. 2026</div>
+        </div>
+        <div class="rule"></div>
+        <div class="open">
+          <div>
+            <span class="kk">Veille en cours · ouverte par Charlouze à 20:14</span>
+            <div class="clock" data-clock>2:47<span class="s">:12</span></div>
+          </div>
+          <div class="side">
+            <div><span class="kk">Relève à</span><div class="v">00:30</div></div>
+            <div><span class="kk">Poste</span><div class="v sm"><b>enshrouded.beacon.charlouze.com</b><br>51.83.42.117 · Gravelines GRA</div></div>
+          </div>
+        </div>
+        <div class="ledger">
+          <div class="hd"><span>Date</span><span>Ouverte par · relevée par</span><span>Ouverture</span><span>Relève</span><span>Durée</span><span>Coût</span></div>
+          <div class="r now"><span class="n">02/09</span><span>Charlouze <span class="live">— en cours<span class="nib"></span></span></span><span class="n">20:14</span><span class="n">00:30</span><span class="n">4 h 00</span><span class="rt">0,13 €</span></div>
+          <div class="r"><span class="n">01/09</span><span>Charlouze · relève automatique</span><span class="n">20:30</span><span class="n">00:30</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+          <div class="r"><span class="n">30/08</span><span>Marin · relevé par Charlouze</span><span class="n">19:40</span><span class="n">01:40</span><span class="n">6 h 00</span><span class="rt">0,28 €</span></div>
+          <div class="r"><span class="n">28/08</span><span>Charlouze · relève automatique</span><span class="n">21:10</span><span class="n">01:10</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+          <div class="r"><span class="n">26/08</span><span>Marin · relève automatique</span><span class="n">20:02</span><span class="n">00:02</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+        </div>
+        <div class="foot">
+          <div class="money">
+            <div><span class="kk">Ce mois</span><div class="v">1,42 €</div></div>
+            <div><span class="kk">Joué</span><div class="v">18 h</div></div>
+            <div><span class="kk">Soirées</span><div class="v">6</div></div>
+          </div>
+          <div>
+            <div class="acts"><div class="btn off">Prolonger</div><div class="btn ghost">Clore la veille</div></div>
+            <div class="hint">La prolongation s'ouvre à 00:00.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="cap">En service</p>
+
+    <div class="fit" style="margin-top:22px"><div class="art">
+      <div class="watch">
+        <div class="marg"></div>
+        <div class="wstamp off">CLOS</div>
+        <div class="top">
+          <div class="ttl">Beacon <span>· Enshrouded · registre de veille</span></div>
+          <div class="kk">Reg. 09 · sept. 2026</div>
+        </div>
+        <div class="rule"></div>
+        <div class="empty">
+          <div>
+            <div class="big">Aucune veille ouverte.</div>
+            <div class="sub">La ligne suivante attend une main. Dernière sauvegarde hier à 00:29, 412 Mo, intacte.</div>
+          </div>
+          <div class="side" style="text-align:right">
+            <div><span class="kk">Prochaine veille</span><div class="v">4 h · relève à 00:14</div></div>
+            <div><span class="kk">Coût estimé</span><div class="v">0,19 €</div></div>
+          </div>
+        </div>
+        <div class="ledger">
+          <div class="hd"><span>Date</span><span>Ouverte par · relevée par</span><span>Ouverture</span><span>Relève</span><span>Durée</span><span>Coût</span></div>
+          <div class="r"><span class="n">01/09</span><span>Charlouze · relève automatique</span><span class="n">20:30</span><span class="n">00:30</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+          <div class="r"><span class="n">30/08</span><span>Marin · relevé par Charlouze</span><span class="n">19:40</span><span class="n">01:40</span><span class="n">6 h 00</span><span class="rt">0,28 €</span></div>
+          <div class="r"><span class="n">28/08</span><span>Charlouze · relève automatique</span><span class="n">21:10</span><span class="n">01:10</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+          <div class="r"><span class="n">26/08</span><span>Marin · relève automatique</span><span class="n">20:02</span><span class="n">00:02</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+          <div class="r"><span class="n">24/08</span><span>Charlouze · relève automatique</span><span class="n">21:00</span><span class="n">01:00</span><span class="n">4 h 00</span><span class="rt">0,19 €</span></div>
+        </div>
+        <div class="foot">
+          <div class="money">
+            <div><span class="kk">Ce mois</span><div class="v">1,42 €</div></div>
+            <div><span class="kk">Joué</span><div class="v">18 h</div></div>
+            <div><span class="kk">Soirées</span><div class="v">6</div></div>
+          </div>
+          <div>
+            <div class="acts"><div class="btn">Prendre la veille</div></div>
+            <div class="hint g">Environ quatre minutes. On t'annoncera l'heure exacte.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <p class="cap">Hors service</p>
+  </div>
+
+</div>
+
+<script>
+  const pair = document.getElementById('pair');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(box => {
+      const art = box.querySelector('.art');
+      const s = box.clientWidth / 1440;
+      art.style.transform = 'scale(' + s + ')';
+      box.style.height = (art.offsetHeight * s) + 'px';
+    });
+  }
+  addEventListener('resize', fit);
+  addEventListener('load', fit);
+
+  document.querySelectorAll('.fit').forEach(box => box.addEventListener('click', () => {
+    const col = box.closest('.col');
+    if (pair.classList.contains('solo') && !col.classList.contains('hide')) {
+      pair.classList.remove('solo');
+      document.querySelectorAll('.col').forEach(c => c.classList.remove('hide'));
+    } else {
+      pair.classList.add('solo');
+      document.querySelectorAll('.col').forEach(c => c.classList.toggle('hide', c !== col));
+    }
+    requestAnimationFrame(fit);
+  }));
+
+  let left = 2 * 3600 + 47 * 60 + 12;
+  const clocks = document.querySelectorAll('[data-clock]');
+  setInterval(() => {
+    left = left > 0 ? left - 1 : 0;
+    const h = Math.floor(left / 3600);
+    const m = String(Math.floor(left % 3600 / 60)).padStart(2, '0');
+    const s = String(left % 60).padStart(2, '0');
+    clocks.forEach(c => {
+      const red = c.closest('.watch') ? '#a6321f' : '#b33a1e';
+      c.innerHTML = h + ':' + m + '<span class="s" style="color:' + red + '">:' + s + '</span>';
+    });
+  }, 1000);
+
+  fit();
+</script>
