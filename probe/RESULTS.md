@@ -186,3 +186,47 @@ Un seul port UDP à ouvrir, `15637`, pas deux. Et le nom, le nombre de places et
 le mot de passe de session se passent par `SERVER_ROLE_0_*`, jamais par
 `SERVER_PASSWORD` — ce que le `cloud-init` de la tranche 2 devra rendre.
 
+## D · Les trois questions documentaires
+
+| Question du §12 | Réponse | Source |
+|---|---|---|
+| tarif `b3-8` après le 2026-10-01, stockage et IPv4 compris ou non | **45 €/mois HT tout compris, soit ~0,0616 €/h**, contre 37 € avant (+19,5 %). Le prix horaire de l'instance seule ne bouge pas ; ce qui change est que l'IPv4 (0,0027 €/h, ~1,97 €/mois) et le stockage local « Low Latency » (0,0001458 €/Go/h, ~0,11 €/Go/mois, soit ~5,50 €/mois pour les 50 Go du `b3-8`) sortent du prix de base. | [blog OVHcloud, tarifs au 1er octobre 2026](https://blog.ovhcloud.com/en/posts/public-cloud-pricing-update-october-2026/) — grille publique. **Recoupement par l'API `npm --prefix probe run ovh:price` en attente du jeton OVH.** |
+| Cloud Monitoring alerte-t-il sur l'**absence** d'exécution d'un job Scheduler, et à quel coût | **Oui.** Une condition d'absence de métrique se pose sur une série temporelle, avec une fenêtre configurable jusqu'à **23,5 h**. Les politiques d'alerte et les canaux de notification par e-mail ne sont pas facturés ; seule l'ingestion de métriques le serait, et les métriques Google Cloud comme `cloudscheduler.googleapis.com/job/attempt_count` sont gratuites. | [Create metric-absence alerting policies](https://docs.cloud.google.com/monitoring/alerts/metric-absence) |
+| le déploiement Firebase accepte-t-il l'identité fédérée OIDC sans clé entreposée | **Oui.** `google-github-actions/auth@v2` avec `workload_identity_provider` et `create_credentials_file` écrit un fichier d'identifiants externes et exporte `GOOGLE_APPLICATION_CREDENTIALS` ; la CLI Firebase le consomme par les Application Default Credentials. Le support côté SDK Admin, longtemps absent, existe depuis le 2024-11-12. | [google-github-actions/auth](https://github.com/google-github-actions/auth), [firebase-tools#3926](https://github.com/firebase/firebase-tools/issues/3926) |
+
+**Le piège de l'alerte sur absence, et il est sérieux.** La documentation est
+explicite : *« Metric-absence conditions require at least one successful
+measurement — one that retrieves data — within the maximum period of time after
+the policy was installed or modified »*, et *« The condition won't be met when
+the subsystem that writes metric data has never written a data point »*.
+
+Autrement dit : **un watchdog qui n'a jamais tourné une seule fois ne déclenche
+aucune alerte.** L'alerte détecte l'arrêt, pas l'absence de départ. Le §6 du
+spec en fait le seul garde-fou du watchdog ; il l'est pour la panne, pas pour le
+job jamais créé ou supprimé. La tranche 1 doit donc vérifier la première
+exécution autrement — à la main, une fois, à la pose du job.
+
+**Conséquence pour le spec, écrite le 2026-09-03 avant la décision :** le §11 est
+à refaire. Le tableau des coûts table sur ~0,047 €/h ; le tarif OVH applicable
+est ~0,0616 €/h, soit **+31 %**. Un mois à 32 h passerait de ~1,50 € à ~1,97 €,
+et le point d'équilibre contre la référence de 7,90 €/mois descendrait
+d'environ **165 h à environ 127 h**. Le pari tient largement — on parle de 32 h
+de jeu par mois — mais les chiffres écrits sont faux.
+
+Le §6 doit dire ce que l'alerte sur absence ne couvre pas.
+
+### Ce qui a été fait, le 2026-09-03
+
+Cette hausse est **le second motif de la bascule vers Scaleway** (§2 du spec).
+Le §11 a été refait sur les tarifs Scaleway et non sur ceux d'OVH : le point
+d'équilibre est revenu à ~163 h, `DEV1-L` plus son IP revenant à ~0,0478 €/h —
+soit très exactement le tarif sur lequel le pari initial était bâti. Les 127 h
+ci-dessus décrivent le monde qu'on n'a pas choisi.
+
+Le §6 porte désormais la limite de l'alerte sur absence.
+
+Les deux réponses de monitoring et d'identité fédérée ne dépendent pas de
+l'hébergeur : elles restent valides telles quelles. Le tarif, lui, est à
+recouper avec le catalogue du projet Scaleway — c'est une question ouverte du
+§12, pas une réponse.
+
