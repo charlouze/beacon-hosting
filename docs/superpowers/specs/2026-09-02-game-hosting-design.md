@@ -32,19 +32,21 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Cycle de vie | Démarrage manuel, échéance explicite | Une échéance supprime le besoin de détecter la présence des joueurs, qui était le composant le plus risqué du système. |
 | Durée de session | 4 h par défaut | Choix du commanditaire. |
 | Prolongation | +1 h, illimitée, seulement dans les 30 dernières minutes | Le garde-fou n'est pas une durée maximale mais l'obligation qu'un humain éveillé reclique : une machine oubliée s'arrête toujours dans l'heure. |
-| Hébergement du jeu | OVH Public Cloud, région GRA (Gravelines) | Le moins cher (~0,047 €/h en `b3-8`), français, compte et domaine déjà en place. |
+| Hébergement du jeu | Scaleway, région `fr-par` (Paris) | **Décision révisée le 2026-09-03**, la première portait sur OVH. Scaleway sait étiqueter l'instance **et** l'IP flottante, et les filtrer par étiquette ; l'API OVH v1 ne sait ni l'un ni l'autre, et toute la réconciliation du §5 en dépend. Français, et moins cher depuis la hausse OVH du 1er octobre 2026. Le pourquoi du renversement est plus bas. |
 | Plan de contrôle | Firebase | Choix du commanditaire ; le free tier couvre entièrement l'usage. La contrainte France ne s'applique pas à l'app de gestion. |
-| Frontière front / Functions | Le navigateur écrit directement dans Firestore ; une Function n'existe que là où un secret est indispensable | Choix du commanditaire. Interdire l'écriture au client ne protégeait rien — il n'a de toute façon aucun identifiant OVH — et ajoutait une couche de callables à maintenir. |
+| Frontière front / Functions | Le navigateur écrit directement dans Firestore ; une Function n'existe que là où un secret est indispensable | Choix du commanditaire. Interdire l'écriture au client ne protégeait rien — il n'a de toute façon aucun identifiant d'hébergeur — et ajoutait une couche de callables à maintenir. |
 | Rôle des règles Firestore | Sécurité seule : identité, appartenance, rôle, propriété des champs. Aucune règle métier | Choix du commanditaire. Réécrire les durées et les transitions en langage de règles aurait dupliqué `libs/session` dans un second langage, avec une divergence garantie à terme. Le contrôle métier côté serveur est assuré par le watchdog, qui rejoue le même code. |
 | Modèle de domaine | Un seul contexte délimité, `session`, dont `saves` est un module support. `libs/session` est un **noyau de décision partagé** : le navigateur et les Functions y calculent, le watchdog seul y fait autorité | La valeur du projet tient entièrement dans la session et son échéance ; la structure doit le dire plutôt que de ranger le code par couche. Parler d'un agrégat qui « porte ses invariants » aurait menti sur le mécanisme : ce code tourne aussi dans un navigateur qu'on ne contrôle pas. Où chaque invariant tient réellement est dit au §4. |
 | Nom du produit | **Beacon** — app sur `beacon.charlouze.com`, serveurs de jeu sur `<jeu>.beacon.charlouze.com` | Un feu qu'on allume pour appeler les autres, éteint après : le nom raconte l'acte social plutôt que la machine. La forme du domaine accueille un deuxième jeu sans rien renommer. |
 | Langue | Code et interface en anglais ; spec et documentation en français | L'expert du domaine lit lui-même le TypeScript, donc il n'y a pas de fossé de traduction à combler. Le glossaire de §4 fait le pont, et tout terme visible dans l'interface doit y figurer. |
-| Stockage des saves | OVH Object Storage, GRA | Français, même région que l'instance, donc transferts internes. |
+| Stockage des saves | Scaleway Object Storage, `fr-par` | Français, même région que l'instance, donc transferts internes. C'est cette justification qui l'a fait suivre l'instance : laissé chez OVH, il devenait un transfert entre fournisseurs. Du S3 dans les deux cas, l'adapter ne change que d'endpoint. |
 | Fichiers du serveur | Téléchargés par SteamCMD à chaque démarrage | Évite ~8 Go de stockage permanent et tout un chemin de code de cache, pour une durée de démarrage équivalente. Aligné sur la pratique des images communautaires. |
-| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com` | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. |
+| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com` | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. |
 | Conteneur du jeu | `mornedhels/enshrouded-server`, utilisée telle quelle | Gère déjà SteamCMD, Wine, supervisord, l'auto-update du jeu et des backups périodiques avec rotation. La forker nous priverait des mises à jour amont pour un bénéfice nul. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
-| Gabarit d'instance | `b3-8` (2 vCPU / 8 Go) par défaut, sélecteur réservé à l'admin | Enshrouded idle à ~4,4 Go et n'ajoute que ~100 Mo par joueur ; le doute porte sur les 2 vCPU, donc on veut pouvoir comparer en conditions réelles. |
+| Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter à la fois le gabarit retenu et son repli, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
+| Gabarit d'instance | **Libre**, sélecteur réservé à l'admin. `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux) en v1, **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. `DEV1-L` est aussi, au 2026-09-03, le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture réelle a montré et que le catalogue ne dit pas. |
+| Modes de stockage | **Les deux**, disque local et volume bloc | Le gabarit ne serait pas vraiment libre si le système n'acceptait qu'une famille : à 8 Gio, tout calibre autre que `DEV1-L` demande un volume bloc attaché. La différence n'est d'ailleurs pas tarifaire — **aucun disque n'est compris dans un prix d'instance chez Scaleway**, local ou bloc — mais structurelle : un volume local naît et meurt avec son instance, un volume bloc est une ressource indépendante à créer, réconcilier et détruire. Le coût est contenu par le §4 : `ServerHost` ouvre et ferme *un serveur*, pas des ressources, et la fermeture se dit par le tag. **La v1 n'implémente que le disque local.** |
 
 ### Fournisseurs écartés, et pourquoi
 
@@ -54,10 +56,73 @@ facturant l'egress, cela représente ~1,10 € par session, soit ~9 €/mois pou
 huit sessions — plus cher que la solution qu'on remplace. OVH et Scaleway ne
 facturent pas le trafic sortant, ce qui élimine le problème.
 
-**Scaleway.** Techniquement équivalent et français, avec un meilleur SDK
-TypeScript, mais ~0,082 €/h à Paris contre ~0,047 €/h chez OVH, plus une IPv4
-facturée séparément. Écart d'environ 1,25 €/mois. Reste le repli naturel si
-l'API OpenStack d'OVH s'avère pénible.
+**OVH, écarté le 2026-09-03 après avoir été retenu.** La conception l'avait
+choisi sur le prix, et écarté Scaleway pour ~1,25 €/mois d'écart en notant qu'il
+resterait « le repli naturel si l'API OpenStack d'OVH s'avère pénible ». La
+tranche 0 a mesuré les deux termes, et les deux sont tombés.
+
+*Le tag.* `cloud.ProjectInstanceCreation` et `cloud.project.FloatingIp` n'ont
+aucun champ de métadonnée, et aucun chemin de l'API v1 n'en porte. Même si un
+`POST` acceptait un champ non documenté, **aucun modèle de lecture ne le
+rendrait** : le mécanisme du §5 a besoin de *retrouver* le tag, pas de l'écrire.
+Restait OpenStack, donc une seconde API et une seconde authentification par
+jeton Keystone en plus de l'API v1 qu'il faut garder pour les gabarits. Chez
+Scaleway, `tags` est un champ natif du serveur *et* de l'IP flottante, mutable,
+et les listes se filtrent dessus côté serveur.
+
+*Le prix.* Au 1er octobre 2026, OVH sort l'IPv4 et le stockage local du prix de
+base : le `b3-8` passe de 37 à 45 €/mois, soit ~0,0616 €/h tout compris. Le
+`DEV1-L` retenu revient à ~0,0495 €/h, disque compris. L'écart s'est non seulement
+effacé, il s'est inversé.
+
+Le détail des mesures est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md),
+sections T et D. Le domaine et son DynHost restent chez OVH : c'est un
+enregistrement A, il pointe où l'on veut.
+
+**Les hébergeurs non français ne sont pas comparés**, parce que la souveraineté
+est une contrainte du commanditaire et non un critère à optimiser. La question
+s'est posée le 2026-09-04 ; voici ce qu'elle a donné, pour ne pas la refaire.
+
+Le candidat serait **Hetzner**. Son `CPX31` — 4 vCPU, 8 Go, **160 Go de NVMe
+inclus**, zones Falkenstein, Nuremberg et Helsinki — est plus généreux que le
+`DEV1-L` retenu, et son API a des `label_selector` avec un vrai langage
+d'expression : y sélectionner par la seule présence d'une clé est possible, ce
+qui **rendrait le schéma à deux tags du §5 inutile**. Sur les trois points qui
+ont occupé la tranche 0 — prix, disque, réconciliation — il serait
+techniquement meilleur.
+
+**Et il est plus cher, relevé à la source le 2026-09-04 : 0,1211 €/h**, contre
+~0,0495 €/h pour le `DEV1-L` disque compris. **Deux fois et demie le prix.** Sur
+quarante heures facturées par mois, 4,84 € contre 1,98 €.
+
+C'est l'inverse de ce que laissaient croire les agrégateurs tiers, qui
+annonçaient 16,49 €/mois — des chiffres d'avant la hausse Hetzner de juin 2026.
+
+Le catalogue affiche bien un `CX33` à **0,0173 €/h** pour les mêmes 4 vCPU et
+8 Go, soit trois fois moins que Scaleway. Il est marqué **indisponible**. C'est
+le second fournisseur de la journée à afficher un tarif alléchant sur un type
+qu'on ne peut pas commander, après la famille `BASIC1` de Scaleway : **un prix
+au catalogue n'est une option que si le type est disponible**, et les deux
+informations ne se lisent pas au même endroit.
+
+Enfin, les gammes ARM — les moins chères chez tous les fournisseurs — sont
+**exclues par construction** : le serveur Enshrouded est un binaire Windows
+x86-64 exécuté sous Wine, et l'image amont est `x86_64`. Aucune comparaison
+future n'a besoin de les examiner.
+
+L'explication tient au modèle : un tarif horaire élevé plafonné par un forfait
+mensuel avantage ce qui tourne en permanence. **C'est exactement le contraire de
+ce produit**, qui paie à l'heure une quarantaine d'heures par mois et
+n'approchera jamais le plafond. Hetzner est optimisé pour la chose qu'on
+remplace.
+
+**La souveraineté ne coûte donc rien ici** — elle rapporte. La question est
+close, et pas par principe : par la mesure. Elle ne mérite d'être rouverte que
+si Scaleway déçoit, et il faudra alors comparer sur un usage horaire et non sur
+des forfaits mensuels.
+
+Lever la souveraineté rouvrirait en revanche Cloudflare R2 pour les saves, juste
+en dessous — un poste bien plus petit, et le seul où le calcul reste favorable.
 
 **Cloudflare R2 pour les saves.** 10 Go gratuits en permanence et egress gratuit
 illimité, donc le meilleur choix économique, mais Cloudflare est une société
@@ -95,8 +160,29 @@ projet est repris plus tard.
 
 ## 3. Contrainte structurante : l'instance doit être détruite, pas éteinte
 
-Chez OVH, une instance arrêtée continue d'être facturée, les ressources restant
-réservées. Il n'existe donc pas d'état « serveur éteint mais conservé ».
+**Il n'existe pas d'état arrêté à coût nul.** Une machine éteinte mais conservée
+garde son volume et son IP flottante, tous deux facturés tant qu'ils existent —
+et chez certains fournisseurs le calcul lui-même continue de l'être.
+
+C'est la prémisse dont dépend tout ce qui suit, et elle est énoncée sous cette
+forme à dessein. La première version disait « une instance arrêtée continue
+d'être facturée », ce qui était vrai chez OVH et **ne l'est probablement pas
+chez Scaleway**, où l'extinction arrête la facturation du calcul. La conclusion
+survit à la nuance, la formulation d'origine non : ce qui porte l'architecture
+n'est pas que l'arrêt coûte le prix plein, c'est qu'il coûte quelque chose sans
+rien rendre.
+
+Le détail est documenté par Scaleway : *« any attached storage or flexible IPv4s
+continue to be billed even when powered off »*. Éteindre arrête le calcul et
+**laisse courir le disque et l'adresse**. La conclusion tient donc, et par le
+mécanisme annoncé : l'état « éteint mais conservé » coûte, sans rien rendre.
+
+**Et l'heure entamée est due.** Les instances CPU se facturent à l'heure
+d'*uptime*, minimum 60 minutes, **chaque ressource comptée séparément** —
+l'instance, son disque, son IP. Une session ratée au bout de cinq minutes coûte
+donc une heure pleine sur les trois lignes, et non cinq minutes. C'est une raison
+de plus de détruire vite plutôt que d'attendre : ce qui traîne se paie à l'heure
+ronde.
 
 Toute l'architecture en découle : la machine est strictement jetable, rien de
 précieux n'y réside plus de quelques minutes, et le composant le plus critique
@@ -110,17 +196,20 @@ flowchart TD
     fs[("Firestore<br/>état et audit")]
     fn["Cloud Functions gen2<br/>seules détentrices des secrets"]
     sch["Cloud Scheduler<br/>toutes les 5 min"]
-    ovh["API OVH<br/>compute et DNS"]
-    vm["Instance b3-8<br/>Gravelines"]
-    obj[("OVH Object Storage<br/>sauvegardes")]
+    scw["API Scaleway<br/>instance et IP"]
+    dns["OVH DynHost<br/>enregistrement A"]
+    vm["Instance DEV1-L<br/>Paris"]
+    obj[("Scaleway Object Storage<br/>sauvegardes")]
 
     nav -->|"écritures directes, filtrées par les règles"| fs
     fs -.->|"lecture temps réel"| nav
     fs -->|"trigger sur server/current"| fn
     sch -->|"watchdog"| fn
     fn -->|"réconciliation et arrêts forcés"| fs
-    fn --> ovh
-    ovh -->|"crée et détruit"| vm
+    fn --> scw
+    fn --> dns
+    scw -->|"crée et détruit"| vm
+    dns -.->|"pointe vers"| vm
     vm -->|"agentReport, jeton de session"| fn
     vm -->|"restaure et synchronise"| obj
 ```
@@ -128,7 +217,7 @@ flowchart TD
 **Le front écrit directement dans Firestore.** La frontière n'est pas « client
 contre serveur » mais « ce qui exige un secret contre ce qui n'en exige pas ».
 Interdire l'écriture au navigateur ne protégeait rien : il ne possède aucun
-identifiant OVH et ne peut donc pas créer de machine, quoi qu'il écrive. Tout
+identifiant d'hébergeur et ne peut donc pas créer de machine, quoi qu'il écrive. Tout
 ce qui ne demande ni identifiant cloud ni jeton d'agent est joué depuis le
 navigateur, sous le contrôle des règles de sécurité Firestore. Le front
 s'abonne par ailleurs en temps réel à l'état, donc le compte à rebours et les
@@ -141,12 +230,12 @@ changements d'état s'affichent simultanément chez tout le monde sans polling.
 | Demander l'arrêt (`RUNNING` → `STOPPING`) | Navigateur | Aucun secret requis. |
 | `config/settings`, `members/{uid}` | Navigateur (admin) | Les règles vérifient `role == 'admin'`. |
 | `events/{id}` | Navigateur et Functions, en création seule | Journal d'audit ; les règles interdisent modification et suppression. |
-| Créer et détruire l'instance et l'IP | Function | Identifiants OVH. |
-| Mettre à jour DynHost | Function | Identifiants OVH. |
+| Créer et détruire l'instance et l'IP | Function | Clé secrète Scaleway. |
+| Mettre à jour DynHost | Function | Identifiants DynHost, chez OVH. |
 | `instanceId`, `ipId`, `ip`, et `agentTokens/{sessionId}` | Function | Valeurs que le client ne doit ni connaître ni forger. |
 | `provisioning/{sessionId}`, `health/watchdog` | Function | Comptabilité interne : l'intention de création taguée et le battement de cœur. Aucun client n'y lit ni n'y écrit. |
 | `saves/{id}` | Function, via `agentReport` | La VM n'a pas d'identité Firebase. |
-| Arrêts forcés et réconciliation | Function, via le watchdog | Identifiants OVH. |
+| Arrêts forcés et réconciliation | Function, via le watchdog | Clé secrète Scaleway. |
 
 ### Ce que les règles Firestore font, et ce qu'elles ne font pas
 
@@ -179,7 +268,7 @@ apps/
 libs/
   session/             CŒUR DE MÉTIER. Session, Deadline, SessionState,
                        événements de domaine. Ports ServerHost, DnsUpdater,
-                       Clock, SaveStore. Ne connaît ni Firestore ni OVH
+                       Clock, SaveStore. Ne connaît ni Firestore ni l'hébergeur
     saves/             module support : Save, plancher de taille
   session-record/      ACL Firestore du contexte session : server/current,
                        config/settings, events. Deux faces, client et admin
@@ -187,8 +276,8 @@ libs/
                        ne voient Firestore : tout passe par un module *-record
   agent-protocol/      format de fil entre la VM et le plan de contrôle —
                        une ACL, pas du métier
-  ovh-compute/         adapter ServerHost   -> API OVH Public Cloud
-  ovh-storage/         adapter SaveStore    -> Object Storage (S3)
+  scaleway-compute/    adapter ServerHost   -> API Instance Scaleway
+  scaleway-storage/    adapter SaveStore    -> Object Storage (S3)
   ovh-dns/             adapter DnsUpdater   -> DynHost
 deploy/
   cloud-init/          génère le docker-compose.yml de l'instance
@@ -266,7 +355,7 @@ glossaire est la langue omniprésente :
 | échéance, *affichée* « heure de fermeture » | `Deadline`, libellé `Closing time` | l'instant auquel le serveur s'arrête |
 | prolongation | `extend()` | repousser l'échéance d'un pas, dans la fenêtre |
 | fenêtre de prolongation | `extensionWindow` | les 30 dernières minutes, seul moment où prolonger est possible |
-| gabarit | `flavor` | le calibre d'instance OVH, `b3-8` par défaut |
+| gabarit | `InstanceSize` | le calibre de la machine, `DEV1-L` par défaut. Le mot du fournisseur — `flavor` chez OpenStack, *commercial type* chez Scaleway — s'arrête à l'adapter et n'entre pas dans `session` |
 | sauvegarde | `Save` | un état du monde de jeu déposé dans le stockage objet |
 | membre | `Member` | une personne autorisée, `player` ou `admin` |
 | l'ouvrant | `startedBy` | le membre qui a lancé la session |
@@ -301,7 +390,7 @@ l'implémente :
 
 | Port | Déclaré dans | Rôle |
 |---|---|---|
-| `ServerHost` | `session` | créer, détruire, décrire une instance et son IP |
+| `ServerHost` | `session` | ouvrir, fermer et décrire **un serveur de jeu**, désigné par le tag de sa session |
 | `DnsUpdater` | `session` | pointer un enregistrement A vers une IP |
 | `Clock` | `session` | fournir l'instant courant |
 | `SaveStore` | `session`, module `saves` | lister, lire, écrire les sauvegardes |
@@ -309,27 +398,58 @@ l'implémente :
 `Clock` est un port parce que tout le système tourne autour d'échéances :
 sans lui, tester la fenêtre de prolongation demanderait d'attendre 3 h 30.
 
-Les adapters `ovh-*` sont les couches anticorruption vers les fournisseurs : le
-modèle OpenStack d'OVH, le format S3 et le protocole DynHost s'arrêtent à leur
+**`ServerHost` ouvre et ferme un serveur, pas des ressources.** C'est ce qui
+laisse le gabarit libre. Selon le calibre choisi, ouvrir un serveur crée une
+instance et une IP, ou une instance, une IP **et un volume** ; `session` n'en
+sait rien et n'a pas à le savoir. Le port parle d'un serveur de jeu, l'adapter
+sait combien d'objets cela représente chez le fournisseur.
+
+**Fermer se dit par le tag, jamais par une liste.** `ServerHost` détruit tout ce
+qui porte `session:{sessionId}`, et c'est l'adapter qui sait descendre aux
+dépendances muettes — un volume Scaleway ne porte aucune étiquette, il se
+retrouve par l'instance à laquelle il est attaché, et seulement si l'instance
+existe encore.
+
+La différence n'est pas cosmétique. Si la fermeture consommait la liste des
+identifiants enregistrés au §5, alors une panne entre la création d'une
+ressource et son enregistrement laisserait cette ressource introuvable et
+facturée. En interrogeant le fournisseur par le tag, **la destruction ne dépend
+d'aucun enregistrement** : ce que le §5 note sert à décider *s'il faut*
+détruire, jamais à savoir *quoi* détruire.
+
+C'est cette séparation qui rend le gabarit configurable sans toucher au domaine.
+Ajouter demain un calibre à stockage bloc coûte une branche dans
+`scaleway-compute` et rien ailleurs — ni champ dans `server/current`, ni ligne
+dans le watchdog, ni cas dans `libs/session`.
+
+Les trois adapters sont les couches anticorruption vers les fournisseurs : le
+modèle Scaleway, le format S3 et le protocole DynHost s'arrêtent à leur
 frontière et n'entrent jamais dans `session`.
 
-**Pourquoi trois libs `ovh-*` et non une seule.** Le nombre n'est pas un choix :
-un adapter par port. Les fusionner ne supprimerait pas les trois ports, cela
+**Pourquoi trois libs et non une seule.** Le nombre n'est pas un choix : un
+adapter par port. Les fusionner ne supprimerait pas les trois ports, cela
 produirait un module dont les dépendances sont l'union des trois — et comme les
 secrets se lient par fonction chez gen2, chaque Function porterait les trois
 jeux d'identifiants alors que le watchdog n'a besoin que du calcul.
 
 | Lib | Protocole | Identifiants |
 |---|---|---|
-| `ovh-compute` | API OVH, signature à clé applicative | clé applicative, secret, consumer key |
-| `ovh-storage` | S3 | access key et secret S3 |
+| `scaleway-compute` | API Instance Scaleway, en-tête `X-Auth-Token` | une clé secrète |
+| `scaleway-storage` | S3 | access key et secret S3 |
 | `ovh-dns` | un GET HTTP sur `ovh.com/nic/update` | user et mot de passe DynHost |
 
-Leur seul point commun est la facture : grouper par fournisseur serait grouper
-par relation commerciale, la même erreur que grouper par couche technique sur un
-autre axe. Elles n'ont pas non plus les mêmes raisons de changer — le repli
-Scaleway annoncé plus haut ne concernerait que le calcul, et scinderait la lib
-unique exactement au moment où elle est sous tension.
+Leur seul point commun serait la facture : grouper par fournisseur serait
+grouper par relation commerciale, la même erreur que grouper par couche
+technique sur un autre axe. Et elles n'ont pas les mêmes raisons de changer.
+
+**C'est arrivé, et c'est la preuve.** La conception écrivait que « le repli
+Scaleway ne concernerait que le calcul, et scinderait la lib unique exactement
+au moment où elle est sous tension ». Le repli a eu lieu le 2026-09-03 : le
+calcul a changé de fournisseur, le stockage l'a suivi pour une raison qui lui
+est propre — rester dans la région de l'instance — et le DNS n'a pas bougé du
+tout. Une lib unique par fournisseur aurait éclaté ; trois libs par port ont
+absorbé le changement en changeant deux noms. Le découpage tient, la table
+ci-dessus est le seul endroit du spec qui ait eu à bouger pour lui.
 
 ### `session-record` : la frontière avec Firestore
 
@@ -450,7 +570,7 @@ invariant, où il tient et en combien de temps :
 | `RUNNING` implique qu'une machine existe | Functions seules — le navigateur ne peut pas écrire cet état | immédiat |
 | Transition légale, pas de `IDLE` vers `STOPPING` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
 | `deadline - maintenant ≤ durée de session` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
-| Aucune ressource OVH ne survit à sa session | watchdog, par réconciliation sur le tag | jusqu'à 5 min |
+| Aucune ressource Scaleway ne survit à sa session | watchdog, par réconciliation sur le tag | jusqu'à 5 min |
 
 Un invariant dont on sait dire où il tient et en combien de temps est protégé ;
 un invariant « porté par l'agrégat » mais exécuté dans un navigateur hostile est
@@ -488,9 +608,9 @@ tout le monde sans le savoir.
 | Document | Contenu | Écrivain |
 |---|---|---|
 | `server/current` | champs *demandés* : `state`, `sessionId`, `startedBy`, `startedAt`, `deadline` | navigateur (membre) |
-| `server/current` | `flavor` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
+| `server/current` | `instanceSize` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
 | `server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `provisionClaimedAt`, `lastError` | Functions |
-| `provisioning/{sessionId}` | `tag`, `intendedAt`, `flavor`, puis `instanceId`, `ipId`, `closedAt` — l'intention de création ; ni lue ni écrite par un client | Functions |
+| `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, puis `instanceId`, `ipId`, `ip`, `closedAt` — l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
 | `config/settings` | champ *réservé* : `rulesVersion` | le déploiement, via l'Admin SDK (§10) |
@@ -588,7 +708,7 @@ par mois, totaliser par requête ne coûte rien et évite un compteur à tenir.
 
 Le tarif horaire nécessaire à ce calcul — le `tariff` de `estimatedCost()` —
 vit dans `config/settings`, par gabarit. Il ne peut pas être compilé dans le
-bundle : OVH change ses prix, et un tarif faux fausserait silencieusement le
+bundle : l'hébergeur change ses prix, et un tarif faux fausserait silencieusement le
 seul chiffre que l'interface affiche sur l'argent.
 
 `server/current` est un document unique dont les champs ont deux propriétaires.
@@ -601,17 +721,42 @@ Firestore filtrent la lecture au niveau du document, pas du champ : posé dans
 tous. Il vit donc dans `agentTokens/{sessionId}`, qu'aucun client ne lit.
 
 **`provisioning/{sessionId}` porte l'intention de création**, écrite avant tout
-appel à OVH (§6, étape 4). C'est la pièce qui empêche une machine fantôme de
+appel à Scaleway (§6, étape 4). C'est la pièce qui empêche une machine fantôme de
 tourner à l'insu de tout le monde, donc la protection la plus directe du budget.
 
-`tag` vaut `beacon:{sessionId}`, et cette même chaîne est posée en métadonnée
-sur l'instance et sur l'IP au moment de leur création. La réconciliation du
-watchdog est alors une simple comparaison : toute ressource OVH portant un tag
-`beacon:` dont le `sessionId` n'a pas de document `provisioning` ouvert — soit
-qu'il n'en ait jamais eu, soit qu'il porte un `closedAt` — est orpheline et se
-détruit. Le document est fermé au passage à `IDLE`, jamais supprimé : c'est ce
-qui distingue « session terminée proprement » de « ressource dont personne n'a
-jamais entendu parler ».
+**Deux tags, et non un.** L'instance et l'IP flottante portent, dès leur
+création :
+
+| Tag | Valeur | À quoi il sert |
+|---|---|---|
+| d'appartenance | `beacon` — constant | **énumérer** tout ce qui appartient au système |
+| de session | `session:{sessionId}` | **apparier** une ressource à son document `provisioning` |
+
+`tag` dans `provisioning/{sessionId}` porte le second.
+
+Le premier n'est pas une redondance, et c'est une correction : le filtre `tags=`
+de l'API Scaleway est un filtre **exact**, pas un filtre par préfixe. Or la
+requête dont la réconciliation a besoin — *toute ressource du système dont la
+session est inconnue* — porte précisément sur des `sessionId` que le watchdog
+ne connaît pas. Sans tag constant, il n'y a rien à demander à l'API : il
+faudrait tout rapatrier et trier côté client. Le tag d'appartenance est ce qui
+rend la question posable.
+
+La réconciliation est alors une comparaison en deux temps : lister par
+`tags=beacon`, puis, pour chaque ressource, lire son `session:{id}` et vérifier
+que `provisioning/{id}` existe et est ouvert. Une ressource dont le document
+n'existe pas, porte un `closedAt`, ou qui n'a pas de tag de session du tout, est
+orpheline et se détruit. Le document est fermé au passage à `IDLE`, jamais
+supprimé : c'est ce qui distingue « session terminée proprement » de « ressource
+dont personne n'a jamais entendu parler ».
+
+`tags` est un champ natif de l'API Instance Scaleway, présent sur le serveur
+**et** sur l'IP flottante, posable à la création et modifiable ensuite. C'est
+cette capacité, et son absence de l'API OVH v1, qui a fait changer d'hébergeur
+(§2). La **sémantique exacte du filtre** — exact ou préfixe, et son
+comportement quand plusieurs tags sont demandés — reste à mesurer en vivo
+(§12) : c'est elle qui décide si le premier temps de la réconciliation coûte
+une requête ou un rapatriement.
 
 Le `sessionId` est tiré par le navigateur, ce qui pose la question de sa
 réutilisation. Elle est fermée par construction : la Function crée
@@ -638,7 +783,7 @@ n'obtiendrait rien : sans champ réservé il ne peut ni faire naître une machin
 ni en cacher une, et le watchdog remet `server/current` d'équerre au tour
 suivant.
 
-`flavor` obéit à la même logique de propriété : le champ est réservé à l'admin,
+`instanceSize` obéit à la même logique de propriété : le champ est réservé à l'admin,
 donc un membre qui ne l'écrit pas hérite du gabarit par défaut appliqué par la
 Function.
 
@@ -652,19 +797,19 @@ stateDiagram-v2
     RUNNING --> STOPPING : bouton, ou échéance atteinte
     STOPPING --> IDLE : instance et IP détruites
     PROVISIONING --> IDLE : échec, mais nettoyage réussi
-    RUNNING --> IDLE : watchdog, la machine a disparu chez OVH
+    RUNNING --> IDLE : watchdog, la machine a disparu chez l'hebergeur
     PROVISIONING --> FAILED : échec, et nettoyage impossible
     STOPPING --> FAILED : destruction refusée
     FAILED --> IDLE : watchdog, dès qu'aucune ressource taguée ne survit
 ```
 
 **`FAILED` n'est pas un état terminal, et l'échec ordinaire n'y passe pas.**
-Une création d'instance refusée par OVH est un incident banal : la Function
+Une création d'instance refusée par Scaleway est un incident banal : la Function
 nettoie ce qu'elle a pu créer, écrit `lastError` et repasse à `IDLE`. Le bouton
 redevient immédiatement cliquable, l'interface disant simplement que la
 tentative précédente a échoué.
 
-`FAILED` est réservé au cas où le nettoyage lui-même n'a pas abouti — API OVH
+`FAILED` est réservé au cas où le nettoyage lui-même n'a pas abouti — API Scaleway
 injoignable, destruction refusée. C'est un état d'attente, pas un mur : le
 watchdog y revient toutes les 5 minutes, retente la destruction, et rend l'état
 à `IDLE` dès qu'aucune ressource taguée ne survit.
@@ -680,7 +825,7 @@ jamais bloqué ».
 
 1. Le navigateur exécute une transaction Firestore qui fait passer
    `server/current` de `IDLE` à `PROVISIONING`, en y inscrivant `sessionId`,
-   `startedBy`, `startedAt`, `deadline` — et `flavor` seulement s'il est admin,
+   `startedBy`, `startedAt`, `deadline` — et `instanceSize` seulement s'il est admin,
    sinon la Function appliquera le gabarit par défaut — plus l'événement
    `SessionStarted` dans la même écriture, c'est lui qui porte le nom affiché.
    L'échéance est calculée par `libs/session` à partir de `config/settings`.
@@ -697,27 +842,56 @@ jamais bloqué ».
    un double déclenchement créerait deux instances facturées.
 4. Elle génère un jeton d'agent aléatoire de 32 octets, dont seul le hachage est
    stocké, dans `agentTokens/{sessionId}`, puis écrit l'**intention de
-   création** dans `provisioning/{sessionId}` — tag `beacon:{sessionId}`,
-   instant, gabarit — **avant** d'appeler OVH. Sans cela, un crash entre l'appel
+   création** dans `provisioning/{sessionId}` — tag `session:{sessionId}`,
+   instant, gabarit — **avant** d'appeler Scaleway. Sans cela, un crash entre l'appel
    et l'enregistrement de l'`instanceId` laisserait une machine facturée dont
    plus personne ne connaît l'existence. Les deux documents sont créés en
    création stricte : un `sessionId` déjà vu fait échouer la transaction.
-5. Création de l'instance et de l'IP, **toutes deux portant le tag**, avec un
-   `cloud-init` contenant : le jeton, l'URL de l'endpoint, des identifiants S3
-   restreints au seul préfixe des saves, la configuration serveur et l'échéance.
-   `instanceId` et `ipId` sont inscrits dans `provisioning/{sessionId}` dès
-   qu'OVH les retourne.
+5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
+   avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, des
+   identifiants S3 restreints au seul préfixe des saves, la configuration
+   serveur et l'échéance. `ipId`, `ip` et `instanceId` sont inscrits dans
+   `provisioning/{sessionId}` dès que Scaleway les retourne. L'IP d'abord :
+   c'est la Function qui connaît l'adresse, et elle la connaît avant que la
+   machine existe.
 6. Au boot, `cloud-init` écrit un `docker-compose.yml` et lance deux conteneurs :
    `mornedhels/enshrouded-server`, qui télécharge le jeu via SteamCMD et prend sa
    configuration dans les variables d'environnement, et le compagnon, qui
    restaure la save depuis Object Storage **avant** que le serveur démarre, puis
    synchronise vers le bucket les backups produits par l'image amont.
-7. L'agent appelle `agentReport({phase: 'ready', ip})`. La Function met à jour
-   DynHost, recopie `instanceId`, `ipId`, `ip` et le `flavor` effectivement
+7. **L'agent sait que le serveur est prêt en l'interrogeant en A2S** sur le port
+   de requête, toutes les 30 s pendant le démarrage. C'est le protocole que le
+   client d'un joueur emploie : il teste ce qui compte — « quelqu'un peut-il se
+   connecter » — et non un intermédiaire comme la présence du processus ou
+   l'ouverture du port. La bibliothèque est déjà installée par le conteneur
+   amont, qui s'en sert pour compter les joueurs avant une mise à jour.
+
+   **Prêt veut dire « le serveur répond *et* c'est le bon monde ».** Le serveur
+   de jeu ne démarre qu'une fois la sauvegarde restaurée (étape 6), et c'est une
+   protection avant d'être une commodité : un serveur qui répondrait avant la
+   restauration laisserait quelqu'un se connecter, jouer dans un monde vierge,
+   et **cette partie-là serait sauvegardée par-dessus la vraie**. Le §8 fait de
+   la perte d'une sauvegarde le seul échec grave du système ; c'est ici qu'elle
+   se produirait.
+
+   L'ordre se tient donc dans le `docker-compose`, pas dans une convention : le
+   conteneur de jeu attend que le compagnon ait fini sa restauration. Tant qu'il
+   ne démarre pas, aucun client ne peut se connecter, et la fenêtre n'existe
+   pas. C'est le travail de la tranche 3, et le `deploy/docker-compose.yml`
+   d'aujourd'hui ne le fait pas — il n'a pas encore de compagnon à attendre.
+
+   L'agent appelle alors `agentReport({phase: 'ready', ip})`. La Function met à jour
+   DynHost **depuis l'`ip` de `provisioning/{sessionId}`, pas depuis celle que
+   l'agent déclare** : c'est elle qui a réservé l'adresse à l'étape 5, et le §7
+   fait de la VM l'élément le moins fiable du système. L'`ip` du rapport ne sert
+   qu'à corroborer ; si les deux diffèrent, c'est un incident à journaliser, pas
+   une valeur à suivre — sans quoi une VM compromise pointerait
+   `enshrouded.beacon.charlouze.com` où elle veut. Elle recopie ensuite
+   `instanceId`, `ipId`, `ip` et le gabarit `instanceSize` effectivement
    provisionné de `provisioning/{sessionId}` vers `server/current`, et fait
    passer l'état à `RUNNING`. Recopier le gabarit évite que l'estimation
    affichée dérive si un admin change le gabarit par défaut en cours de session. C'est ce recopiage qui donne au watchdog de quoi comparer l'état
-   affiché à ce qu'OVH déclare, et à l'arrêt propre de quoi effacer.
+   affiché à ce que Scaleway déclare, et à l'arrêt propre de quoi effacer.
 8. L'UI affiche le nom de domaine, l'IP brute et le compte à rebours.
 
 Durée attendue du clic au serveur jouable : environ 4 minutes, dont 2 à 3 pour
@@ -781,26 +955,68 @@ système pour le budget.
 |---|---|
 | Échéance dépassée de plus de 2 min, état encore `RUNNING` | Arrêt forcé |
 | `deadline - maintenant` supérieur à la durée de session | Échéance ramenée à la borne, écart journalisé |
-| État incohérent avec les champs réservés — `RUNNING` sans `instanceId`, `IDLE` avec une instance vivante | `server/current` remis d'équerre à partir de ce qu'OVH déclare réellement |
+| État incohérent avec les champs réservés — `RUNNING` sans `instanceId`, `IDLE` avec une instance vivante | `server/current` remis d'équerre à partir de ce que Scaleway déclare réellement |
 | `PROVISIONING` depuis plus de 15 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
 | `STOPPING` depuis plus de 10 min | Destruction sans attendre l'agent — la save de moins de 10 min est déjà en Object Storage |
 | État `FAILED` | Nouvelle tentative de destruction ; retour à `IDLE` dès qu'aucune ressource taguée ne survit |
-| Ressource taguée `beacon:` sans `provisioning/{sessionId}` ouvert | Destruction |
+| Ressource taguée `beacon` sans `provisioning/{sessionId}` ouvert | Destruction |
 
 Chaque passage écrit `health/watchdog.lastRunAt`. La dernière ligne est la
-réconciliation : elle rattrape toute instance ou IP orpheline, quelle qu'en soit
-la cause, en confrontant les ressources qu'OVH déclare aux intentions de
-création enregistrées.
+réconciliation : elle rattrape toute ressource orpheline, quelle qu'en soit la
+cause, en confrontant ce que Scaleway déclare aux intentions de création
+enregistrées. Elle énumère par le tag d'appartenance et apparie par le tag de
+session (§5).
+
+**Détruire une instance, c'est deux gestes différents selon son état, et le
+watchdog doit connaître les deux.** Mesuré en tranche 0 :
+
+| État de l'instance | Comment elle meurt | Ce qu'il reste |
+|---|---|---|
+| en marche | action `terminate` | rien, les volumes partent avec |
+| arrêtée, jamais démarrée | `terminate` **est refusé** ; suppression simple | **le volume survit**, détaché et facturé |
+
+C'est le cas dangereux, parce qu'il croise la ligne « `PROVISIONING` depuis plus
+de 15 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
+watchdog la supprime — et abandonne son disque. Le volume ne porte **aucun tag**,
+les étiquettes posées sur l'instance ne descendant pas dessus ; il n'apparaît
+donc ni dans la liste des instances, ni dans celle des IP, et rien ne le
+rattache à une session.
+
+La destruction d'une instance arrêtée supprime donc explicitement ses volumes, et
+la réconciliation balaie **trois** listes et non deux.
+
+Cette énumération est le travail de `scaleway-compute`, pas du watchdog. Le
+watchdog demande la fermeture d'un serveur en donnant le tag de sa session ;
+combien d'objets cela représente, et dans quel ordre les défaire, appartient à
+l'adapter (§4). C'est ce qui permet au §2 de laisser le gabarit libre : un
+calibre à volume bloc ajoutera une ressource à démonter dans l'adapter, et rien
+ici.
+
+Un volume détaché dont on ne sait pas prouver l'origine est signalé, jamais
+détruit d'office : c'est la seule ressource du système qu'on ne peut pas
+rattacher — elle ne porte aucun tag — et supprimer le disque d'autrui n'est pas
+une erreur que le watchdog a le droit de commettre.
 
 ### Qui surveille le watchdog
 
 Le watchdog est déclaré composant le plus critique du système pour le budget,
-et rien ne signalait son arrêt. Une alerte de budget OVH mesure le dégât une
+et rien ne signalait son arrêt. Une alerte de budget Scaleway mesure le dégât une
 fois qu'il est fait ; il faut aussi mesurer la panne.
 
 **Le garde-fou est une alerte Cloud Monitoring** sur l'échec ou l'absence
 d'exécution du job Scheduler, qui prévient l'administrateur par e-mail. C'est
 elle, et elle seule, qui signale la panne.
+
+**Et elle a une limite, mesurée en tranche 0.** Une condition d'absence de
+métrique exige qu'au moins un point ait déjà été reçu : *« The condition won't
+be met when the subsystem that writes metric data has never written a data
+point. »* L'alerte détecte donc l'**arrêt** du watchdog, jamais son **absence de
+départ** — un job supprimé, mal créé, ou qui n'a jamais tourné une seule fois ne
+déclenche rien.
+
+La conséquence est une tâche, pas une inquiétude : à la pose du job, sa première
+exécution se vérifie à la main, une fois. Après quoi l'alerte couvre le reste.
+La fenêtre d'absence est configurable jusqu'à 23,5 h.
 
 `health/watchdog.lastRunAt`, écrit à chaque passage réussi, n'est pas un second
 garde-fou : rien ne le lit automatiquement. C'est une trace de diagnostic — elle
@@ -840,7 +1056,7 @@ limites du TTL, ou écrire un `SessionStarted` plus récent pour que l'écran
 affiche son nom comme celui de l'ouvrant.
 
 C'est assumé, et les trois pour la même raison : ce sont des affichages, pas des
-autorités. Le cumul est un indicateur, la vraie facture est chez OVH ; l'ouvrant
+autorités. Le cumul est un indicateur, la vraie facture est chez l'hébergeur ; l'ouvrant
 affiché est un confort, la vérité est le `startedBy` de `server/current`, que
 les règles attachent à l'`uid` de l'auteur. Ce serait à revoir le jour où
 `events` servirait à autre chose qu'à informer des amis.
@@ -864,13 +1080,15 @@ exposée sur Internet qui exécute un binaire propriétaire sous Wine ; si elle 
 compromise, l'attaquant ne doit rien obtenir de plus que des droits d'écriture
 sur un préfixe de bucket. La conséquence assumée est que l'instance ne peut pas
 s'auto-détruire : le watchdog est le seul réclamateur, complété par une alerte
-de budget OVH comme garde-fou humain.
+de budget Scaleway comme garde-fou humain.
 
 L'agent s'authentifie auprès d'un unique endpoint avec un jeton propre à la
 session, qui meurt avec elle.
 
-Les identifiants OVH (clé applicative, secret, consumer key) et ceux du bucket
-sont stockés dans Secret Manager et lus par les Functions.
+La clé secrète Scaleway, les identifiants S3 du bucket et ceux de DynHost sont
+stockés dans Secret Manager et lus par les Functions. Le calcul n'en demande
+qu'un seul : l'API Scaleway s'authentifie par un en-tête `X-Auth-Token`, là où
+l'API OVH en réclamait trois et une signature à recalculer.
 
 Une IP orpheline chez certains fournisseurs continue d'être facturée après la
 destruction de l'instance. Le flux d'arrêt doit donc supprimer l'IP **et**
@@ -925,7 +1143,7 @@ L'ordre compte : la protection réelle est en 1, pas en 3.
 L'essentiel de l'effort porte sur `libs/session` : tests unitaires purs avec un
 `Clock` bouchonné, couvrant les transitions de `Session`, la fenêtre de
 prolongation portée par `Deadline` et le calcul de coût. Ces tests
-n'instancient ni Firestore ni OVH — si l'un d'eux en a besoin, c'est que le
+n'instancient ni Firestore ni l'API de l'hébergeur — si l'un d'eux en a besoin, c'est que le
 noyau de décision a laissé fuir une dépendance vers l'infrastructure.
 
 **Les règles Firestore ont leur propre suite de tests**, écrite avec
@@ -933,7 +1151,7 @@ noyau de décision a laissé fuir une dépendance vers l'infrastructure.
 d'autorisation, donc elle se teste par ses refus : écriture par un `uid` absent
 de `members`, `state` porté à `RUNNING` ou `IDLE` depuis le navigateur, écriture
 d'un champ réservé, lecture de `agentTokens/{sessionId}` ou de
-`provisioning/{sessionId}`, `flavor` écrit par un non-admin, promotion de
+`provisioning/{sessionId}`, `instanceSize` écrit par un non-admin, promotion de
 soi-même en admin, modification ou suppression d'une entrée d'audit.
 
 **Les refus de lecture se testent au même titre que ceux d'écriture**, et
@@ -977,7 +1195,7 @@ Trois tests gardent chacun une frontière :
 - **Le plancher de taille de `Save`** refuse l'enregistrement d'une sauvegarde
   suspecte. Le chemin de restauration a par ailleurs ses propres tests dédiés.
 
-L'adapter OVH dispose de tests de contrat lancés à la demande contre le compte
+L'adapter Scaleway dispose de tests de contrat lancés à la demande contre le compte
 réel, jamais en intégration continue : c'est le seul moyen de vérifier que l'API
 se comporte comme sa documentation le prétend.
 
@@ -1051,7 +1269,7 @@ Le compagnon est construit et poussé sur ghcr.io par son propre workflow,
 déclenché par un tag git ; le test de fumée `docker-compose` (§9) en est la
 barrière.
 
-**Les identifiants OVH n'entrent pas dans GitHub.** Les tests de contrat contre
+**La clé secrète Scaleway n'entre pas dans GitHub.** Les tests de contrat contre
 le compte réel se lancent depuis la machine du développeur, jamais depuis un
 runner. C'est la raison pour laquelle le §9 les exclut de l'intégration
 continue, et elle est de sécurité : le §7 pose que les identifiants cloud
@@ -1063,7 +1281,7 @@ Le déploiement, lui, doit bien s'authentifier auprès de Firebase : il utilise
 l'identité fédérée GitHub (OIDC) vers un compte de service dédié, ce qui évite
 d'entreposer une clé de longue durée.
 
-**Sur une pull request, rien qui sorte du runner** : ni appel à OVH, ni test de
+**Sur une pull request, rien qui sorte du runner** : ni appel à Scaleway, ni test de
 fumée Docker — ce dernier est trop lent pour une boucle de relecture et tourne
 après fusion, ou à la demande.
 
@@ -1071,17 +1289,44 @@ après fusion, ou à la demande.
 
 | Poste | Mois sans jouer | Mois à 32 h |
 |---|---|---|
-| Instance `b3-8` (~0,047 €/h) | 0 € | ~1,50 € |
-| IPv4 publique | 0 € | quelques centimes |
+| Instance `DEV1-L` (0,04284 €/h) | 0 € | ~1,71 € |
+| Ses 80 Go de disque local (~0,0067 €/h) | 0 € | ~0,27 € |
+| IPv4 flexible (0,005 €/h, facturée même détachée) | 0 € | ~0,20 € |
 | Object Storage (saves, 2-3 Go) | ~0,03 € | ~0,03 € |
 | Images Docker (amont + compagnon sur ghcr.io) | 0 € | 0 € |
 | DNS (DynHost) | 0 € | 0 € |
 | Firebase (Hosting, Auth, Firestore, Functions, Scheduler) | 0 € | 0 € |
 | Artifact Registry (images des Functions) | ~0,05 € | ~0,05 € |
-| **Total** | **~0,10 €** | **~1,75 €** |
+| **Total** | **~0,08 €** | **~2,26 €** |
 
-Référence à battre : 7,90 €/mois. Point d'équilibre : environ 165 h de jeu par
-mois.
+Référence à battre : 7,90 €/mois. Point d'équilibre : environ **143 h
+facturées** par mois.
+
+**Facturées, et non jouées** : l'heure entamée est due, chaque ressource ayant
+son propre minimum de 60 minutes. Une soirée de 4 h plus ses cinq minutes de
+démarrage se paie 5 h. Les 32 h de jeu de la colonne ci-dessus valent donc
+**~40 h facturées** sur huit soirées, ce que le total reflète.
+
+Une remarque sur ce tableau. Le disque y a sa ligne parce **qu'aucun disque
+n'est compris dans un prix d'instance** chez Scaleway ; ce qui distingue le
+disque local du volume bloc n'est donc pas le tarif mais le cycle de vie — le
+local naît et meurt avec son instance, le bloc est une ressource indépendante à
+créer, réconcilier et détruire (§2).
+
+**Le tarif de l'instance est relevé sur le catalogue du projet**, le 2026-09-03,
+donc c'est le prix appliqué et non celui d'une page publique — laquelle vend
+d'ailleurs des gammes qu'aucune zone parisienne ne propose.
+
+**Mais un prix d'instance ne comprend pas son disque**, et le catalogue ne le dit
+pas. La première facture l'a montré : une ligne `LocalSSD` distincte de la ligne
+d'instance. Le champ `per_volume_constraint.l_ssd` du catalogue décrit ce qu'un
+gabarit *peut porter*, et se lit facilement comme « compris » — il ne l'est pas. La grille publique le disait pourtant : les prix « excluent le
+stockage et les adresses IPv4 publiques ».
+
+Les ~0,0067 €/h du disque sont **déduits d'une facture arrondie au centime**, pas
+relevés sur un tarif publié. À reprendre sur la facture du mois, avec l'egress
+objet et le prix du stockage — et avec la ligne IPv4, dont le montant observé
+sur une soirée dépasse ce que 0,005 €/h expliquerait.
 
 L'UI affiche le coût estimé de la session en cours et le cumul du mois, calculés
 à partir des heures écoulées et du `tariffPerHour` du gabarit lu dans
@@ -1101,35 +1346,45 @@ simple donc index automatique, et ne trie le mois que sur les quelques dizaines
 de documents ramenés. Sans ce filtre, elle rapatrierait jusqu'à 400 jours
 d'événements pour n'en garder qu'une poignée.
 
-## 12. À vérifier au démarrage de l'implémentation
+## 12. Ce qui est vérifié, et ce qui reste ouvert
 
-- Les ports UDP du serveur Enshrouded — 15636 et 15637 de mémoire — et le
-  comportement exact de l'image communautaire retenue, pour configurer le
-  groupe de sécurité.
-- Le tarif exact du `b3-8` après le 1er octobre 2026, date à laquelle OVH
-  sépare le stockage local et l'IPv4 du prix de base des instances de
-  génération 3.
-- La facturation réelle du trafic sortant d'OVH Object Storage vers une
-  instance de la même région.
-- Le débit réel de SteamCMD depuis une instance OVH, qui détermine la durée de
-  démarrage annoncée aux utilisateurs.
-- Que les règles Firestore sachent restreindre l'écriture champ par champ, via
-  `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...])`. Si
-  ce n'était pas exploitable, il faudrait scinder `server/current` en deux
-  documents, l'un écrit par le navigateur et l'autre par les Functions.
-- **Que l'API OVH accepte des métadonnées libres sur l'instance *et* sur l'IP
-  flottante**, et qu'elle sache les lister. Toute la réconciliation repose sur
-  ce tag ; s'il n'est pas portable par l'IP, il faudra rapprocher les IP par
-  leur instance d'attachement, ou par leur seule présence dans
-  `provisioning/{sessionId}`.
-- Que Cloud Monitoring sache alerter sur l'absence d'exécution d'un job Cloud
-  Scheduler, et à quel coût — le free tier doit couvrir une alerte unique.
-- Que le déploiement Firebase depuis GitHub Actions accepte bien l'identité
-  fédérée OIDC sans clé de compte de service à entreposer (§10).
-- Le comportement exact de `mornedhels/enshrouded-server` : emplacement et
-  format des backups, variables d'environnement disponibles, et surtout la
-  possibilité de désactiver son auto-update pour qu'une mise à jour du jeu ne se
-  déclenche pas en pleine session.
+La tranche 0 mesure les questions de la conception une par une. Le détail des
+commandes et des observations est dans
+[`probe/RESULTS.md`](../../../probe/RESULTS.md) ; ci-dessous les réponses et ce
+qu'elles ont changé.
+
+### Vérifié
+
+| Question | Réponse, mesurée le 2026-09-03 |
+|---|---|
+| Les règles Firestore savent-elles restreindre champ par champ, via `affectedKeys().hasOnly([...])` ? | **Oui.** `{deadline, ip}` est refusé là où `{deadline}` passe. `server/current` reste un document unique et le §5 tient. Deux effets de bord pour la tranche 4 : une réécriture à valeur identique donne un `affectedKeys()` vide, et une suppression de champ s'y lit comme une modification. |
+| L'API OVH accepte-t-elle des métadonnées libres sur l'instance et sur l'IP flottante ? | **Non, ni l'une ni l'autre, et aucun modèle de lecture n'en rend.** C'est ce qui a fait changer d'hébergeur (§2). Chez Scaleway, `tags` est natif sur les deux et filtrable **d'après la documentation** — la vérification en vivo est la première ligne d'« Encore ouvert », ci-dessous. |
+| Tarif du `b3-8` après le 1er octobre 2026 | 45 €/mois tout compris, ~0,0616 €/h. Sans objet depuis la bascule, mais c'est le second motif du §2. |
+| Cloud Monitoring alerte-t-il sur l'**absence** d'exécution d'un job Scheduler, et à quel coût ? | **Oui**, fenêtre configurable jusqu'à 23,5 h, sans surcoût. **Mais l'alerte exige qu'au moins un point ait déjà été reçu** : elle détecte l'arrêt du watchdog, jamais son absence de départ. Le §6 en fait le seul garde-fou ; la première exécution se vérifie donc à la main, à la pose du job. |
+| Le déploiement Firebase accepte-t-il l'identité fédérée OIDC sans clé entreposée ? | **Oui**, via `google-github-actions/auth` et `GOOGLE_APPLICATION_CREDENTIALS` sur un fichier d'identifiants externes. |
+| Quels gabarits sont commandables, avec quel disque, à quel prix, et **réellement disponibles** ? | Le catalogue seul ne suffit pas : un type peut être listé, tarifé, non obsolète, et refuser d'être créé faute de capacité. `getServerTypesAvailability` le dit — toute la famille `BASIC1` est en `shortage` en `fr-par-1`. **`DEV1-L` est le seul type à 8 Gio à la fois `available` et livré avec son disque**, à 0,04284 €/h. `PRO2` n'existe pas dans la zone. Aucun type de la zone n'est `endOfService`. |
+| `tags` est-il rendu et filtrable en vivo, et avec quelle sémantique ? | **Oui sur l'instance comme sur l'IP flottante**, à la création et à la relecture. **Le filtre est exact, pas par préfixe** : `tags=session:` rend une liste vide là où `tags=session:probe0001` rend la ressource. C'est ce qui rend le tag d'appartenance du §5 nécessaire et non redondant. |
+| La destruction d'une instance emporte-t-elle son volume ? | **Seulement si elle tourne**, et les deux cas sont vérifiés en vivo. `terminate` sur une instance en marche emporte le volume ; il est refusé sur une instance arrêtée, qui meurt par une suppression simple laissant son disque détaché et facturé. Le volume ne porte aucun tag. Voir §6, la réconciliation balaie trois listes. |
+| Scaleway propose-t-il une alerte de budget ? | **Oui**, alerte de consommation posée à 5 €/mois le 2026-09-03, avant toute création facturée. Le garde-fou de dernier recours du §7 existe. |
+| Le groupe de sécurité laisse-t-il passer `15637/udp` sans configuration ? | **Oui.** Scaleway attache un groupe par défaut, mais sa politique entrante est `accept` et ses seules règles bloquent le SMTP **sortant**. Il est `stateful`, donc le retour UDP est autorisé d'office. La tranche 2 n'a ni groupe à créer ni règle à poser. |
+| Que reste-t-il facturé sur une instance éteinte, et à quelle granularité ? | **Le disque et l'IP continuent**, le calcul s'arrête. Et **l'heure entamée est due** : facturation à l'heure d'uptime, minimum 60 minutes, chaque ressource comptée à part. Une session ratée à cinq minutes coûte une heure sur trois lignes. Le §3 tient, et le §11 compte désormais en heures facturées. |
+| Combien de temps du clic au serveur jouable ? | **Cinq à huit minutes, et c'est variable** — 4 min 49 et 7 min 58 sur deux sessions identiques à une heure d'écart. Aucun segment ne domine ; ce sont les deux postes réseau qui doublent. L'interface annonce donc une fourchette, jamais une heure. |
+| Deux vCPU auraient-ils suffi ? | **Non.** Le serveur brûle 2,6 cœurs sur 4 **sans personne connecté** : Enshrouded simule son monde en permanence et Wine s'ajoute. Le doute du §2 est tranché sans avoir eu besoin de quatre joueurs, et par la négative. |
+| Une sauvegarde se restaure-t-elle sur une machine neuve ? | **Oui**, vérifié de bout en bout : archive rapatriée, instance détruite, instance vierge, fichiers déposés — l'autel de flamme de la session précédente est là, et un monde généré à neuf ne contient aucune structure de joueur. Le gate de la tranche 3 ne repose plus sur un pari. |
+| Ports UDP du serveur Enshrouded | **Un seul, `15637`.** `15636` n'est jamais lié par l'image. Le spec en supposait deux. |
+| Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
+
+### Encore ouvert
+
+Toutes sont nées de la bascule vers Scaleway et n'ont pas d'équivalent dans la
+conception. Aucune ne se devine : la leçon de la question du tag est qu'un
+fournisseur ne fait pas ce qu'on suppose.
+
+- **Le trafic Object Storage vers une instance de la même région est-il
+  facturé**, et à quel prix les 2-3 Go de saves ?
+- **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
+  Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
+  tout gabarit à 2 vCPU — mais elle affinera le dimensionnement.
 
 ## 13. Hors périmètre v1
 

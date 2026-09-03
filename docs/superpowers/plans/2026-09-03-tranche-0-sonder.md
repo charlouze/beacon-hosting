@@ -10,41 +10,74 @@ la main.
 seul le résultat écrit compte. Les deux questions qui peuvent déplacer
 l'architecture passent en premier, la moins chère d'abord : la restriction champ
 par champ des règles Firestore se tranche sur l'émulateur pour 0 €, le tag sur
-l'IP flottante coûte une instance de cinq minutes. Rien qui crée une ressource
-OVH n'est lancé avant qu'existent une alerte de budget et un faucheur manuel —
-la règle du lotissement « le faucheur avant le semeur » vaut aussi à l'intérieur
-de cette tranche, où aucun watchdog ne rattrapera l'oubli.
+l'IP flottante coûte une IP de cinq minutes. Rien qui crée une ressource
+facturée n'est lancé avant qu'existent une alerte de budget et un faucheur
+manuel — la règle du lotissement « le faucheur avant le semeur » vaut aussi à
+l'intérieur de cette tranche, où aucun watchdog ne rattrapera l'oubli.
 
 **Pile :** Node 22, TypeScript exécuté par `tsx`, Vitest, l'émulateur Firestore
 via `firebase-tools`, `@firebase/rules-unit-testing`, Docker en local, et l'API
-OVH v1 appelée en `fetch` signé. Aucun workspace Nx : il naît en tranche 1, avec
-le premier code qui reste.
+Scaleway appelée en `fetch` avec un en-tête `X-Auth-Token`. Aucun workspace Nx :
+il naît en tranche 1, avec le premier code qui reste.
+
+> **L'hébergeur a changé en cours de tranche.** Le plan d'origine visait OVH. La
+> tâche 3 a mesuré que son API v1 ne porte de tag ni sur l'instance ni sur l'IP
+> flottante ; le spec est passé à Scaleway le 2026-09-03, et les tâches 2, 3 et
+> 6 ont été réécrites. Les tâches 1, 4, 5 et 7 n'étaient pas concernées.
 
 **Spec :** [`docs/superpowers/specs/2026-09-02-game-hosting-design.md`](../specs/2026-09-02-game-hosting-design.md) —
 les questions sondées sont son §12. Le découpage en tranches est au
 [lotissement](2026-09-02-lotissement.md).
 
+## Où en est la tranche
+
+Au 2026-09-03. Les cases à cocher des tâches ne sont pas tenues à jour : le
+rapport et l'historique git font foi, cette section dit seulement par où
+reprendre.
+
+| Tâche | État |
+|---|---|
+| 1 · Sonde R | **faite**, verdict dans `probe/RESULTS.md` |
+| 2 · Le filet | **faite** — client, inventaire, faucheur sur le SDK Scaleway, 13 cas de test |
+| 3 · Sonde T | **faite** — tag posé, relu et filtrable sur l'instance comme sur l'IP, filtre exact et non par préfixe |
+| 4 · Sonde I | **faite** |
+| 5 · Les artefacts | **faits**, `deploy/` est écrit et validé |
+| 6 · Sonde S | **faite** — trois sessions, démarrage mesuré, session jouée, sauvegarde restaurée sur une machine neuve |
+| 7 · Les trois questions | **faite** — alerte de monitoring, identité fédérée et tarif du catalogue |
+| 8 · Le spec | **faite** — le §12 est un relevé, il ne reste que deux réponses différées |
+
+Le §12 du spec est passé de neuf questions ouvertes à deux, et aucune ne bloque
+la tranche 1 : l'egress Object Storage avec le prix du stockage, qui se lit sur
+la facture du mois, et la charge à quatre joueurs, qui affinera le
+dimensionnement sans pouvoir faire choisir moins.
+
 ## Contraintes globales
 
-- **Aucune ressource OVH n'est créée, modifiée ou détruite par un agent.** Tout
-  appel qui écrit chez OVH est écrit dans le plan, expliqué, et **lancé par un
-  humain**. Un agent peut lancer les appels en lecture seule (`GET`).
+- **Aucune ressource Scaleway n'est créée, modifiée ou détruite par un agent.**
+  Tout appel qui écrit chez Scaleway est écrit dans le plan, expliqué, et
+  **lancé par un humain**. Un agent peut lancer les appels en lecture seule
+  (`GET`).
 - **Aucune écriture dans le Firestore de production, aucun `firebase deploy`.**
   L'émulateur est la cible, sur le projet fictif `demo-beacon` : le préfixe
   `demo-` garantit que le SDK ne joint jamais un vrai projet.
-- **Toute ressource OVH créée pendant cette tranche porte le préfixe de nom
-  `beacon-probe-`.** C'est ce qui rend le faucheur de la tâche 2 fiable avant que
-  le mécanisme de tag soit connu.
+- **Toute ressource créée pendant cette tranche porte le préfixe de nom
+  `beacon-probe-` *et* le tag `beacon-probe`.** Le préfixe de nom est ce qui
+  rend le faucheur fiable avant que le mécanisme de tag soit confirmé en vivo ;
+  le tag est ce que la sonde T vérifie. Une IP flottante Scaleway n'a pas de
+  nom, seulement des tags — c'est la seule ressource que le faucheur ne sait pas
+  reconnaître autrement, et la tâche 2 le dit explicitement.
 - **Les images sont référencées par leur digest `sha256:`, jamais par un tag
   mobile** (§10 du spec). Cela vaut dès la tranche 0 pour l'image amont.
-- **Les identifiants OVH ne quittent pas la machine du développeur** : ils vivent
+- **La clé secrète Scaleway ne quitte pas la machine du développeur** : elle vit
   dans `probe/.env`, déjà couvert par le `.gitignore` du dépôt (`.env`).
 - Code, noms de fichiers et commentaires en **anglais** ; documentation, rapport
   de sonde et messages de commit en **français**.
 - Commits en Conventional Commits, description française à l'impératif, portée
   parmi `probe`, `deploy`, `spec`, `plan`.
 - Budget attendu de la tranche entière : **moins de 0,20 €** — environ 2 h
-  d'instance `b3-8` à ~0,047 €/h, plus quelques centimes de stockage objet.
+  d'instance `DEV1-L` à 0,04284 €/h et son IP à 0,005 €/h, plus quelques
+  centimes de stockage objet. La sonde T ne coûte presque rien : une IP
+  flottante quelques minutes, et la plus petite instance de la gamme.
 - **Toute commande de ce plan se lance avec l'outil Bash**, c'est-à-dire Git Bash
   sur cette machine. Rien ne s'exécute par un `npx -e` à guillemets imbriqués :
   chaque script a son entrée dans `probe/package.json` et se lance par
@@ -57,7 +90,7 @@ les questions sondées sont son §12. Le découpage en tranches est au
 flowchart TD
     T1["1 · Sonde R<br/>règles champ par champ<br/>émulateur, 0 €"]
     T2["2 · Le filet<br/>inventaire, alerte de budget, faucheur"]
-    T3["3 · Sonde T<br/>tag sur instance et IP flottante"]
+    T3["3 · Sonde T<br/>tag sur l'IP seule, puis sur l'instance"]
     T4["4 · Sonde I<br/>conteneur amont, en local"]
     T5["5 · Les artefacts qui restent<br/>docker-compose et cloud-init"]
     T6["6 · Sonde S<br/>session réelle, mesures, egress objet"]
@@ -70,6 +103,7 @@ flowchart TD
     T4 --> T5
     T5 --> T6
     T6 --> T8
+    T3 --> T7
     T7 --> T8
 
     classDef arch fill:#fde8e8,stroke:#d8232a,stroke-width:2px
@@ -77,8 +111,9 @@ flowchart TD
 ```
 
 Les deux cases encadrées de rouge sont celles dont une réponse négative corrige
-le spec avant que le plan de la tranche 1 s'écrive. Les tâches 1, 4 et 7 ne
-touchent rien de facturé et peuvent tourner pendant qu'une autre attend.
+le spec avant que le plan de la tranche 1 s'écrive. Les tâches 1 et 4 ne
+touchent rien de facturé et peuvent tourner pendant qu'une autre attend. La 7
+demande le catalogue du projet, donc la clé de la 2 et le script de la 3.
 
 ## Ce que la tranche 0 ne construit pas
 
@@ -88,11 +123,12 @@ suit est hors périmètre, non par oubli mais par décision :
 - **Pas de workspace Nx.** Il naît en tranche 1, avec le premier code qui reste.
   `probe/` est un dossier Node autonome, et le `nx-generate` obligatoire du
   `CLAUDE.md` s'applique au monorepo, qui n'existe pas encore.
-- **Pas de `libs/ovh-compute`.** Les scripts de `probe/ovh/` connaissent les
-  routes de l'API en clair, chacun pour son compte. En faire un adapter
-  aujourd'hui serait le construire contre les hypothèses que la sonde est
-  justement chargée de vérifier — l'adapter s'écrit en tranche 1, sur les
-  réponses.
+- **Pas de `libs/scaleway-compute`.** Les scripts de `probe/scaleway/`
+  connaissent les routes de l'API en clair, chacun pour son compte. En faire un
+  adapter aujourd'hui serait le construire contre les hypothèses que la sonde
+  est justement chargée de vérifier — l'adapter s'écrit en tranche 1, sur les
+  réponses. La bascule d'hébergeur en cours de tranche est la démonstration :
+  l'adapter écrit trop tôt aurait été à jeter.
 - **Pas de `firestore.rules` de production.** Les règles de la tâche 1 sont un
   banc d'essai du mécanisme, pas la couche d'autorisation : celle-là s'écrit en
   tranche 4, avec `firebase-security-rules-auditor`, et elle est bien plus large.
@@ -111,7 +147,7 @@ Le spec fait reposer toute la propriété des champs de `server/current` sur
 `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...])`. Si ce
 mécanisme ne restreint pas réellement champ par champ, le document se scinde en
 deux — l'un écrit par le navigateur, l'autre par les Functions — et le §5 change.
-La question se tranche sur l'émulateur, sans un centime et sans OVH : elle passe
+La question se tranche sur l'émulateur, sans un centime et sans hébergeur : elle passe
 donc en premier.
 
 Ces règles ne sont pas les règles du produit. Ce sont les règles minimales qui
@@ -413,137 +449,211 @@ git commit -m "test(probe): mesure la restriction champ par champ des regles Fir
 
 ### Task 2: Le filet — inventaire, alerte de budget, faucheur manuel
 
+> **Cette tâche est faite, et le code ci-dessous est le brouillon d'avant le
+> SDK.** La sonde parlait à l'API par un `fetch` maison ; elle s'est trompée
+> trois fois sur la forme des requêtes, deux fois après qu'une ressource
+> facturée existe, et elle est passée au SDK officiel `@scaleway/sdk`. **Le code
+> qui fait foi est dans `probe/scaleway/`**, pas ici. Ce qui suit reste pour le
+> raisonnement — pourquoi chaque pièce existe — et ne se recopie pas.
+
 Aucun watchdog n'existe. Ce qui est créé dans les tâches suivantes n'est détruit
 que si quelqu'un le détruit, et une instance oubliée un vendredi soir coûte
-~3,40 € le temps qu'on s'en aperçoive. Le faucheur passe donc avant le semeur, à
+~3,10 € le temps qu'on s'en aperçoive. Le faucheur passe donc avant le semeur, à
 l'échelle de cette tranche comme à celle du projet.
 
-Cette tâche ne crée rien chez OVH. Elle lit, et elle se dote du moyen de
+Cette tâche ne crée rien chez Scaleway. Elle lit, et elle se dote du moyen de
 détruire.
+
+**La décision de détruire est du code pur, testé.** C'est le seul endroit de la
+sonde qui mérite un test : un faucheur trop gourmand efface une ressource qui
+n'est pas à nous, un faucheur trop timide laisse filer de l'argent. La règle de
+sélection est donc une fonction sans réseau, et le script qui appelle l'API n'en
+est que l'enveloppe.
 
 **Fichiers :**
 - Modifier : `probe/package.json` — dépendances et scripts
-- Créer : `probe/.env.example`
-- Créer : `probe/ovh/client.ts`
-- Créer : `probe/ovh/me.ts`
-- Créer : `probe/ovh/inventory.ts`
-- Créer : `probe/ovh/reap.ts`
-- Test : `probe/ovh/client.spec.ts`
+- Modifier : `probe/.env.example`
+- Créer : `probe/scaleway/client.ts`
+- Créer : `probe/scaleway/reaper-policy.ts`
+- Test : `probe/scaleway/reaper-policy.spec.ts`
+- Créer : `probe/scaleway/inventory.ts`
+- Créer : `probe/scaleway/inventory-report.ts`
+- Créer : `probe/scaleway/reap.ts`
 - Modifier : `probe/RESULTS.md`
+- Supprimer : `probe/ovh/` — sauf `schema.ts`, dont la mesure a fondé la bascule
 
 **Interfaces :**
 - Consomme : `probe/package.json` de la tâche 1.
 - Produit :
-  - `signaturePayload(appSecret, consumerKey, method, url, body, timestamp): string`
-  - `ovhFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T>`
-  - `ovhConfig(): { endpoint: string; appKey: string; appSecret: string; consumerKey: string; serviceName: string; region: string }`
+  - `scwConfig(): { secretKey: string; projectId: string; zone: string }`
+  - `scwFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T>`
+    — `path` est relatif à `https://api.scaleway.com`
   - `runScript(main: () => Promise<void>): void` — le pied de page commun à tous
     les scripts de sonde
-  - `npm --prefix probe run ovh:inventory` et `npm --prefix probe run ovh:reap`,
+  - `selectDoomed(inventory: ProbeInventory, options: { includeOrphanIps: boolean }): Doomed`
+  - `npm --prefix probe run scw:inventory` et `npm --prefix probe run scw:reap`,
     utilisés par les tâches 3 et 6.
 
-- [ ] **Step 1: Obtenir des identifiants OVH — geste humain**
+- [ ] **Step 1: Obtenir une clé API Scaleway — geste humain**
 
-Cette étape se fait à la main sur le compte OVH, elle ne s'automatise pas.
+Cette étape se fait à la main dans la console Scaleway, elle ne s'automatise pas.
 
-1. Ouvrir <https://eu.api.ovh.com/createToken/>.
-2. Renseigner le compte, et demander les droits suivants — rien de plus :
-   - `GET /me`
-   - `GET /cloud/project`
-   - `GET /cloud/project/*`
-   - `POST /cloud/project/*`
-   - `DELETE /cloud/project/*`
-3. Validité : quelques jours suffisent, la sonde est jetable.
-4. Recopier `Application Key`, `Application Secret` et `Consumer Key` dans
-   `probe/.env`, ainsi que l'identifiant du projet Public Cloud
-   (`serviceName`, visible dans l'espace client).
+1. Créer le projet Public Cloud s'il n'existe pas, dans l'organisation.
+2. Ouvrir *IAM → Clés API*, créer une clé pour son propre utilisateur.
+3. Recopier la `Secret Key` et l'`ID du projet` dans `probe/.env`. L'`Access
+   Key` ne sert pas : l'API Instance s'authentifie par la seule clé secrète.
+
+**Une clé ne suffit pas : il faut une politique.** Scaleway ne coche pas les
+droits route par route comme OVH, mais il ne donne pas non plus tout par
+défaut — le principal porteur de la clé doit avoir une *policy* qui lui attache
+un *permission set*, sinon les lectures passent et les écritures rendent
+`403 permissions_denied`.
+
+Pour la sonde, dans *IAM → Policies*, attacher au principal :
+
+| Jeu de permissions | Portée | Pourquoi |
+|---|---|---|
+| `InstancesFullAccess` | le projet | créer et **détruire** serveurs, IP, volumes |
+| `ObjectStorageFullAccess` | le projet | la mesure d'egress de la tâche 6, et la tranche 3 |
+
+`InstancesReadOnly` seul suffit à tout ce que la sonde fait en lecture —
+inventaire, catalogue, faucheur à vide — mais pas à la sonde T.
+
+C'est une bonne nouvelle pour plus tard : la tranche 2 pourra donner à la
+Function une clé qui crée des instances **sans** aucun droit sur le stockage, et
+au compagnon une clé Object Storage **sans** aucun droit de calcul. Le §8 du spec
+parle d'identifiants restreints ; voilà avec quoi les restreindre.
 
 `probe/.env.example` — versionné, sans valeur :
 
 ```dotenv
-# OVH API credentials, created at https://eu.api.ovh.com/createToken/
+# Scaleway API key, created in the console under IAM > API keys.
 # The real file is probe/.env, which .gitignore already excludes.
-OVH_ENDPOINT=https://eu.api.ovh.com/1.0
-OVH_APP_KEY=
-OVH_APP_SECRET=
-OVH_CONSUMER_KEY=
-OVH_PROJECT_ID=
-OVH_REGION=GRA11
+SCW_SECRET_KEY=
+SCW_PROJECT_ID=
+SCW_ZONE=fr-par-1
 ```
 
 Vérifier avant d'aller plus loin que `git status` ne propose pas `probe/.env`.
 
-- [ ] **Step 2: Écrire le test de l'assemblage de signature**
+- [ ] **Step 2: Écrire le test de la règle de sélection**
 
-La signature OVH est un sha1 sur une chaîne assemblée dans un ordre précis, avec
-`+` pour séparateur, l'URL complète query comprise, et une chaîne vide quand il
-n'y a pas de corps. Tester le sha1 lui-même ne prouverait rien ; c'est
-l'assemblage qui casse.
-
-`probe/ovh/client.spec.ts` :
+`probe/scaleway/reaper-policy.spec.ts` :
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { signaturePayload } from './client'
+import { PROBE_PREFIX, PROBE_TAG, selectDoomed } from './reaper-policy'
 
-describe('signaturePayload', () => {
-  it('joins the six parts with a plus sign, in OVH order', () => {
-    const payload = signaturePayload(
-      'SECRET',
-      'CK',
-      'GET',
-      'https://eu.api.ovh.com/1.0/me',
-      '',
-      1756800000,
-    )
-    // An empty body still contributes its separator: the two plus signs matter.
-    expect(payload).toBe('SECRET+CK+GET+https://eu.api.ovh.com/1.0/me++1756800000')
+const server = (id: string, name: string, tags: string[] = []) => ({ id, name, tags, state: 'running' })
+const ip = (id: string, address: string, tags: string[] = [], serverId: string | null = null) => ({
+  id,
+  address,
+  tags,
+  server: serverId ? { id: serverId } : null,
+})
+const volume = (id: string, serverId: string | null = null) => ({
+  id,
+  name: `${id}-vol`,
+  size: 80_000_000_000,
+  server: serverId ? { id: serverId } : null,
+})
+
+const inventory = (parts: Partial<{ servers: any[]; ips: any[]; volumes: any[] }>) => ({
+  servers: parts.servers ?? [],
+  ips: parts.ips ?? [],
+  volumes: parts.volumes ?? [],
+})
+
+const withoutOrphans = { includeOrphanIps: false }
+const withOrphans = { includeOrphanIps: true }
+
+describe('selectDoomed', () => {
+  it('claims a server whose name carries the probe prefix', () => {
+    const doomed = selectDoomed(inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`)] }), withoutOrphans)
+    expect(doomed.servers.map((s) => s.id)).toEqual(['s1'])
   })
 
-  it('keeps the query string inside the signed url', () => {
-    const payload = signaturePayload(
-      'SECRET',
-      'CK',
-      'GET',
-      'https://eu.api.ovh.com/1.0/cloud/project/abc/flavor?region=GRA11',
-      '',
-      1756800000,
-    )
-    expect(payload).toContain('/cloud/project/abc/flavor?region=GRA11')
+  it('leaves a server that is none of ours alone', () => {
+    const doomed = selectDoomed(inventory({ servers: [server('s1', 'prod-web')] }), withoutOrphans)
+    expect(doomed.servers).toEqual([])
   })
 
-  it('signs the serialized body verbatim', () => {
-    const payload = signaturePayload(
-      'SECRET',
-      'CK',
-      'POST',
-      'https://eu.api.ovh.com/1.0/cloud/project/abc/instance',
-      '{"name":"beacon-probe-1"}',
-      1756800000,
+  // The reaper must never guess about a volume: it carries none of our tags,
+  // and destroying someone else's disk is not a mistake it gets to make.
+  it('reports a detached volume without ever claiming it', () => {
+    const doomed = selectDoomed(inventory({ volumes: [volume('v1')] }), withOrphans)
+    expect(doomed.strayVolumes.map((v) => v.id)).toEqual(['v1'])
+  })
+
+  it('says nothing about a volume still attached to a server', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`)], volumes: [volume('v1', 's1')] }),
+      withoutOrphans,
     )
-    expect(payload).toBe(
-      'SECRET+CK+POST+https://eu.api.ovh.com/1.0/cloud/project/abc/instance+{"name":"beacon-probe-1"}+1756800000',
+    expect(doomed.strayVolumes).toEqual([])
+  })
+
+  // Deliberate, and worth a test so that it stays a decision: on a project
+  // dedicated to the probe, our tag outranks whose server the ip hangs off.
+  it('claims a tagged ip even when it hangs off a server we spare', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', 'prod-web')], ips: [ip('i1', '51.15.0.1', [PROBE_TAG], 's1')] }),
+      withoutOrphans,
     )
+    expect(doomed.ips.map((i) => i.id)).toEqual(['i1'])
+  })
+
+  // An ip has no name at Scaleway, only tags. Without this the reaper would be
+  // blind to exactly the resource that keeps billing after its server dies.
+  it('claims an ip by its probe tag alone', () => {
+    const doomed = selectDoomed(inventory({ ips: [ip('i1', '51.15.0.1', [PROBE_TAG])] }), withoutOrphans)
+    expect(doomed.ips.map((i) => i.id)).toEqual(['i1'])
+  })
+
+  it('claims an ip attached to a doomed server even without the tag', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`)], ips: [ip('i1', '51.15.0.1', [], 's1')] }),
+      withoutOrphans,
+    )
+    expect(doomed.ips.map((i) => i.id)).toEqual(['i1'])
+  })
+
+  it('reports an untagged unattached ip without claiming it', () => {
+    const doomed = selectDoomed(inventory({ ips: [ip('i1', '51.15.0.1')] }), withoutOrphans)
+    expect(doomed.ips).toEqual([])
+    expect(doomed.orphanIps.map((i) => i.id)).toEqual(['i1'])
+  })
+
+  it('claims the untagged unattached ip once asked to', () => {
+    const doomed = selectDoomed(inventory({ ips: [ip('i1', '51.15.0.1')] }), withOrphans)
+    expect(doomed.ips.map((i) => i.id)).toEqual(['i1'])
+  })
+
+  it('never lists the same ip twice when tag and attachment both match', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`)], ips: [ip('i1', '51.15.0.1', [PROBE_TAG], 's1')] }),
+      withOrphans,
+    )
+    expect(doomed.ips).toHaveLength(1)
   })
 })
 ```
 
 - [ ] **Step 3: Lancer le test et le voir échouer**
 
-Ajouter d'abord les dépendances et les scripts à `probe/package.json` :
+Remplacer les scripts et les dépendances de `probe/package.json` :
 
 ```json
 {
   "scripts": {
     "probe:rules": "firebase emulators:exec --project demo-beacon \"vitest run rules\"",
-    "probe:ovh": "vitest run ovh",
-    "ovh:me": "tsx ovh/me.ts",
+    "probe:scw": "vitest run scaleway",
+    "scw:products": "tsx scaleway/products.ts",
     "ovh:schema": "tsx ovh/schema.ts",
-    "ovh:inventory": "tsx ovh/inventory.ts",
-    "ovh:reap": "tsx ovh/reap.ts",
-    "ovh:tag": "tsx ovh/tag-probe.ts",
-    "ovh:sshkey": "tsx ovh/sshkey.ts",
-    "ovh:session": "tsx ovh/session-probe.ts"
+    "scw:inventory": "tsx scaleway/inventory-report.ts",
+    "scw:reap": "tsx scaleway/reap.ts",
+    "scw:tag": "tsx scaleway/tag-probe.ts",
+    "scw:session": "tsx scaleway/session-probe.ts"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
@@ -559,81 +669,100 @@ Ajouter d'abord les dépendances et les scripts à `probe/package.json` :
 
 Puis `npm install --prefix probe`.
 
-Run : `npm --prefix probe run probe:ovh`
-Attendu : FAIL, `Failed to resolve import "./client"`.
+Run : `npm --prefix probe run probe:scw`
+Attendu : FAIL, `Failed to resolve import "./reaper-policy"`.
 
-- [ ] **Step 4: Écrire le client**
+- [ ] **Step 4: Écrire la règle de sélection**
 
-`probe/ovh/client.ts` :
+`probe/scaleway/reaper-policy.ts` :
 
 ```ts
-import { createHash } from 'node:crypto'
-import 'dotenv/config'
+export const PROBE_PREFIX = 'beacon-probe-'
+export const PROBE_TAG = 'beacon-probe'
 
-export function signaturePayload(
-  appSecret: string,
-  consumerKey: string,
-  method: string,
-  url: string,
-  body: string,
-  timestamp: number,
-): string {
-  return [appSecret, consumerKey, method, url, body, timestamp].join('+')
+export type ProbeServer = { id: string; name: string; state: string; tags: string[] }
+export type ProbeIp = { id: string; address: string; tags: string[]; server: { id: string } | null }
+export type ProbeVolume = { id: string; name: string; size: number; server: { id: string } | null }
+
+export type ProbeInventory = { servers: ProbeServer[]; ips: ProbeIp[]; volumes: ProbeVolume[] }
+
+export type Doomed = {
+  servers: ProbeServer[]
+  ips: ProbeIp[]
+  /** Untagged and unattached: billed, probably ours, never destroyed on our own. */
+  orphanIps: ProbeIp[]
+  /** Detached and outliving their server: reported, never destroyed on our own. */
+  strayVolumes: ProbeVolume[]
 }
 
-export function ovhConfig() {
-  const required = [
-    'OVH_ENDPOINT',
-    'OVH_APP_KEY',
-    'OVH_APP_SECRET',
-    'OVH_CONSUMER_KEY',
-    'OVH_PROJECT_ID',
-    'OVH_REGION',
-  ] as const
+export function selectDoomed(
+  inventory: ProbeInventory,
+  options: { includeOrphanIps: boolean },
+): Doomed {
+  const servers = inventory.servers.filter((server) => server.name.startsWith(PROBE_PREFIX))
+  const doomedServerIds = new Set(servers.map((server) => server.id))
+
+  const isOurs = (ip: ProbeIp) =>
+    ip.tags.includes(PROBE_TAG) || (ip.server !== null && doomedServerIds.has(ip.server.id))
+  const isOrphan = (ip: ProbeIp) => !isOurs(ip) && ip.server === null
+
+  const orphanIps = inventory.ips.filter(isOrphan)
+  const ips = inventory.ips.filter(
+    (ip) => isOurs(ip) || (options.includeOrphanIps && isOrphan(ip)),
+  )
+
+  // A volume has no tag of ours to carry — it is created by the server, not by
+  // us. Detached, it is billed and invisible: reported, never auto-destroyed.
+  const strayVolumes = inventory.volumes.filter((volume) => volume.server === null)
+
+  return { servers, ips, orphanIps: options.includeOrphanIps ? [] : orphanIps, strayVolumes }
+}
+```
+
+- [ ] **Step 5: Lancer le test et le voir passer**
+
+Run : `npm --prefix probe run probe:scw`
+Attendu : PASS, dix cas.
+
+- [ ] **Step 6: Écrire le client**
+
+`probe/scaleway/client.ts` :
+
+```ts
+import 'dotenv/config'
+
+const API_ROOT = 'https://api.scaleway.com'
+
+export function scwConfig() {
+  const required = ['SCW_SECRET_KEY', 'SCW_PROJECT_ID', 'SCW_ZONE'] as const
   const missing = required.filter((key) => !process.env[key])
   if (missing.length > 0) {
     throw new Error(`probe/.env is missing: ${missing.join(', ')}`)
   }
   return {
-    endpoint: process.env.OVH_ENDPOINT!,
-    appKey: process.env.OVH_APP_KEY!,
-    appSecret: process.env.OVH_APP_SECRET!,
-    consumerKey: process.env.OVH_CONSUMER_KEY!,
-    serviceName: process.env.OVH_PROJECT_ID!,
-    region: process.env.OVH_REGION!,
+    secretKey: process.env.SCW_SECRET_KEY!,
+    projectId: process.env.SCW_PROJECT_ID!,
+    zone: process.env.SCW_ZONE!,
   }
 }
 
 // The caller names the shape it expects; nothing here can check it, and pushing
 // an `unknown` onto every call site would only spread the cast around.
-export async function ovhFetch<T>(
+// `text` exists for the one endpoint that refuses JSON: cloud-init user data.
+export async function scwFetch<T>(
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: { method?: string; body?: unknown; text?: string } = {},
 ): Promise<T> {
-  const config = ovhConfig()
+  const { secretKey } = scwConfig()
   const method = init.method ?? 'GET'
-  const url = `${config.endpoint}${path}`
-  const body = init.body === undefined ? '' : JSON.stringify(init.body)
-  const timestamp = Math.floor(Date.now() / 1000)
-
-  const signature =
-    '$1$' +
-    createHash('sha1')
-      .update(
-        signaturePayload(config.appSecret, config.consumerKey, method, url, body, timestamp),
-      )
-      .digest('hex')
-
-  const response = await fetch(url, {
+  const isText = init.text !== undefined
+  const response = await fetch(`${API_ROOT}${path}`, {
     method,
     headers: {
-      'Content-Type': 'application/json',
-      'X-Ovh-Application': config.appKey,
-      'X-Ovh-Consumer': config.consumerKey,
-      'X-Ovh-Timestamp': String(timestamp),
-      'X-Ovh-Signature': signature,
+      'Content-Type': isText ? 'text/plain' : 'application/json',
+      'X-Auth-Token': secretKey,
     },
-    body: body === '' ? undefined : body,
+    body: isText ? init.text : init.body === undefined ? undefined : JSON.stringify(init.body),
   })
 
   const text = await response.text()
@@ -643,7 +772,7 @@ export async function ovhFetch<T>(
   return (text === '' ? null : JSON.parse(text)) as T
 }
 
-// Every probe script ends the same way; without this, eight copies of the same
+// Every probe script ends the same way; without this, six copies of the same
 // six lines drift apart and one of them forgets to set a failing exit code.
 export function runScript(main: () => Promise<void>): void {
   main().catch((error) => {
@@ -653,131 +782,126 @@ export function runScript(main: () => Promise<void>): void {
 }
 ```
 
-Le décalage d'horloge est une cause classique de `403 Invalid signature` chez
-OVH. Si l'horloge locale dérive de plus de 30 s, remplacer `Date.now()` par la
-valeur de `GET /auth/time` — inutile tant que la signature passe.
-
-- [ ] **Step 5: Lancer le test et le voir passer**
-
-Run : `npm --prefix probe run probe:ovh`
-Attendu : PASS, trois cas.
-
-- [ ] **Step 6: Vérifier les identifiants contre le compte réel — lecture seule**
-
-`probe/ovh/me.ts` :
-
-```ts
-import { ovhFetch, runScript } from './client'
-
-runScript(async () => {
-  console.log(JSON.stringify(await ovhFetch('/me'), null, 2))
-})
-```
-
-Run : `npm --prefix probe run ovh:me`
-Attendu : un objet JSON décrivant le compte. Un `403` signifie un droit manquant
-sur le jeton ou une horloge décalée de plus de 30 s. Cet appel ne crée rien.
+Il n'y a pas de signature à assembler : Scaleway authentifie par un en-tête. Les
+quatre-vingts lignes de sha1 que l'API OVH imposait, et le test qui les gardait,
+disparaissent avec elle.
 
 - [ ] **Step 7: Écrire l'inventaire**
 
-Il liste tout ce qui existe dans le projet, pas seulement ce que la sonde croit
+Il liste tout ce qui existe dans la zone, pas seulement ce que la sonde croit
 avoir créé : une ressource qu'on ne sait pas nommer est exactement celle qui
 survit.
 
-`probe/ovh/inventory.ts` :
+`probe/scaleway/inventory.ts` :
 
 ```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
+import { scwConfig, scwFetch } from './client'
+import type { ProbeInventory, ProbeIp, ProbeServer, ProbeVolume } from './reaper-policy'
 
-type Instance = { id: string; name: string; status: string; region: string; flavor?: { name?: string } }
-type FloatingIp = { id: string; ip: string; status?: string; associatedEntity?: unknown }
+// Library only, deliberately: `reap.ts` imports this, and a module-level
+// runScript here would run the report every time the reaper starts.
+// The human-facing listing lives in inventory-report.ts.
+export async function readInventory(): Promise<ProbeInventory> {
+  const { zone, projectId } = scwConfig()
+  const query = `project=${projectId}&per_page=100`
+  const [servers, ips, volumes] = await Promise.all([
+    scwFetch<{ servers: ProbeServer[] }>(`/instance/v1/zones/${zone}/servers?${query}`),
+    scwFetch<{ ips: ProbeIp[] }>(`/instance/v1/zones/${zone}/ips?${query}`),
+    // The quietest resource of the lot: a volume outlives its server if the
+    // terminate action does not take it, and appears in neither list above.
+    scwFetch<{ volumes: Record<string, ProbeVolume> }>(
+      `/instance/v1/zones/${zone}/volumes?${query}`,
+    ),
+  ])
+  return {
+    servers: servers.servers,
+    ips: ips.ips,
+    volumes: Object.values(volumes.volumes),
+  }
+}
+```
+
+`probe/scaleway/inventory-report.ts` :
+
+```ts
+import { scwConfig, runScript } from './client'
+import { readInventory } from './inventory'
 
 runScript(async () => {
-  const { serviceName, region } = ovhConfig()
+  const { zone } = scwConfig()
+  const { servers, ips, volumes } = await readInventory()
 
-  const instances = await ovhFetch<Instance[]>(`/cloud/project/${serviceName}/instance`)
-  console.log(`\n=== instances (${instances.length}) ===`)
-  for (const instance of instances) {
+  console.log(`\n=== servers in ${zone} (${servers.length}) ===`)
+  for (const server of servers) {
+    console.log([server.id, server.name, server.state, server.tags.join('|') || '-'].join('  '))
+  }
+
+  console.log(`\n=== flexible ips in ${zone} (${ips.length}) ===`)
+  for (const ip of ips) {
     console.log(
-      [instance.id, instance.name, instance.status, instance.region, instance.flavor?.name ?? '?'].join(
-        '  ',
-      ),
+      [ip.id, ip.address, ip.server?.id ?? 'unattached', ip.tags.join('|') || '-'].join('  '),
     )
   }
 
-  const floatingIps = await ovhFetch<FloatingIp[]>(
-    `/cloud/project/${serviceName}/region/${region}/floatingip`,
-  )
-  console.log(`\n=== floating ips in ${region} (${floatingIps.length}) ===`)
-  for (const floatingIp of floatingIps) {
-    console.log(JSON.stringify(floatingIp))
+  console.log(`\n=== volumes in ${zone} (${volumes.length}) ===`)
+  for (const volume of volumes) {
+    console.log(
+      [volume.id, volume.name, volume.server?.id ?? 'detached', `${volume.size}`].join('  '),
+    )
   }
-
-  console.log(`\n=== object storage containers ===`)
-  console.log(JSON.stringify(await ovhFetch(`/cloud/project/${serviceName}/storage`), null, 2))
 })
 ```
 
-Si une de ces routes répond `404`, elle n'existe pas sous ce nom dans l'API :
-c'est déjà un résultat de sonde. La tâche 3 étape 1 lit le schéma pour trancher ;
-corriger le chemin ici et noter l'écart dans `RESULTS.md`.
+`inventory.ts` est une bibliothèque et rien d'autre. Le faucheur l'importe, et
+un `runScript` au niveau du module y ferait tourner l'inventaire à chaque
+lancement du faucheur — c'est arrivé, et c'est le même piège que celui du
+résolveur d'image. Le listing pour l'humain vit donc dans `inventory-report.ts`.
+
+`readInventory` est partagé parce que deux lectures divergentes de « ce qui
+existe » seraient deux vérités, et que le faucheur détruit sur cette lecture.
 
 - [ ] **Step 8: Lancer l'inventaire et noter l'état initial**
 
-Run : `npm --prefix probe run ovh:inventory`
-Attendu : la liste, probablement vide, des ressources du projet. **Cette sortie
-est la ligne de base** : à la fin de la tranche, l'inventaire doit y être
-revenu. La coller dans `probe/RESULTS.md`.
+Run : `npm --prefix probe run scw:inventory`
+Attendu : la liste, probablement vide, des ressources du projet. Une erreur
+`401` signifie une clé fausse ; une `403`, un utilisateur sans droit sur le
+projet. **Cette sortie est la ligne de base** : à la fin de la tranche,
+l'inventaire doit y être revenu. La coller dans `probe/RESULTS.md`.
 
 - [ ] **Step 9: Écrire le faucheur**
 
-Il détruit par préfixe de nom, pas par tag : le mécanisme de tag est justement ce
-que la tâche 3 doit découvrir, et un faucheur qui dépend de la réponse d'une
-question ouverte ne protège rien pendant qu'on la pose.
-
-`probe/ovh/reap.ts` :
+`probe/scaleway/reap.ts` :
 
 ```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
-
-const PROBE_PREFIX = 'beacon-probe-'
-
-type Instance = { id: string; name: string; status: string }
-type FloatingIp = { id: string; ip: string; associatedEntity?: { id?: string } | null }
+import { scwConfig, scwFetch, runScript } from './client'
+import { readInventory } from './inventory'
+import { selectDoomed } from './reaper-policy'
 
 runScript(async () => {
-  const { serviceName, region } = ovhConfig()
+  const { zone } = scwConfig()
   const confirmed = process.argv.includes('--yes')
   const includeOrphanIps = process.argv.includes('--include-orphan-ips')
 
-  const instances = await ovhFetch<Instance[]>(`/cloud/project/${serviceName}/instance`)
-  const doomedInstances = instances.filter((instance) => instance.name.startsWith(PROBE_PREFIX))
+  const doomed = selectDoomed(await readInventory(), { includeOrphanIps })
 
-  const floatingIps = await ovhFetch<FloatingIp[]>(
-    `/cloud/project/${serviceName}/region/${region}/floatingip`,
-  )
-  const attachedToDoomed = (floatingIp: FloatingIp) =>
-    doomedInstances.some((instance) => instance.id === floatingIp.associatedEntity?.id)
-  const orphans = floatingIps.filter((floatingIp) => floatingIp.associatedEntity == null)
-
-  // An unattached ip is billed and is very probably ours, but this account is
-  // the owner's real account: destroying something the probe never created is
-  // not a mistake it gets to make on its own.
-  const doomedIps = includeOrphanIps
-    ? floatingIps.filter((floatingIp) => attachedToDoomed(floatingIp) || orphans.includes(floatingIp))
-    : floatingIps.filter(attachedToDoomed)
-
-  for (const instance of doomedInstances) {
-    console.log(`instance ${instance.id} ${instance.name} ${instance.status}`)
+  for (const server of doomed.servers) {
+    console.log(`server ${server.id} ${server.name} ${server.state}`)
   }
-  for (const floatingIp of doomedIps) {
-    console.log(`floating ip ${floatingIp.id} ${floatingIp.ip}`)
+  for (const ip of doomed.ips) {
+    console.log(`flexible ip ${ip.id} ${ip.address}`)
   }
-  if (!includeOrphanIps && orphans.length > 0) {
+  if (doomed.orphanIps.length > 0) {
     console.log(
-      `\n${orphans.length} unattached floating ip(s) left alone and still billed: ` +
-        `${orphans.map((floatingIp) => floatingIp.ip).join(', ')}\n` +
+      `\n${doomed.orphanIps.length} unattached, untagged ip(s) left alone and still billed: ` +
+        `${doomed.orphanIps.map((ip) => ip.address).join(', ')}\n` +
         'rerun with --include-orphan-ips to destroy them too',
+    )
+  }
+  if (doomed.strayVolumes.length > 0) {
+    console.log(
+      `\n${doomed.strayVolumes.length} detached volume(s), billed and attached to nothing: ` +
+        `${doomed.strayVolumes.map((volume) => volume.id).join(', ')}\n` +
+        'they carry no tag of ours — destroy them by hand once identified',
     )
   }
 
@@ -786,305 +910,393 @@ runScript(async () => {
     return
   }
 
-  // The ip goes first: an orphaned floating ip keeps billing after its instance dies.
-  for (const floatingIp of doomedIps) {
-    await ovhFetch(`/cloud/project/${serviceName}/region/${region}/floatingip/${floatingIp.id}`, {
-      method: 'DELETE',
-    })
-    console.log(`destroyed floating ip ${floatingIp.id}`)
+  // The ip goes first: an orphaned flexible ip keeps billing after its server dies.
+  for (const ip of doomed.ips) {
+    await scwFetch(`/instance/v1/zones/${zone}/ips/${ip.id}`, { method: 'DELETE' })
+    console.log(`destroyed flexible ip ${ip.id}`)
   }
-  for (const instance of doomedInstances) {
-    await ovhFetch(`/cloud/project/${serviceName}/instance/${instance.id}`, { method: 'DELETE' })
-    console.log(`destroyed instance ${instance.id}`)
+  for (const server of doomed.servers) {
+    // A running server refuses deletion; ask for the poweroff and let it settle.
+    await scwFetch(`/instance/v1/zones/${zone}/servers/${server.id}/action`, {
+      method: 'POST',
+      body: { action: 'terminate' },
+    })
+    console.log(`terminated server ${server.id}`)
   }
 })
 ```
 
+`terminate` est l'action qui détruit le serveur **et** ses volumes attachés. Un
+`DELETE` sur le serveur seul laisserait le volume, facturé et invisible dans la
+liste des serveurs — la panne exacte que le faucheur existe pour empêcher. À
+vérifier en vivo à la tâche 3 étape 5, et à consigner.
+
 - [ ] **Step 10: Vérifier le faucheur à vide**
 
-Run : `npm --prefix probe run ovh:reap`
+Run : `npm --prefix probe run scw:reap`
 Attendu : aucune ressource listée, et le message `dry run`. Le faucheur ne
 détruit rien sans `--yes` : c'est ce qui permet à un agent de le lancer sans
 danger, et à un humain seul de conclure.
 
-Si le compte porte déjà des IP flottantes non attachées, il les signale sans y
-toucher. Elles ne viennent pas de la sonde ; les détruire demande
-`--include-orphan-ips`, et c'est une décision humaine.
+- [ ] **Step 11: Poser l'alerte de budget Scaleway — geste humain**
 
-- [ ] **Step 11: Poser l'alerte de budget OVH — geste humain**
-
-Dans l'espace client OVH, projet Public Cloud, section *Alertes de consommation* :
-créer une alerte à **2 €** par mois, destinataire l'adresse de l'administrateur.
+Dans la console Scaleway, *Facturation → Alertes de consommation* : créer une
+alerte à **2 €** par mois, destinataire l'adresse de l'administrateur.
 
 Ce n'est pas de la décoration : la tranche 0 démarre des machines sans watchdog,
 et le §7 du spec fait de l'alerte de budget le garde-fou humain de dernier
 recours. Elle existe avant la première instance, pas après.
 
+**Si Scaleway n'en propose pas**, c'est une réponse à consigner : le §7 doit
+alors nommer un autre garde-fou, et la tranche 1 le construire.
+
 - [ ] **Step 12: Commit**
 
 ```bash
-git add probe/package.json probe/package-lock.json probe/.env.example probe/ovh probe/RESULTS.md
-git commit -m "feat(probe): outille l'API OVH et son faucheur avant toute creation"
+git rm -r probe/ovh/client.ts probe/ovh/client.spec.ts probe/ovh/me.ts \
+  probe/ovh/inventory.ts probe/ovh/reap.ts probe/ovh/price.ts
+git add probe/package.json probe/package-lock.json probe/.env.example probe/scaleway probe/RESULTS.md
+git commit -m "feat(probe): outille l'API Scaleway et son faucheur avant toute creation"
 ```
+
+`probe/ovh/schema.ts` reste : c'est la commande qui fonde la section T du
+rapport, et une mesure dont on a perdu la commande n'est plus une mesure.
 
 ---
 
-### Task 3: Sonde T — le tag sur l'instance et sur l'IP flottante
+### Task 3: Sonde T — le tag sur l'IP flottante, puis sur l'instance
+
+> **Cette tâche est faite, et le code ci-dessous est le brouillon d'avant le
+> SDK.** La sonde parlait à l'API par un `fetch` maison ; elle s'est trompée
+> trois fois sur la forme des requêtes, deux fois après qu'une ressource
+> facturée existe, et elle est passée au SDK officiel `@scaleway/sdk`. **Le code
+> qui fait foi est dans `probe/scaleway/`**, pas ici. Ce qui suit reste pour le
+> raisonnement — pourquoi chaque pièce existe — et ne se recopie pas.
 
 Deuxième question qui peut déplacer l'architecture. Toute la réconciliation du
-watchdog repose sur une métadonnée `beacon:{sessionId}` posée sur l'instance
-**et** sur l'IP flottante, et sur la capacité de les lister. Si l'IP ne peut pas
-la porter, le §5 change de mécanisme — rapprochement par l'instance
-d'attachement, ou par la seule présence dans `provisioning/{sessionId}`.
+watchdog repose sur un tag `beacon:{sessionId}` posé sur l'instance **et** sur
+l'IP flottante, et sur la capacité de les lister.
 
-Trois mécanismes candidats, essayés dans cet ordre, du plus direct au plus
-coûteux :
+**Cette tâche a déjà changé le projet une fois.** Écrite pour OVH, son étape de
+lecture du schéma a montré que l'API v1 ne porte de métadonnée sur aucune des
+deux ressources et n'en rend aucune en lecture. Le spec est passé à Scaleway le
+2026-09-03 (§2), où `tags` est un champ natif du serveur et de l'IP, filtrable.
+Ce qui reste à faire n'est donc plus « trouver un mécanisme » mais **vérifier en
+vivo celui que la documentation annonce** — ce n'est pas la même tâche, et ça ne
+coûte plus la même chose.
 
-1. un champ de métadonnées libres dans l'API OVH v1 ;
-2. l'API OpenStack (Nova, Neutron) atteinte avec les identifiants OpenStack du
-   projet, où les métadonnées sont natives ;
-3. le repli sur le champ `name`, toujours libre, avec un rapprochement de l'IP
-   par son instance d'attachement.
+Trois étapes, de la gratuite à la facturée, et on s'arrête dès qu'une échoue :
 
-Le troisième marche à coup sûr. La sonde sert à savoir si on peut mieux.
+1. lire le catalogue des gabarits — gratuit, aucune ressource créée ;
+2. taguer une **IP flottante seule** — quelques centimes d'heure, pas d'instance ;
+3. taguer un serveur, le plus petit de la gamme.
+
+L'ordre n'est pas décoratif : l'IP est la moitié qui décide, et c'est aussi la
+moins chère à éprouver. La sonder sans instance est possible chez Scaleway, où
+une IP flottante est une ressource autonome. Chez OVH elle ne l'était pas, et le
+plan d'origine allumait une machine pour rien.
 
 **Fichiers :**
-- Créer : `probe/ovh/schema.ts`
-- Créer : `probe/ovh/tag-probe.ts`
-- Créer : `probe/ovh/floatingip-probe.ts`
-- Modifier : `probe/package.json` — le script `ovh:fip`
+- Créer : `probe/scaleway/products.ts`
+- Créer : `probe/scaleway/images.ts`
+- Créer : `probe/scaleway/tag-probe.ts`
 - Modifier : `probe/RESULTS.md`
 
 **Interfaces :**
-- Consomme : `ovhFetch`, `ovhConfig`, `npm run ovh:reap` de la tâche 2.
+- Consomme : `scwFetch`, `scwConfig`, `readInventory`, `npm run scw:reap` de la
+  tâche 2.
 - Produit : la section T de `RESULTS.md`, dont dépend le mécanisme de
-  réconciliation de la tranche 1.
+  réconciliation de la tranche 1 ; et la réponse sur le gabarit, dont dépend le
+  §2 du spec.
 
-- [ ] **Step 1: Lire le schéma de l'API avant de créer quoi que ce soit**
+- [x] **Step 1: Lire le catalogue des gabarits — gratuit, un agent peut le lancer**
 
-Gratuit, sans authentification, et cela répond peut-être à la question sans
-allumer une machine.
+**Fait le 2026-09-03**, et le résultat a corrigé le §2 du spec. Le script reste
+ici parce qu'il se rejoue, et parce que la suite du plan s'en sert.
 
-`probe/ovh/schema.ts` :
+Ce qu'il a montré, en deux temps. Le catalogue diffère par zone, et `PRO2` —
+que le §2 nommait en repli — n'est commandable dans aucune zone parisienne.
+Puis, moins évident et bien plus utile : **un type listé, tarifé et non obsolète
+peut refuser d'être créé faute de capacité.** Toute la famille `BASIC1` est en
+`shortage`, et `createServer` rend alors un `403 quotas_exceeded` dont le
+libellé oriente vers un quota de compte qui n'existe pas.
+
+`DEV1-L` est donc le défaut : le seul gabarit à 8 Gio de la zone qui soit à la
+fois `available` et livré avec son disque. Pas par préférence — faute
+d'alternative.
+
+C'est aussi ce qui a fait de la zone une décision : `fr-par-1` porte le défaut
+et son repli aux meilleurs prix de la région, ce que personne n'avait vérifié
+avant de la poser dans `.env.example`.
+
+`probe/scaleway/products.ts` :
 
 ```ts
-import { runScript } from './client'
+import { scwConfig, scwFetch, runScript } from './client'
 
-const SCHEMA_URL = 'https://eu.api.ovh.com/1.0/cloud.json'
+type Product = {
+  ncpus: number
+  ram: number
+  volumes_constraint: { min_size: number; max_size: number }
+  per_volume_constraint?: { l_ssd?: { min_size: number; max_size: number } }
+  network: { sum_internal_bandwidth?: number | null; ipv6_support: boolean }
+  arch: string
+  hourly_price: number
+}
+
+const GIGABYTE = 1000 ** 3
 
 runScript(async () => {
-  const needle = (process.argv[2] ?? 'metadata').toLowerCase()
-  const schema = (await (await fetch(SCHEMA_URL)).json()) as {
-    apis: { path: string; operations: { httpMethod: string; parameters: unknown[] }[] }[]
-    models: Record<string, unknown>
-  }
+  const { zone } = scwConfig()
+  const needle = (process.argv[2] ?? '').toUpperCase()
 
-  console.log(`=== paths matching "${needle}" ===`)
-  for (const api of schema.apis) {
-    if (api.path.toLowerCase().includes(needle)) {
-      console.log(api.path, api.operations.map((operation) => operation.httpMethod).join(','))
-    }
-  }
+  const { servers } = await scwFetch<{ servers: Record<string, Product> }>(
+    `/instance/v1/zones/${zone}/products/servers`,
+  )
 
-  console.log(`\n=== models mentioning "${needle}" ===`)
-  for (const [name, model] of Object.entries(schema.models)) {
-    if (JSON.stringify(model).toLowerCase().includes(needle)) {
-      console.log(name)
-    }
+  for (const [name, product] of Object.entries(servers)) {
+    if (needle && !name.includes(needle)) continue
+    const localSsd = product.per_volume_constraint?.l_ssd
+    console.log(
+      [
+        name.padEnd(18),
+        `${product.ncpus} vCPU`,
+        `${Math.round(product.ram / GIGABYTE)} Go`,
+        localSsd ? `local ${Math.round(localSsd.max_size / GIGABYTE)} Go` : 'block only',
+        `${product.hourly_price} EUR/h`,
+        product.arch,
+      ].join('  '),
+    )
   }
 })
 ```
 
-Run, trois fois :
+Run, une fois par gamme candidate, et sans argument pour voir la zone entière :
 
 ```bash
-npm --prefix probe run ovh:schema -- floatingip
-npm --prefix probe run ovh:schema -- metadata
-npm --prefix probe run ovh:schema -- openstack
+npm --prefix probe run scw:products -- DEV1
+npm --prefix probe run scw:products
+SCW_ZONE=fr-par-2 npm --prefix probe run scw:products   # le catalogue change par zone
 ```
 
-Consigner dans `RESULTS.md` : les routes exactes des IP flottantes, l'existence
-ou non d'un champ de métadonnées sur `cloud.instance` et sur le modèle d'IP
-flottante, et la route qui délivre les identifiants OpenStack du projet.
+Consigner dans `RESULTS.md` le gabarit retenu, son disque local, son prix
+horaire réel, et ce que la zone change.
 
-- [ ] **Step 2: Écrire la sonde de tag**
+**Si la colonne du disque affiche `block only` pour tout le monde, se méfier
+avant de conclure** : c'est aussi ce qu'affiche un nom de champ erroné. Vérifier
+sur la réponse brute — `curl` sur la même route — que `per_volume_constraint` et
+`l_ssd` existent bien sous ces noms. Un gabarit déclaré sans disque local
+pousserait à tort vers un gabarit sans disque et ferait ajouter un `volumeId`
+au §5 pour rien.
 
-Elle crée le strict minimum, observe, et détruit dans le même souffle. Les
-chemins d'IP flottante viennent de l'étape 1 ; les corriger ici si le schéma en
-dit d'autres.
+**Si le gabarit retenu disparaît du catalogue ou perd son disque local, le §2 du
+spec se corrige avant la suite**, et le §5 gagne un `volumeId` à réconcilier. Ne
+pas enchaîner sans avoir tranché.
 
-`probe/ovh/tag-probe.ts` :
+- [ ] **Step 2: Résoudre l'image, puis écrire la sonde de tag**
+
+Le champ `image` de l'API Instance attend un **UUID**, propre à la zone et au
+gabarit ; `ubuntu_noble` est un label de la place de marché, pas un
+identifiant. C'est un module à part et non un bout de `tag-probe.ts`, parce que
+la tâche 6 en a besoin aussi et qu'importer un script qui appelle `runScript`
+au chargement lancerait la sonde.
+
+`probe/scaleway/images.ts` :
 
 ```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
+import { scwFetch } from './client'
+
+type LocalImage = { id: string; zone: string; compatible_commercial_types: string[] }
+type MarketplaceImage = { label: string; versions: { local_images: LocalImage[] }[] }
+
+export async function resolveImageId(
+  zone: string,
+  commercialType: string,
+  label = 'ubuntu_noble',
+): Promise<string> {
+  const { images } = await scwFetch<{ images: MarketplaceImage[] }>(
+    '/marketplace/v2/images?page_size=100',
+  )
+
+  const image = images.find((candidate) => candidate.label === label)
+  if (!image) throw new Error(`no ${label} image in the marketplace`)
+
+  const local = image.versions
+    .flatMap((version) => version.local_images)
+    .find(
+      (candidate) =>
+        candidate.zone === zone && candidate.compatible_commercial_types.includes(commercialType),
+    )
+  if (!local) throw new Error(`no ${label} image for ${commercialType} in ${zone}`)
+
+  return local.id
+}
+```
+
+Cette route est un `GET` public : **l'inspecter avant de créer quoi que ce
+soit.** Si sa forme diffère de celle supposée ici, le corriger coûte une lecture ;
+le découvrir après avoir réservé une IP coûte un cycle complet.
+
+Puis la sonde elle-même. Elle crée le strict minimum, observe, et laisse le
+faucheur nettoyer.
+
+`probe/scaleway/tag-probe.ts` :
+
+```ts
+import { scwConfig, scwFetch, runScript } from './client'
+import { resolveImageId } from './images'
+import { PROBE_PREFIX, PROBE_TAG, type ProbeIp, type ProbeServer } from './reaper-policy'
 
 const SESSION_ID = 'probe0001'
-const TAG = `beacon:${SESSION_ID}`
-const INSTANCE_NAME = `beacon-probe-${SESSION_ID}`
-
-type Instance = { id: string; name: string; status: string }
+const SESSION_TAG = `session:${SESSION_ID}`
 
 runScript(async () => {
-  const { serviceName, region } = ovhConfig()
+  const { zone, projectId } = scwConfig()
+  const withServer = process.argv.includes('--with-server')
 
-  const flavors = await ovhFetch<{ id: string; name: string }[]>(
-    `/cloud/project/${serviceName}/flavor?region=${region}`,
+  // The half that decides, and the cheap one: at Scaleway a flexible ip exists
+  // on its own, so the tag is measurable without booting anything.
+  const created = await scwFetch<{ ip: ProbeIp }>(`/instance/v1/zones/${zone}/ips`, {
+    method: 'POST',
+    body: { project: projectId, type: 'routed_ipv4', tags: [PROBE_TAG, SESSION_TAG] },
+  })
+  console.log(`created ip ${created.ip.id} ${created.ip.address}`)
+  console.log(`tags returned at creation: ${JSON.stringify(created.ip.tags)}`)
+
+  const reread = await scwFetch<{ ip: ProbeIp }>(`/instance/v1/zones/${zone}/ips/${created.ip.id}`)
+  console.log(`tags on re-read:            ${JSON.stringify(reread.ip.tags)}`)
+
+  const filtered = await scwFetch<{ ips: ProbeIp[] }>(
+    `/instance/v1/zones/${zone}/ips?project=${projectId}&tags=${encodeURIComponent(SESSION_TAG)}`,
   )
-  const flavor = flavors.find((candidate) => candidate.name === 'b3-8')
-  if (!flavor) throw new Error(`no b3-8 flavor in ${region}`)
+  console.log(`ips returned by tags=${SESSION_TAG}: ${filtered.ips.map((ip) => ip.id).join(', ') || 'none'}`)
 
-  const images = await ovhFetch<{ id: string; name: string }[]>(
-    `/cloud/project/${serviceName}/image?region=${region}&osType=linux`,
-  )
-  const image = images.find((candidate) => candidate.name.includes('Ubuntu 24.04'))
-  if (!image) throw new Error(`no Ubuntu 24.04 image in ${region}`)
+  if (!withServer) {
+    console.log('\nip half done — rerun with --with-server to also probe the server tag')
+    return
+  }
 
-  console.log(`flavor ${flavor.id}  image ${image.id}`)
+  const typeIndex = process.argv.indexOf('--type')
+  const commercialType = typeIndex === -1 ? PROBE_TYPE : process.argv[typeIndex + 1]
 
-  // Candidate 1: free-form metadata on the OVH v1 create call. If the API
-  // ignores the field, the read-back below simply will not show it.
-  const instance = await ovhFetch<Instance>(`/cloud/project/${serviceName}/instance`, {
+  const server = await scwFetch<{ server: ProbeServer }>(`/instance/v1/zones/${zone}/servers`, {
     method: 'POST',
     body: {
-      name: INSTANCE_NAME,
-      flavorId: flavor.id,
-      imageId: image.id,
-      region,
-      monthlyBilling: false,
-      metadata: { beacon: TAG },
+      project: projectId,
+      name: `${PROBE_PREFIX}${SESSION_ID}`,
+      commercial_type: commercialType,
+      image: await resolveImageId(zone, commercialType),
+      tags: [PROBE_TAG, SESSION_TAG],
     },
   })
+  console.log(`\ncreated server ${server.server.id}`)
+  console.log(`tags returned at creation: ${JSON.stringify(server.server.tags)}`)
 
-  console.log(`created instance ${instance.id}`)
+  const listed = await scwFetch<{ servers: ProbeServer[] }>(
+    `/instance/v1/zones/${zone}/servers?project=${projectId}&tags=${encodeURIComponent(SESSION_TAG)}`,
+  )
   console.log(
-    JSON.stringify(await ovhFetch(`/cloud/project/${serviceName}/instance/${instance.id}`), null, 2),
+    `servers returned by tags=${SESSION_TAG}: ${listed.servers.map((s) => s.id).join(', ') || 'none'}`,
   )
 })
 ```
 
-- [ ] **Step 3: Lancer la sonde — geste humain, elle crée une instance facturée**
+Le serveur est créé **sans être démarré** : l'appel de création ne l'allume pas,
+et le tag se lit sur une machine éteinte. C'est le tag qu'on mesure, pas le boot.
 
-Run : `npm --prefix probe run ovh:tag`
+Une observation à relever au passage : **`terminate` refuse-t-il un serveur
+jamais allumé ?** Celui-ci ne l'est pas, et c'est exactement ce que le faucheur
+devra détruire. Si l'action échoue sur un serveur `stopped`, écrire le repli —
+`DELETE` du serveur puis de ses volumes — dans `RESULTS.md` et corriger la
+tâche 2.
 
-Attendu : soit l'instance est créée et le `GET` de relecture montre la
-métadonnée, soit l'API refuse le champ `metadata` (`400`), soit elle l'accepte en
-silence sans le rendre. Les trois sont des réponses ; seule la première autorise
-le mécanisme du spec tel quel.
+- [ ] **Step 3: Éprouver l'IP seule — geste humain, elle crée une ressource facturée**
 
-Si l'appel échoue **après** création, lancer immédiatement
-`npm --prefix probe run ovh:reap` puis `-- --yes`.
-
-- [ ] **Step 4: Éprouver l'IP flottante — geste humain**
-
-C'est la moitié qui décide. Ajouter `"ovh:fip": "tsx ovh/floatingip-probe.ts"` aux
-scripts de `probe/package.json`, puis `probe/ovh/floatingip-probe.ts` — les deux
-constantes de tête viennent du schéma lu à l'étape 1 :
-
-```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
-
-// Both routes come from step 1: read them off cloud.json rather than guessing.
-const listRoute = (serviceName: string, region: string) =>
-  `/cloud/project/${serviceName}/region/${region}/floatingip`
-const attachRoute = (serviceName: string, region: string, instanceId: string) =>
-  `/cloud/project/${serviceName}/region/${region}/instance/${instanceId}/attachFloatingIp`
-
-runScript(async () => {
-  const { serviceName, region } = ovhConfig()
-  const instanceId = process.argv[2]
-  if (!instanceId) throw new Error('usage: ovh:fip -- <instanceId>')
-
-  console.log('--- before ---')
-  console.log(JSON.stringify(await ovhFetch(listRoute(serviceName, region)), null, 2))
-
-  console.log('--- attach response ---')
-  console.log(
-    JSON.stringify(
-      await ovhFetch(attachRoute(serviceName, region, instanceId), {
-        method: 'POST',
-        body: { ip: { metadata: { beacon: 'beacon:probe0001' } } },
-      }),
-      null,
-      2,
-    ),
-  )
-
-  console.log('--- after ---')
-  console.log(JSON.stringify(await ovhFetch(listRoute(serviceName, region)), null, 2))
-})
-```
-
-Run : `npm --prefix probe run ovh:fip -- <instanceId de l'étape 3>`
-
-Si le corps de l'appel d'attachement diffère dans le schéma, le corriger ici :
-c'est l'observation qui commande, pas ce que ce plan suppose.
+Run : `npm --prefix probe run scw:tag`
 
 Répondre à trois questions, et les écrire :
 
-1. l'IP flottante peut-elle porter une métadonnée libre à la création ?
-2. la liste des IP flottantes la rend-elle, ou faut-il un `GET` par IP ?
-3. l'IP détachée reste-t-elle listée avec son `associatedEntity` à `null` — ce
-   qui rend le repli par instance d'attachement viable ?
+1. l'IP porte-t-elle les tags rendus par l'appel de création ?
+2. la relecture unitaire les rend-elle aussi ?
+3. **le filtre `tags=` les retrouve-t-il côté serveur ?** C'est celle qui décide
+   si le watchdog interroge par tag ou rapatrie tout pour trier.
 
-- [ ] **Step 5: Essayer l'API OpenStack si l'API v1 a refusé**
+Trois `oui` et le §5 tient tel qu'il est écrit. Un `non` sur la troisième et il
+faut lister sans filtre — c'est plus lent, ce n'est pas grave. Un `non` sur la
+première ou la deuxième, et **on est dans la situation d'OVH** : le §5 et le §6
+changent de mécanisme, et le spec se corrige avant la tranche 1.
 
-Uniquement si l'étape 3 ou 4 a échoué. Relever la route des identifiants
-OpenStack au schéma (étape 1), les créer, et vérifier avec la CLI OpenStack que
-`nova` et `neutron` acceptent des métadonnées et savent filtrer dessus :
+- [ ] **Step 4: Éprouver le serveur — geste humain**
+
+Run : `npm --prefix probe run scw:tag -- --with-server`
+
+Le défaut est `DEV1-L`, à 0,04284 €/h. Ce n'est pas le moins cher de la zone —
+c'est le seul à 8 Gio qui soit `available` **et** livré avec son disque, et la
+sonde a appris à ses dépens que le reste ne se crée pas.
+
+Deux gabarits sont tombés avant lui. `DEV1-S` n'existe pas : de la gamme `DEV1`,
+seul le `L` subsiste ici. `BASIC1-X1C-2G`, à 0,0068 €/h, semblait imbattable —
+toute sa famille est en `shortage`, et `createServer` rend alors un
+`403 quotas_exceeded` dont le libellé égare. Les deux auraient échoué **après**
+la création de l'IP facturée ; l'étape 1 les attrape avant.
+
+Mêmes questions que l'étape 3, et une de plus : **une IP détachée reste-t-elle
+listée**, et avec quel `server` ? C'est ce qui rend le repli du faucheur viable,
+et la règle de sélection de la tâche 2 en dépend.
+
+- [ ] **Step 5: Détruire et vérifier — geste humain**
 
 ```bash
-openstack server set --property beacon=beacon:probe0001 <instance-id>
-openstack server list --property beacon=beacon:probe0001
-openstack floating ip set --property beacon=beacon:probe0001 <floating-ip-id>
-openstack floating ip list --long
-```
-
-Consigner ce que ça donne : c'est ce qui décide si `libs/ovh-compute` parle à
-l'API v1 d'OVH ou à OpenStack — une décision d'implémentation d'adapter, pas
-d'architecture, mais elle appartient au rapport.
-
-- [ ] **Step 6: Détruire et vérifier — geste humain**
-
-```bash
-npm --prefix probe run ovh:reap          # liste, ne détruit rien
-npm --prefix probe run ovh:reap -- --yes # détruit
-npm --prefix probe run ovh:inventory     # doit être revenu à la ligne de base
+npm --prefix probe run scw:reap          # liste, ne détruit rien
+npm --prefix probe run scw:reap -- --yes # détruit
+npm --prefix probe run scw:inventory     # doit être revenu à la ligne de base
 ```
 
 Attendu : l'inventaire est identique à celui de la tâche 2 étape 8. Ne pas
 passer à la suite tant que ce n'est pas le cas.
 
-- [ ] **Step 7: Consigner le verdict**
+**Vérifier en plus qu'aucun volume ne survit** au serveur détruit :
 
-Ajouter à `probe/RESULTS.md` :
+```bash
+npm --prefix probe run scw:inventory
+# Le shell n'a jamais source probe/.env : sans ca, l'en-tete part vide et rend 401.
+export $(grep -v "^#" probe/.env | xargs)
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/instance/v1/zones/$SCW_ZONE/volumes?project=$SCW_PROJECT_ID" | head -40
+```
+
+La tâche 2 parie que l'action `terminate` emporte les volumes attachés. Si un
+volume survit, le faucheur est incomplet et **la tâche 2 se corrige avant la
+tâche 6** : un volume orphelin se facture comme une IP orpheline, et ne se voit
+dans aucune des deux listes que le faucheur consulte.
+
+- [ ] **Step 6: Consigner le verdict**
+
+Compléter la section T de `probe/RESULTS.md`, qui porte déjà la mesure du schéma
+OVH ayant fondé la bascule. Y ajouter :
 
 ```markdown
-## T · Le tag sur l'instance et sur l'IP flottante
+### Vérification en vivo chez Scaleway, le AAAA-MM-JJ
 
-Question du §12 : l'API OVH accepte-t-elle des métadonnées libres sur
-l'instance **et** sur l'IP flottante, et sait-elle les lister ? Toute la
-réconciliation du watchdog en dépend.
-
-| Ressource | Métadonnée à la création | Rendue par la liste | Filtrable |
+| Ressource | Tag à la création | Rendu à la relecture | Filtrable par `tags=` |
 |---|---|---|---|
-| instance, API v1 | | | |
-| IP flottante, API v1 | | | |
-| instance, OpenStack | | | |
-| IP flottante, OpenStack | | | |
+| IP flottante | | | |
+| serveur | | | |
 
-Repli observé : une IP détachée reste-t-elle listée, et avec quel
-`associatedEntity` ?
+- Gabarits disponibles en `fr-par-1` : relevé le 2026-09-03, voir plus haut.
+- Une IP détachée reste-t-elle listée, et avec quel `server` ?
+- L'action `terminate` emporte-t-elle les volumes attachés ?
 
 **Mécanisme retenu pour la tranche 1 :**
 
 **Conséquence pour le spec :**
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add probe/package.json probe/ovh/schema.ts probe/ovh/tag-probe.ts probe/ovh/floatingip-probe.ts probe/RESULTS.md
-git commit -m "test(probe): mesure le tag portable sur l'instance et l'IP flottante"
+git add probe/package.json probe/scaleway/products.ts probe/scaleway/images.ts probe/scaleway/tag-probe.ts probe/RESULTS.md
+git commit -m "test(probe): verifie en vivo le tag Scaleway sur l'IP et sur le serveur"
 ```
 
 ---
@@ -1098,7 +1310,7 @@ sous quel format elle dépose ses backups, ses ports, et surtout **comment
 désactiver son auto-update** — une mise à jour du jeu déclenchée en pleine
 session couperait la soirée.
 
-Tout se fait sur la machine du développeur, sans un centime et sans OVH. Le
+Tout se fait sur la machine du développeur, sans un centime et sans hébergeur. Le
 téléchargement SteamCMD y prend quelques minutes ; c'est le prix d'apprendre
 gratuitement.
 
@@ -1243,7 +1455,7 @@ compagnon quand le compagnon existera.
 - Consomme : le digest, les noms de variables et le point de montage de la
   tâche 4.
 - Produit : `node deploy/render-cloud-init.mjs` sur `stdout`, le `userData`
-  passé à OVH par la tâche 6. La tranche 2 remplacera ce script par la même
+  passé à Scaleway par la tâche 6. La tranche 2 remplacera ce script par la même
   opération dans une Function ; le gabarit, lui, reste.
 
 - [ ] **Step 1: Écrire le `docker-compose`**
@@ -1278,7 +1490,7 @@ sauvegarde incohérente. La tranche 3 s'appuiera dessus.
 - [ ] **Step 2: Écrire le gabarit de `cloud-init`**
 
 Le `docker-compose` doit finir **à l'intérieur** du `cloud-init`, puisque c'est
-lui qu'OVH exécute au boot. Le recopier à la main en ferait deux fichiers à tenir
+lui que Scaleway exécute au boot. Le recopier à la main en ferait deux fichiers à tenir
 d'accord, et le jour où ils divergeraient, la version testée en local ne serait
 pas celle qui tourne. Le gabarit porte donc un marqueur, et un script de dix
 lignes y injecte le fichier unique.
@@ -1369,7 +1581,7 @@ Les deux artefacts que la tranche 0 laisse derrière elle.
 
 - `docker-compose.yml` — le conteneur de jeu, référencé par digest immuable
   (§10 du spec). Le compagnon s'y ajoute en tranche 3.
-- `cloud-init/enshrouded.yaml.tmpl` — ce qu'OVH exécute au boot : il installe
+- `cloud-init/enshrouded.yaml.tmpl` — ce que Scaleway exécute au boot : il installe
   Docker, écrit le `docker-compose.yml` et le démarre.
 - `render-cloud-init.mjs` — injecte le `docker-compose.yml` dans le gabarit. Le
   compose n'existe donc qu'une fois, et ce qui tourne sur l'instance est ce qui
@@ -1400,141 +1612,149 @@ git commit -m "feat(deploy): pose le docker-compose et le cloud-init du serveur 
 
 Le livrable visible de la tranche : un serveur Enshrouded jouable, démarré à la
 main. Et les trois mesures qui n'existent nulle part ailleurs — le débit réel de
-SteamCMD depuis OVH, la durée du clic au serveur jouable, et le comportement de
-l'egress Object Storage intra-région.
+SteamCMD depuis Scaleway, la durée du clic au serveur jouable, et le
+comportement de l'egress Object Storage intra-région.
 
 Toute cette tâche est **conduite par un humain** : elle crée une instance
 facturée, y fait jouer des gens, et la détruit.
 
 **Fichiers :**
-- Créer : `probe/ovh/sshkey.ts`
-- Créer : `probe/ovh/session-probe.ts`
-- Modifier : `probe/.env.example` — `SSH_PUBLIC_KEY`
+- Créer : `probe/scaleway/session-probe.ts`
 - Modifier : `probe/RESULTS.md`
 
 **Interfaces :**
-- Consomme : `ovhFetch`/`ovhConfig` (tâche 2), le mécanisme de tag retenu
-  (tâche 3), `deploy/render-cloud-init.mjs` (tâche 5).
+- Consomme : `scwFetch`/`scwConfig` (tâche 2), le gabarit confirmé et le
+  mécanisme de tag (tâche 3), `deploy/render-cloud-init.mjs` (tâche 5).
 - Produit : la durée de démarrage annoncée aux utilisateurs, qui fonde la ligne
   « prêt vers 20:18 » du dossier de surface `.impeccable/`.
 
-- [ ] **Step 1: Déposer une clé SSH sur le projet — geste humain**
+- [ ] **Step 1: Enregistrer une clé SSH sur le projet — geste humain**
 
 Sans accès SSH, une instance qui ne démarre pas ne se diagnostique pas : on ne
 saurait rien d'autre que « elle ne répond pas », et la mesure de la tâche serait
 perdue avec l'instance.
 
-Ajouter `SSH_PUBLIC_KEY` à `probe/.env` — le contenu de `~/.ssh/id_ed25519.pub` —
-et à `probe/.env.example` sans valeur. Puis `probe/ovh/sshkey.ts` :
+Dans la console Scaleway, *IAM → Clés SSH*, ajouter le contenu de
+`~/.ssh/id_ed25519.pub`. Scaleway injecte les clés du projet dans les instances
+au démarrage ; aucun script n'est nécessaire, contrairement à OVH où la clé
+était une ressource du projet à créer par l'API.
 
-```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
+**Vérifier que l'injection a bien lieu** à l'étape 4. Si elle n'a pas lieu,
+ajouter au gabarit de `deploy/cloud-init/enshrouded.yaml.tmpl` :
 
-const KEY_NAME = 'beacon-probe'
-
-runScript(async () => {
-  const { serviceName, region } = ovhConfig()
-  const publicKey = process.env.SSH_PUBLIC_KEY
-  if (!publicKey) throw new Error('probe/.env is missing SSH_PUBLIC_KEY')
-
-  const existing = await ovhFetch<{ name: string }[]>(`/cloud/project/${serviceName}/sshkey`)
-  if (existing.some((key) => key.name === KEY_NAME)) {
-    console.log(`ssh key ${KEY_NAME} already registered`)
-    return
-  }
-
-  console.log(
-    JSON.stringify(
-      await ovhFetch(`/cloud/project/${serviceName}/sshkey`, {
-        method: 'POST',
-        body: { name: KEY_NAME, publicKey, region },
-      }),
-      null,
-      2,
-    ),
-  )
-})
+```yaml
+ssh_authorized_keys:
+  - __SSH_PUBLIC_KEY__
 ```
 
-Run : `npm --prefix probe run ovh:sshkey`
+et le marqueur correspondant dans `deploy/render-cloud-init.mjs`. C'est un
+changement du `deploy/`, donc son propre commit, avec le motif.
 
 - [ ] **Step 2: Écrire le lanceur de session**
 
-`probe/ovh/session-probe.ts` :
+`probe/scaleway/session-probe.ts` :
 
 ```ts
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { ovhConfig, ovhFetch, runScript } from './client'
+import { instanceApi, scwConfig, runScript } from './client'
+import { resolveImageId } from './images'
+import { PROBE_PREFIX, PROBE_TAG } from './reaper-policy'
 
 const RENDERER = fileURLToPath(new URL('../../deploy/render-cloud-init.mjs', import.meta.url))
-const POLL_INTERVAL_MS = 10_000
-const POLL_TIMEOUT_MS = 10 * 60 * 1000
+const COMMERCIAL_TYPE = process.env.SCW_COMMERCIAL_TYPE ?? 'DEV1-L'
+const BOOT_TIMEOUT_MS = 10 * 60 * 1000
 
-type Instance = { id: string; name: string; status: string; ipAddresses?: { ip: string; type: string }[] }
-
-async function resolveTarget(serviceName: string, region: string) {
-  const [flavors, images, sshKeys] = await Promise.all([
-    ovhFetch<{ id: string; name: string }[]>(`/cloud/project/${serviceName}/flavor?region=${region}`),
-    ovhFetch<{ id: string; name: string }[]>(
-      `/cloud/project/${serviceName}/image?region=${region}&osType=linux`,
-    ),
-    ovhFetch<{ id: string; name: string }[]>(`/cloud/project/${serviceName}/sshkey`),
-  ])
-
-  const flavor = flavors.find((candidate) => candidate.name === 'b3-8')
-  const image = images.find((candidate) => candidate.name.includes('Ubuntu 24.04'))
-  const sshKey = sshKeys.find((candidate) => candidate.name === 'beacon-probe')
-  if (!flavor) throw new Error(`no b3-8 flavor in ${region}`)
-  if (!image) throw new Error(`no Ubuntu 24.04 image in ${region}`)
-  if (!sshKey) throw new Error('no beacon-probe ssh key — run ovh:sshkey first')
-
-  return { flavorId: flavor.id, imageId: image.id, sshKeyId: sshKey.id }
-}
-
-// The instance is billed from creation, so this loop must always end. A machine
-// that never reaches ACTIVE is exactly what the watchdog will handle in tranche
-// 1; here the operator is the watchdog, and they need to be told.
-async function waitUntilActive(serviceName: string, instanceId: string, startedAt: number) {
-  while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-    const current = await ovhFetch<Instance>(`/cloud/project/${serviceName}/instance/${instanceId}`)
-    console.log(`${Math.round((Date.now() - startedAt) / 1000)}s  ${current.status}`)
-    if (current.status === 'ACTIVE') return current
-    if (current.status === 'ERROR') throw new Error(`instance ${instanceId} is in ERROR state`)
-  }
-  throw new Error(`instance ${instanceId} never became ACTIVE — destroy it now with ovh:reap`)
-}
+const since = (start: number) => `${Math.round((Date.now() - start) / 1000)}s`
 
 runScript(async () => {
-  const { serviceName, region } = ovhConfig()
+  const { zone, projectId } = scwConfig()
+  const api = instanceApi()
   const sessionId = process.argv[2]
-  if (!sessionId) throw new Error('usage: ovh:session -- <sessionId>')
+  if (!sessionId) throw new Error('usage: scw:session -- <sessionId>')
   if (!process.env.SERVER_PASSWORD) throw new Error('probe/.env is missing SERVER_PASSWORD')
 
-  // The very same renderer the README documents: what boots is what was tested.
+  // Two tags, as §5 of the spec has it: one to enumerate, one to match.
+  const sessionTag = `session:${sessionId}`
+  const tags = [PROBE_TAG, sessionTag]
+  const name = `${PROBE_PREFIX}${sessionId}`
+
+  // Re-runnable by design. A probe that is retried after a boot failure must
+  // retry, not seed: the reaper would otherwise chase resources this run forgot.
+  const known = await api.listServers({ zone, project: projectId, tags: [sessionTag] })
+  if (known.servers.length > 0) {
+    throw new Error(
+      `server ${known.servers[0].id} already carries ${sessionTag} — reap it or use another sessionId`,
+    )
+  }
+
+  // The very same renderer the deploy README documents: what boots is what was
+  // tested locally in task 4.
   const userData = execFileSync('node', [RENDERER], { encoding: 'utf8' })
-  const target = await resolveTarget(serviceName, region)
+  const image = await resolveImageId(zone, COMMERCIAL_TYPE)
 
   const startedAt = Date.now()
-  const instance = await ovhFetch<Instance>(`/cloud/project/${serviceName}/instance`, {
-    method: 'POST',
-    body: {
-      name: `beacon-probe-${sessionId}`,
-      region,
-      monthlyBilling: false,
-      userData,
-      ...target,
-    },
-  })
-  console.log(`instance ${instance.id} requested at ${new Date(startedAt).toISOString()}`)
 
-  const active = await waitUntilActive(serviceName, instance.id, startedAt)
-  console.log(JSON.stringify(active.ipAddresses))
+  // The ip first, and attached at creation rather than after: the Function owns
+  // the address before the machine exists, which is what lets §6 update DynHost
+  // from what it knows instead of from what the agent claims.
+  const reusable = await api.listIps({ zone, project: projectId, tags: [sessionTag] })
+  const ip = reusable.ips[0] ?? (await api.createIp({ zone, project: projectId, tags })).ip
+  if (!ip) throw new Error('createIp returned no ip — nothing to attach, nothing to reap')
+  console.log(`${since(startedAt).padEnd(6)} ip ${ip.address}`)
+
+  const { server } = await api.createServer({
+    zone,
+    project: projectId,
+    name,
+    commercialType: COMMERCIAL_TYPE,
+    image,
+    publicIps: [ip.id],
+    tags,
+    protected: false,
+  })
+  if (!server) throw new Error('createServer returned no server — run scw:reap before retrying')
+  console.log(`${since(startedAt).padEnd(6)} server ${server.id} created, ${server.state}`)
+
+  // cloud-init travels as user data, a call of its own, and it must land before
+  // the machine boots — there is no second chance at first boot.
+  await api.setServerUserData({ zone, serverId: server.id, key: 'cloud-init', content: userData })
+  console.log(`${since(startedAt).padEnd(6)} cloud-init posted (${userData.length} bytes)`)
+
+  const running = await api.serverActionAndWait(
+    { zone, serverId: server.id, action: 'poweron' },
+    { timeout: BOOT_TIMEOUT_MS },
+  )
+  console.log(`${since(startedAt).padEnd(6)} ${running.state}`)
+
+  console.log(`
+=== à relever, montre en main ===
+  création → running          ${since(startedAt)}
+  ssh root@${ip.address} 'cloud-init status --wait; docker logs -f enshrouded'
+
+Le compte à rebours du produit continue au-delà de « running » : SteamCMD mange
+les minutes suivantes, et c'est cette durée-là qu'annonce l'interface.
+
+détruire :  npm --prefix probe run scw:reap -- --yes`)
 })
 ```
 
-Le compte à rebours du produit continue au-delà de `ACTIVE` : c'est SteamCMD qui
+Trois choses que le SDK règle et qu'un `fetch` maison ratait. Le `cloud-init`
+part par `setServerUserData`, qui prend une chaîne et pose le bon type de
+contenu — sérialisé en JSON il serait arrivé entre guillemets, retours à la
+ligne échappés, sur une machine qui aurait booté nue sans que rien ne le
+signale. L'attente est `serverActionAndWait` plutôt qu'une boucle de polling
+écrite à la main. Et `image` reçoit l'UUID que `resolveImageId` va chercher, là
+où le label rendait un 400 après création de l'IP.
+
+Deux choix de séquence qui viennent du spec, pas du SDK. **L'IP est réservée
+avant le serveur** et lui est passée à la création : la Function possède
+l'adresse avant que la machine existe, ce qui est exactement ce qui permet au §6
+de mettre DynHost à jour depuis ce qu'elle sait plutôt que depuis ce que l'agent
+déclare. Et la sonde **refuse de démarrer si un serveur porte déjà le tag de
+session** : relancée après un échec de boot, elle doit retenter, pas semer.
+
+Le compte à rebours du produit continue au-delà de `running` : c'est SteamCMD qui
 mange les minutes suivantes, et il se mesure à l'étape 4, pas ici.
 
 - [ ] **Step 3: Lancer la session — geste humain**
@@ -1542,17 +1762,21 @@ mange les minutes suivantes, et il se mesure à l'étape 4, pas ici.
 Ajouter `SERVER_PASSWORD` à `probe/.env`, puis :
 
 ```bash
-npm --prefix probe run ovh:session -- s0001
+npm --prefix probe run scw:session -- s0001
 ```
 
-Noter l'instant du lancement. Attendu : `ACTIVE` en une à deux minutes, puis une
-adresse IP.
+Noter l'instant du lancement. Attendu : `running` en une à deux minutes, puis
+l'adresse IP.
 
 - [ ] **Step 4: Mesurer le démarrage, depuis la machine**
 
 ```bash
-ssh ubuntu@<ip> 'cloud-init status --wait; sudo docker logs -f enshrouded'
+ssh root@<ip> 'cloud-init status --wait; docker logs -f enshrouded'
 ```
+
+L'utilisateur est `root` sur les images Scaleway, non `ubuntu`. Si la connexion
+est refusée, l'injection de clé de l'étape 1 n'a pas eu lieu : appliquer le repli
+`ssh_authorized_keys` et relancer.
 
 Trois instants à relever à la seconde :
 
@@ -1562,42 +1786,70 @@ Trois instants à relever à la seconde :
 
 Le débit SteamCMD se lit dans ses propres logs de progression. La différence
 entre 1 et 3 est **la durée annoncée aux utilisateurs** — le spec parie sur
-environ 4 minutes, dont 2 à 3 pour SteamCMD.
+environ 4 minutes, dont 2 à 3 pour SteamCMD. La tâche 4 a mesuré 8,9 Go
+installés en local ; ce qui transite est moindre, et c'est ici qu'on l'apprend.
 
-- [ ] **Step 5: Vérifier les ports UDP depuis l'extérieur**
+- [ ] **Step 5: Vérifier le port UDP depuis l'extérieur**
+
+**Un seul port**, `15637` : la tâche 4 a établi que l'image ne lie jamais 15636.
 
 L'UDP ne se sonde pas de façon concluante à distance ; deux constats valent mieux
 qu'un scan :
 
 ```bash
 # Sur l'instance : le pare-feu local, et ce qui écoute vraiment
-ssh ubuntu@<ip> 'sudo ufw status; sudo ss -lunp'
+ssh root@<ip> 'ufw status; ss -lunp'
 
 # Depuis la machine, si nmap est installé — indicatif seulement
-nmap -sU -p 15636,15637 <ip>
+nmap -sU -p 15637 <ip>
 ```
 
-Attendu : `ufw` inactif, les deux ports en écoute, et **aucun groupe de sécurité
-à configurer côté OVH**. La preuve réelle vient de l'étape suivante : si quatre
-joueurs se connectent, les ports sont ouverts. Si personne n'y arrive, chercher
-dans cet ordre — `ufw` sur l'instance, puis un groupe de sécurité OpenStack côté
-projet. La réponse détermine ce que la tranche 2 devra configurer au
-provisionnement.
+**Scaleway attache un groupe de sécurité par défaut à toute instance.** C'est la
+différence avec OVH, où il n'y en avait aucun. Relever la règle appliquée :
+
+```bash
+# Le shell n'a jamais source probe/.env : sans ca, l'en-tete part vide et rend 401.
+export $(grep -v "^#" probe/.env | xargs)
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/instance/v1/zones/$SCW_ZONE/security_groups?project=$SCW_PROJECT_ID"
+```
+
+Attendu, à vérifier et non à supposer : le groupe par défaut laisse entrer
+l'UDP. S'il ne le laisse pas, **c'est un travail que la tranche 2 devra faire au
+provisionnement**, et le §12 du spec doit le dire.
+
+La preuve réelle vient de l'étape suivante : si quatre joueurs se connectent, le
+port est ouvert.
 
 - [ ] **Step 6: Jouer — c'est la vérification qui compte**
 
-Se connecter à trois ou quatre depuis les clients Enshrouded, sur `<ip>:15636`.
+Se connecter à trois ou quatre depuis les clients Enshrouded, sur `<ip>:15637`.
 Jouer vingt minutes. Relever :
 
 - la latence ressentie et toute saccade ;
-- `docker stats` et `free -m` sur l'instance, pour savoir si 2 vCPU suffisent —
-  c'est le doute nommé au §2 du spec sur le gabarit ;
+- `docker stats` et `free -m` sur l'instance. Le gabarit retenu ayant 4 vCPU, le
+  doute du §2 sur les 2 vCPU ne se pose plus dans les mêmes termes : la question
+  devient **si 2 auraient suffi** — auquel cas `BASIC1-X2C-8G`, à 0,0286 €/h,
+  fait tomber la facture d'un tiers ;
 - la bande passante sortante, qui fonde l'estimation d'egress du §11.
+
+**Et provoquer une vraie sauvegarde**, maintenant qu'un monde existe :
+
+```bash
+ssh root@<ip> 'docker exec enshrouded supervisorctl start enshrouded-backup'
+ssh root@<ip> 'docker exec enshrouded ls -la /opt/enshrouded/server/backups'
+```
+
+C'est la seule occasion de la tranche de voir le format d'archive en vrai : la
+tâche 4 l'a lu dans le script de l'image, faute de save à sauvegarder. La
+tranche 3 branchera `rclone` dessus.
 
 - [ ] **Step 7: Mesurer l'egress Object Storage intra-région — geste humain**
 
-Créer un conteneur Object Storage en GRA depuis l'espace client OVH, y déposer
-un fichier de 2 Go, puis depuis l'instance :
+Créer un bucket Object Storage en `fr-par` depuis la console Scaleway, **nommé
+`beacon-probe-egress`** — le préfixe de la contrainte globale vaut pour lui
+aussi, et c'est ce qui permettra de le reconnaître à l'étape 8. Y déposer un
+fichier de 2 Go, puis depuis l'instance :
 
 ```bash
 time curl -o /dev/null <url-du-fichier>
@@ -1607,18 +1859,32 @@ Relever le débit. La question de la *facturation* ne se lit pas en direct : not
 la date et le volume transféré, et la vérifier sur la facture du mois suivant.
 Le rapport doit dire que c'est une réponse différée, pas une réponse.
 
+Relever aussi le **prix du stockage** pour 2-3 Go, que le §11 porte encore comme
+une estimation reprise d'OVH.
+
 - [ ] **Step 8: Détruire, et vérifier — geste humain**
 
 ```bash
-npm --prefix probe run ovh:reap
-npm --prefix probe run ovh:reap -- --yes
-npm --prefix probe run ovh:inventory
+npm --prefix probe run scw:reap
+npm --prefix probe run scw:reap -- --yes
+npm --prefix probe run scw:inventory
 ```
 
-Attendu : inventaire revenu à la ligne de base de la tâche 2 étape 8, **IP
-flottante comprise**. Une IP orpheline continue d'être facturée (§7) ; c'est
-précisément la panne que le watchdog de la tranche 1 devra rattraper, et
-aujourd'hui il n'y a que cette commande.
+Attendu : inventaire revenu à la ligne de base de la tâche 2 étape 8 — serveurs,
+IP flottantes **et volumes**, les trois listes que l'inventaire consulte. Une IP
+orpheline continue d'être facturée (§7) ; c'est précisément la panne que le
+watchdog de la tranche 1 devra rattraper, et aujourd'hui il n'y a que cette
+commande.
+
+**Puis vider et supprimer le bucket `beacon-probe-egress`, depuis la console.**
+Le faucheur ne connaît pas l'Object Storage : c'est la seule ressource de la
+tranche qu'aucun script ne sait voir, donc la seule qui survivrait en silence.
+Deux gigaoctets ne ruinent personne, mais « rien de ce que la sonde a créé ne
+survit » doit rester vrai à la lettre — sinon la phrase ne protège plus rien.
+
+Si tu préfères le garder parce que la tranche 3 aura besoin d'un bucket, c'est
+défendable : alors **écris-le dans `RESULTS.md`**, avec son nom. Une ressource
+conservée sciemment et notée n'est pas une ressource oubliée.
 
 - [ ] **Step 9: Consigner**
 
@@ -1627,21 +1893,23 @@ Ajouter à `probe/RESULTS.md` :
 ```markdown
 ## S · La session réelle
 
-Questions du §12 : ports UDP et groupe de sécurité, débit réel de SteamCMD,
+Questions du §12 : port UDP et groupe de sécurité, débit réel de SteamCMD,
 egress Object Storage intra-région.
 
 | Mesure | Valeur |
 |---|---|
-| création → `ACTIVE` | |
-| `ACTIVE` → fin de `cloud-init` | |
-| durée du téléchargement SteamCMD, et débit | |
+| création → `running` | |
+| `running` → fin de `cloud-init` | |
+| durée du téléchargement SteamCMD, débit, et volume réellement transféré | |
 | **création → serveur jouable** | |
-| ports UDP joignables sans configuration | |
-| RAM et CPU à 4 joueurs | |
+| `15637/udp` joignable sans configuration, et règle du groupe de sécurité par défaut | |
+| RAM et CPU à 4 joueurs, et 2 vCPU auraient-ils suffi | |
+| format d'une archive de backup réelle | |
 | débit Object Storage → instance, même région | |
+| prix du stockage pour 2-3 Go | |
 | egress facturé — à vérifier sur la facture du mois | |
 
-**Verdict sur le gabarit `b3-8` :**
+**Verdict sur le gabarit `DEV1-L` :**
 
 **Durée de démarrage à annoncer dans l'interface :**
 
@@ -1651,58 +1919,50 @@ egress Object Storage intra-région.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add probe/ovh/sshkey.ts probe/ovh/session-probe.ts probe/.env.example probe/RESULTS.md
-git commit -m "test(probe): mesure le demarrage reel d'une session sur b3-8"
+git add probe/scaleway/session-probe.ts probe/RESULTS.md
+git commit -m "test(probe): mesure le demarrage reel d'une session sur DEV1-L"
 ```
 
 ---
 
 ### Task 7: Les trois questions qui se lisent
 
-Trois questions du §12 ne demandent ni machine ni code : le tarif du `b3-8`
-après le 1er octobre 2026, la capacité de Cloud Monitoring à alerter sur
-l'absence d'exécution d'un job Scheduler, et l'acceptation de l'identité fédérée
-OIDC par le déploiement Firebase. Elles se répondent par lecture de
-documentation et de console, sans rien créer.
+Trois questions du §12 ne demandent ni machine ni code : le tarif du gabarit, la
+capacité de Cloud Monitoring à alerter sur l'absence d'exécution d'un job
+Scheduler, et l'acceptation de l'identité fédérée OIDC par le déploiement
+Firebase. Elles se répondent par lecture de documentation et de console, sans
+rien créer.
 
-Cette tâche ne dépend d'aucune autre et peut se faire pendant qu'une instance
+Elle demande le catalogue du projet — donc la clé de la tâche 2 et le script de
+la tâche 3 — mais rien de facturé, et peut se faire pendant qu'une instance
 tourne.
 
 **Fichiers :**
-- Créer : `probe/ovh/price.ts`
-- Modifier : `probe/package.json` — le script `ovh:price`
 - Modifier : `probe/RESULTS.md`
 
 **Interfaces :**
-- Consomme : `ovhFetch`/`ovhConfig` de la tâche 2.
+- Consomme : `npm run scw:products` de la tâche 3, pour le prix réellement
+  appliqué au projet.
 - Produit : les trois réponses, dont la deuxième conditionne une tâche de la
   tranche 1 et la troisième une tâche de la tranche 4.
 
-- [ ] **Step 1: Le tarif du `b3-8` après le 1er octobre 2026**
+- [ ] **Step 1: Le tarif du gabarit**
 
-Relever sur la grille tarifaire OVH Public Cloud, région GRA : le prix horaire du
-`b3-8`, celui du stockage local s'il est facturé à part, et celui de l'IPv4
-publique. Le spec du §11 table sur ~0,047 €/h tout compris ; si les trois postes
-sont désormais séparés, le tableau des coûts change et le point d'équilibre de
-165 h avec lui.
+La bascule vers Scaleway a rendu la question d'origine — le tarif du `b3-8`
+après le 1er octobre 2026 — sans objet, mais elle en a créé la même chez le
+nouvel hébergeur. Le §11 du spec table désormais sur 0,04284 €/h pour le
+`DEV1-L` et 0,005 €/h pour son IP, disque inclus, relevés sur la grille
+publique.
 
-Croiser avec l'API, qui donne le prix réellement appliqué au projet et non celui
-de la page publique. Ajouter `"ovh:price": "tsx ovh/price.ts"` aux scripts, et
-`probe/ovh/price.ts` :
+Croiser avec le catalogue du projet, qui donne le prix réellement appliqué et
+non celui de la page publique — c'est le `hourly_price` que
+`npm --prefix probe run scw:products` imprime déjà à la tâche 3 étape 1, qui est
+faite : le tarif du catalogue coïncide avec la grille. Reste à relever le prix
+du volume bloc, qui départagerait les gabarits si celui retenu perdait son
+disque.
 
-```ts
-import { ovhConfig, ovhFetch, runScript } from './client'
-
-runScript(async () => {
-  const { serviceName, region } = ovhConfig()
-  const flavors = await ovhFetch<{ name: string }[]>(
-    `/cloud/project/${serviceName}/flavor?region=${region}`,
-  )
-  console.log(JSON.stringify(flavors.filter((flavor) => flavor.name === 'b3-8'), null, 2))
-})
-```
-
-Run : `npm --prefix probe run ovh:price`
+Si l'écart avec la grille dépasse quelques centimes, le tableau du §11 se
+corrige et le point d'équilibre de 163 h avec lui.
 
 - [ ] **Step 2: L'alerte sur l'absence d'exécution du watchdog**
 
@@ -1746,7 +2006,7 @@ Ajouter à `probe/RESULTS.md` :
 
 | Question du §12 | Réponse | Source |
 |---|---|---|
-| tarif `b3-8` après le 2026-10-01, stockage et IPv4 compris ou non | | |
+| tarif réel du gabarit retenu, IPv4 et stockage compris ou non | | |
 | Cloud Monitoring alerte-t-il sur l'**absence** d'exécution d'un job Scheduler, et à quel coût | | |
 | le déploiement Firebase accepte-t-il l'identité fédérée OIDC sans clé entreposée | | |
 
@@ -1756,7 +2016,7 @@ Ajouter à `probe/RESULTS.md` :
 - [ ] **Step 5: Commit**
 
 ```bash
-git add probe/package.json probe/ovh/price.ts probe/RESULTS.md
+git add probe/RESULTS.md
 git commit -m "docs(probe): repond aux questions de tarif, d'alerte et d'identite federee"
 ```
 
@@ -1796,33 +2056,41 @@ Une seule réponse a le droit de rester différée, et doit le dire explicitemen
 la facturation réelle de l'egress objet, qui se lit sur la facture du mois
 suivant.
 
-- [ ] **Step 2: Réécrire le §12 du spec**
+- [ ] **Step 2: Achever le §12 du spec**
 
-Remplacer la liste à puces « À vérifier au démarrage de l'implémentation » par
-« Vérifié en tranche 0 » : une ligne par question, avec la réponse et la date de
-mesure. Le §12 cesse d'être une liste de doutes pour devenir un relevé.
+Le §12 a déjà été refait le 2026-09-03, quand la bascule vers Scaleway a
+imposé de reprendre le spec : il porte un tableau **Vérifié** et une liste
+**Encore ouvert**. Il ne reste donc pas à le réécrire mais à le finir — déplacer
+dans le tableau chaque question que les tâches 3, 6 et 7 ont refermée, avec sa
+réponse et sa date de mesure.
 
-Ajouter en tête de section le renvoi au rapport :
-
-```markdown
-## 12. Vérifié en tranche 0
-
-Les questions ouvertes de la conception ont été mesurées le 2026-09-03, sonde
-par sonde. Le détail des commandes et des observations est dans
-[`probe/RESULTS.md`](../../../probe/RESULTS.md) ; ci-dessous les réponses et ce
-qu'elles changent.
-```
+Le §12 est complet quand la liste **Encore ouvert** ne contient plus que la
+facturation différée de l'egress objet, seule réponse qui a le droit d'attendre
+la facture du mois suivant — et qui doit dire qu'elle attend.
 
 - [ ] **Step 3: Corriger le spec là où la sonde le contredit**
 
-Deux réponses peuvent déplacer l'architecture, et alors ce n'est pas le §12 qu'on
-corrige mais le corps du spec :
+Les deux réponses qui pouvaient déplacer l'architecture sont tombées le
+2026-09-03, et une seule l'a fait :
 
-- si `hasOnly` ne restreint pas champ par champ, le §5 scinde `server/current` en
-  deux documents, et le §4 ajuste le rôle de `session-record` ;
-- si l'IP flottante ne porte pas de métadonnée, le §5 et le §6 changent le
-  mécanisme de réconciliation — rapprochement par l'instance d'attachement, ou
-  par la seule présence dans `provisioning/{sessionId}`.
+- `hasOnly` **restreint** bien champ par champ. `server/current` reste un
+  document unique, le §5 et le §4 n'ont pas bougé.
+- l'IP flottante d'OVH **ne portait pas** de métadonnée. Le §5 et le §6 n'ont
+  pas changé de mécanisme pour autant : c'est l'hébergeur qui a changé, Scaleway
+  portant nativement ce que le spec demandait. Le §2 et le §11 sont refaits.
+
+Ce qui reste ouvert peut encore déplacer le spec, et ce n'est alors pas le §12
+qu'on corrige mais son corps :
+
+- si le gabarit retenu perd son disque local, le §5 gagne un `volumeId` à
+  écrire, réconcilier et détruire — la table des champs réservés et le flux
+  d'arrêt changent tous deux ;
+- si le tag n'est pas rendu ou pas filtrable en vivo chez Scaleway, on est
+  revenu au point de départ et le §5 change de mécanisme — rapprochement par
+  l'instance d'attachement, ou par la seule présence dans
+  `provisioning/{sessionId}` ;
+- si une instance arrêtée n'est **pas** facturée chez Scaleway, la prémisse du
+  §3 tombe, et c'est le paragraphe qui fonde toute l'architecture jetable.
 
 **Toute modification du spec passe par les skills `clean-architecture` et
 `domain-driven-design`** : c'est la règle du `CLAUDE.md`, sans exception, et
@@ -1868,10 +2136,10 @@ manœuvre.
   fondent.
 - Un faucheur manuel et une alerte de budget, qui restent utiles jusqu'à ce que
   le watchdog de la tranche 1 les rende superflus.
-- Un inventaire OVH revenu à sa ligne de base : rien de ce que la sonde a créé ne
+- Un inventaire Scaleway revenu à sa ligne de base : rien de ce que la sonde a créé ne
   survit.
 
 `probe/` reste dans le dépôt. Le lotissement le dit jetable au sens où son code
 n'est pas repris tel quel, mais l'effacer rendrait le §12 invérifiable : une
 réponse dont on a perdu la commande n'est plus une mesure, c'est une affirmation.
-La tranche 1 décidera de son sort quand `ovh-compute` couvrira le même terrain.
+La tranche 1 décidera de son sort quand `scaleway-compute` couvrira le même terrain.
