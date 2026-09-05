@@ -4882,10 +4882,15 @@ composant.
 
 - [ ] **Step 5: Vérifier que le projet Firebase est prêt — geste humain**
 
+**`firebase` n'est pas installé globalement, et une commande nue échoue.**
+`firebase-tools@^13.35.1` est une dépendance de développement à la racine, pas
+un binaire du PATH : préfixer par `npx`, qui le trouve dans
+`node_modules/.bin`.
+
 ```bash
-firebase login
-firebase use <projectId>
-firebase projects:list
+npx firebase login
+npx firebase use <projectId>
+npx firebase projects:list
 ```
 
 Trois prérequis, à vérifier dans la console avant d'aller plus loin :
@@ -4900,8 +4905,11 @@ Trois prérequis, à vérifier dans la console avant d'aller plus loin :
 
 - [ ] **Step 6: Poser le secret et les paramètres — geste humain**
 
+Même remarque qu'à l'étape 5 : la CLI n'est pas globale, la commande passe par
+`npx`.
+
 ```bash
-firebase functions:secrets:set SCW_SECRET_KEY
+npx firebase functions:secrets:set SCW_SECRET_KEY
 ```
 
 La commande demande la valeur sur l'entrée standard ; **elle ne se passe pas en
@@ -4927,21 +4935,47 @@ restauration du cache Nx remplace en entier. Une configuration ne se range pas
 dans un répertoire que l'outillage a le droit d'effacer.
 
 La source de déploiement se recopie donc à chaque déploiement, par le
-`predeploy` qui reconstruit déjà la charge utile. Dans `firebase.json` :
+`predeploy` qui reconstruit déjà la charge utile.
+
+**Mesuré à l'essai réel : le hook tel qu'écrit plus haut ne tourne pas.**
+`firebase deploy` a rendu `NX Cannot find project '@beacon\functions'` puis
+`Error: spawn npx nx run @beacon\functions:prune-lockfile ENOENT`. Le
+mécanisme est dans `lib/deploy/lifecycleHooks.js` de `firebase-tools` : chaque
+commande de `predeploy` est relancée à travers `cross-env-shell`, et quelque
+part sur ce chemin la barre oblique de `@beacon/functions` devient une
+contre-oblique, et les guillemets internes à la commande ne survivent pas. Une
+commande sans barre oblique passe (`npx nx report`, essayé pour contrôle) ; la
+même avec la barre oblique échoue toujours, qu'elle soit nue ou enveloppée
+dans un `node -e`. **L'idiome `node -e` des étapes 8 et 11 reste correct là où
+il est écrit — un humain le tape dans son propre shell — mais il ne survit pas
+à ce hook précis** : les guillemets qu'il porte sont exactement ce que le hook
+avale.
+
+Le remède est de ne rien laisser de fragile dans la chaîne que ce hook
+retransmet : la barre oblique et les guillemets vivent dans un script npm
+racine, dont le hook n'invoque que le nom, sans slash ni guillemet.
+
+`package.json`, à la racine :
 
 ```json
-"predeploy": [
-  "npx nx run @beacon/functions:prune-lockfile",
-  "node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
-]
+"scripts": {
+  "predeploy:functions": "nx run @beacon/functions:prune-lockfile && node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
+}
 ```
 
-**Une recopie en `node -e` et non en `cp`, et ce n'est pas un maniérisme :**
-Firebase lance ses hooks dans le shell de la plateforme — `cmd.exe` sous
-Windows, où `cp` n'existe pas — et non dans celui que supposent les blocs
-`bash` du reste de ce plan. Node est déjà un prérequis du déploiement, donc
-cette forme n'ajoute rien à installer, et son jeu de guillemets tient dans
-`cmd.exe` comme dans un shell POSIX.
+Le nom évite délibérément `predeploy` seul : ce mot est un hook de cycle de
+vie npm, lancé automatiquement avant tout script `deploy` — un piège pour plus
+tard, pas un problème aujourd'hui, mais aucune raison de le poser quand même.
+
+`firebase.json` :
+
+```json
+"predeploy": ["npm run predeploy:functions"]
+```
+
+Reproduit et vérifié par un harnais qui imite `runCommand` de `firebase-tools`
+(sans jamais appeler `firebase deploy`) : cette forme rend un code de sortie 0
+et exécute réellement les deux étapes.
 
 L'ordre compte : la recopie suit le build, sans quoi elle écrit dans un
 répertoire que le build va reconstruire. Écarté au passage : donner un défaut à
@@ -4964,12 +4998,21 @@ Vérifier avant de continuer que `git status` ne propose pas `apps/functions/.en
 - [ ] **Step 7: Déployer les règles, puis les Functions — geste humain**
 
 Les règles d'abord, et seules. Elles ferment la base ; les poser après les
-Functions laisserait une fenêtre où la base existe sans être fermée.
+Functions laisserait une fenêtre où la base existe sans être fermée. Même
+remarque qu'aux étapes 5 et 6, `firebase` passe par `npx`.
 
 ```bash
 npx nx test @beacon/rules
-firebase deploy --only firestore:rules,firestore:indexes
+npx firebase deploy --only firestore:rules,firestore:indexes
 ```
+
+**`npm exec firebase deploy --only …` n'est pas un substitut acceptable à
+`npx firebase deploy --only …`.** npm avale `--only` comme sa propre option de
+configuration — `npm warn invalid config only=…` — et ne la transmet jamais à
+`firebase` : le déploiement part sans filtre et déploie tout, exactement ce
+que cette étape existe pour empêcher en posant les règles seules avant les
+Functions. `npx` transmet la ligne de commande telle quelle ; `npm exec` ne le
+fait pas dès qu'un nom d'option coïncide avec une option npm.
 
 La suite de refus est la barrière du §10 : **si elle n'est pas verte, on ne
 déploie pas.**
@@ -4978,7 +5021,7 @@ Puis les Functions. Le `predeploy` de `firebase.json` reconstruit la charge
 utile ; il n'y a pas à lancer le build à la main.
 
 ```bash
-firebase deploy --only functions
+npx firebase deploy --only functions
 ```
 
 Attendu : une seule Function, `watchdog`, en `europe-west1`, runtime
