@@ -1,0 +1,62 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - rclone
+
+write_files:
+  - path: /opt/beacon/start.sh
+    permissions: "0755"
+    content: |
+      __START_SH__
+  - path: /opt/beacon/docker-compose.yml
+    permissions: "0644"
+    content: |
+      __DOCKER_COMPOSE__
+  - path: /opt/beacon/.env
+    permissions: "0600"
+    content: |
+      WORLD_GUID=__WORLD_GUID__
+      GAME_PASSWORD=__GAME_PASSWORD__
+      ADMIN_STEAM_IDS=__ADMIN_STEAM_IDS__
+      AUTOSAVE_SECONDS=300
+      REGION=eu
+      MAX_PLAYERS=4
+      GAME_PORT=
+      PUBLIC_IP=
+      PUBLIC_PORT=
+      STEAM_ID=
+      GAME_FILES=/sunkenland/game
+      WORLD_FILES=/sunkenland/Worlds
+  # Read-only credentials, and read-only on purpose: this machine is the least
+  # trusted element of the system (§7). It may restore, never overwrite.
+  - path: /opt/beacon/rclone.env
+    permissions: "0600"
+    content: |
+      RCLONE_CONFIG_SCW_TYPE=s3
+      RCLONE_CONFIG_SCW_PROVIDER=Scaleway
+      RCLONE_CONFIG_SCW_ENDPOINT=__S3_ENDPOINT__
+      RCLONE_CONFIG_SCW_REGION=__S3_REGION__
+      RCLONE_CONFIG_SCW_ACCESS_KEY_ID=__S3_ACCESS_KEY__
+      RCLONE_CONFIG_SCW_SECRET_ACCESS_KEY=__S3_SECRET_KEY__
+
+runcmd:
+  - [ systemctl, enable, --now, docker ]
+  - [ mkdir, -p, /sunkenland/game, /sunkenland/Worlds ]
+  # Bracketed by dates, because the intra-region transfer is one of the
+  # measurements: this log answers "how long does restoring 2.3 GB take", and
+  # its byte count is what the invoice gets confronted with two days later.
+  # `rclone --stats` rather than `/usr/bin/time`, which Ubuntu's minimal image
+  # does not carry — a missing binary here would break the boot, not the timing.
+  - [ sh, -c, 'echo "game copy start $(date -Is)" > /var/log/beacon-probe.log' ]
+  - [ sh, -c, 'set -a; . /opt/beacon/rclone.env; set +a; rclone copy "scw:__BUCKET__/games/sunkenland/" /sunkenland/game --transfers 8 --stats 10s --stats-one-line >> /var/log/beacon-probe.log 2>&1' ]
+  - [ sh, -c, 'echo "game copy done $(date -Is)" >> /var/log/beacon-probe.log' ]
+  - [ sh, -c, 'set -a; . /opt/beacon/rclone.env; set +a; rclone copy "scw:__BUCKET__/saves/sunkenland/" /sunkenland/Worlds --stats 10s --stats-one-line >> /var/log/beacon-probe.log 2>&1' ]
+  - [ sh, -c, 'echo "world copy done $(date -Is)" >> /var/log/beacon-probe.log' ]
+  # The container runs as uid 7000, not root, and rclone just wrote this folder
+  # as root. Without this the autosave has nowhere to write — and the autosave
+  # is the measurement. Invisible on Docker Desktop, which flattens ownership;
+  # only a real Linux machine shows it.
+  - [ chown, -R, '7000:7000', /sunkenland/Worlds ]
+  - [ sh, -c, 'cd /opt/beacon && docker compose --env-file /opt/beacon/.env up -d' ]
