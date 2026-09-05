@@ -1280,12 +1280,64 @@ couvre les deux chemins — le rendeur du `cloud-init` refuse un `$` **avant**
 qu'une machine facturée existe, et `start.sh` imprime la longueur du mot de passe
 au démarrage.
 
-Mesures demandant les 2,3 Go du jeu, à faire par un humain :
+Mesuré le 2026-09-05, jeu et monde montés depuis l'hôte :
 
-- `-autoSaveIntervalInSeconds 300` accepté et journalisé :
-- `-adminSteamIDs` lu `FromBatScript` :
-- Mot de passe non corrompu, `HasPassword` :
-- Port UDP réellement en écoute :
-- Durée du démarrage, jeu et monde déjà présents :
+- **`-autoSaveIntervalInSeconds 300` accepté et journalisé** — `Auto Save Enabled,
+  auto save interval: 300`. La section J n'avait tenu la cadence qu'à 60 ; la
+  valeur retenue par le commanditaire est lue telle quelle.
+- **`-adminSteamIDs` pris en argument** — `AdminSteamIDs: 76561197965918116`,
+  imprimé trois fois. **Ni `FromBatScript` ni `FromFile` n'apparaissent** dans le
+  journal de cette version : les deux chaînes existent dans le binaire, aucune
+  n'est journalisée. Ce qui fonde la conclusion est ailleurs, et c'est plus
+  solide — le dossier du monde ne contient aucun fichier d'admins, et l'argument
+  est repris tel quel. **Beacon n'écrit rien dans le dossier de sauvegarde.**
+- **Mot de passe non corrompu** — `HasPassword: True`, et la ligne résolue se
+  termine par `-password probe`, jamais par `-region`. La longueur imprimée par
+  `start.sh` valait 5.
+- **Port UDP réellement en écoute : `27015`**, sans avoir passé `-port`. Deux
+  ports éphémères l'accompagnent (sortants, Photon). Ni `ss` ni `netstat` dans
+  l'image : lu dans `/proc/net/udp`.
+- **Durée du démarrage, jeu et monde déjà présents : 121 s** — de
+  `beacon: launching with` à `Server Start Complete`. La section J en annonçait
+  185 à 205 avec les fichiers dans un volume Docker.
+- **ServerID** — `4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638`, le
+  GUID du monde en préfixe, conforme.
+- **`SaveManager.get_IsSteamCloudReady()` lève toujours sa `NullReferenceException`**
+  et le serveur trouve le monde quand même, dans la disposition `Worlds`.
+- **À vérifier avec un joueur** : la ligne `StartGame` annonce
+  `MaxPlayerCapacity: 0` alors que `-maxPlayerCapacity 4` est passé. La section J
+  lisait `Current/MaxPlayer 0/4` sur la ligne d'état, qui ne s'imprime qu'avec un
+  joueur connecté — donc rien ne tranche encore entre un champ mal journalisé et
+  une option non appliquée.
 
-**Verdict sur qui porte le script :**
+**Verdict sur qui porte le script : le fichier monté suffit.** L'image amont est
+consommée telle quelle, à son digest, avec `start.sh` monté sur son point
+d'entrée. Ni fork chez `melle2`, ni image mince à nous, ni registre, ni workflow,
+ni artefact de plus à maintenir — la troisième forme tient, donc les deux autres
+sont sans objet.
+
+Deux choses que la reprise du script amont a imposées, et qui ne se déduisaient
+pas :
+
+- **Le serveur tourne en `uid 7000`.** Le dossier des mondes monté doit lui
+  appartenir. Sur Docker Desktop la question ne se pose pas ; sur une VM Linux,
+  `rclone` écrit en root et l'autosave n'a plus où écrire — d'où le `chown` du
+  `cloud-init`.
+- **L'arrêt n'est propre que par le `trap` amont.** En PID 1, un processus sans
+  gestionnaire ne reçoit jamais `SIGTERM` : un `exec` ferait de chaque
+  `docker stop` dix secondes puis un `SIGKILL`, possiblement au milieu d'une
+  sauvegarde.
+
+### Un troisième endroit où le mot de passe fuit
+
+La section J en connaissait un, `RPC_ServerValidatePlayer`. Il y en a deux de
+plus, et tous deux avant qu'un joueur se connecte :
+
+```text
+Start Resolving : Z:\sunkenland\game\Sunkenland-DedicatedServer.exe … -password probe
+```
+
+et la ligne de commande complète, visible dans `ps` de tout processus du
+conteneur. **Conséquence pour le §7 :** ce n'est pas une ligne de journal à
+filtrer, c'est le journal entier et la table des processus. Si l'agent remonte un
+jour quoi que ce soit de cette machine, rien de tout cela n'en sort.
