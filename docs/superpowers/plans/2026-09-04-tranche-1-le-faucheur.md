@@ -5052,9 +5052,31 @@ son absence de départ. Un job mal créé ou jamais exécuté ne déclencherait 
 et personne ne le saurait.
 
 ```bash
-gcloud scheduler jobs list --project <projectId> --location europe-west1
-gcloud scheduler jobs run <jobName> --project <projectId> --location europe-west1
+mise exec python -- gcloud scheduler jobs list --project <projectId> --location europe-west1
+mise exec python -- gcloud scheduler jobs run <jobName> --project <projectId> --location europe-west1
 ```
+
+**Mesuré sur le poste de l'administrateur : `gcloud` ne démarre pas tel quel.**
+Le SDK résout son interpréteur Python sur `PATH` et échoue avant même de lire
+ses arguments — `Python est introuvable`. L'outillage de ce poste est géré par
+mise, qui a `python 3.14.7` installé mais pas activé globalement : le `PATH`
+que `gcloud` regarde ne le voit jamais. Préfixer l'appel par `mise exec python
+--`, comme ci-dessus, le fait voir. Poser `CLOUDSDK_PYTHON` sur l'interpréteur
+de mise atteint le même résultat, mais se répète à chaque invocation là où
+`mise exec` se pose une fois sur la ligne.
+
+**Ni cette étape ni la 11 n'ont réellement besoin de `gcloud`.** La console
+Firebase répond aux deux : le navigateur de données Firestore pour
+`health/watchdog`, l'onglet *TTL* de Firestore pour `expiresAt` sur le groupe
+de collections `events`. Un lecteur bloqué par un SDK qui ne démarre pas n'a
+donc pas à le réparer d'abord — il a un chemin plus court sous la main.
+
+C'est le **quatrième** défaut de la même famille que cette tranche rencontre :
+une commande qu'un humain doit taper et qui ne tourne pas là où il la tape,
+après un `cp` dans un hook de predeploy, un préfixe POSIX `VAR=valeur` sous
+PowerShell, et un `firebase` nu supposant une CLI globale. Une commande qu'un
+humain tape fait partie du livrable, et se vérifie comme le reste — elle ne se
+suppose pas.
 
 Puis, dans la console Firestore, vérifier que `health/watchdog.lastRunAt` porte
 un instant des dernières minutes. **Tant que ce champ n'existe pas, le watchdog
@@ -5093,8 +5115,12 @@ Sur une seule ligne : la continuation par `\` est une forme POSIX, que
 PowerShell et `cmd.exe` coupent en deux commandes incomplètes.
 
 ```
-gcloud firestore fields ttls update expiresAt --collection-group=events --enable-ttl --project <projectId>
+mise exec python -- gcloud firestore fields ttls update expiresAt --collection-group=events --enable-ttl --project <projectId>
 ```
+
+Même défaut qu'à l'étape 9, même remède ; voir son paragraphe pour le
+mécanisme. L'alternative sans `gcloud` du tout est ici l'onglet *TTL* de la
+console Firestore, sur le groupe de collections `events`.
 
 Le §5 donne 400 jours à `events`, et c'est le champ `expiresAt` écrit par
 `session-record` qui les porte. La valeur n'est pas arbitraire : `events` est ce
