@@ -4373,12 +4373,12 @@ La seule façon de le lancer est de le nommer.
 
 ```ts
 import { config as loadEnv } from 'dotenv';
-import { Instancev1, Marketplacev2, type Zone } from '@scaleway/sdk';
-import { createClient } from '@scaleway/sdk-client';
+import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
+import { createClient, type Zone } from '@scaleway/sdk-client';
 import { afterAll, describe, expect, it } from 'vitest';
-import { fromSdk } from './from-sdk';
-import { ScalewayServerHost } from './scaleway-server-host';
-import { OWNERSHIP_TAG, sessionTag } from './tags';
+import { fromSdk } from './from-sdk.js';
+import { ScalewayServerHost } from './scaleway-server-host.js';
+import { OWNERSHIP_TAG, sessionTag } from './tags.js';
 
 // Not `dotenv/config`, which reads the .env of the current directory — the
 // workspace root. The keys live next to the library that uses them, and a
@@ -4415,7 +4415,8 @@ const marketplace = new Marketplacev2.API(client);
 // The very translation that runs in production, not a copy of it. That is the
 // point: this test answers "does InstanceApi describe the sdk", and it could
 // not answer it about a second translation nobody deploys.
-const host = new ScalewayServerHost(fromSdk(sdk, zone));
+const api = fromSdk(sdk, zone);
+const host = new ScalewayServerHost(api);
 const tags = [OWNERSHIP_TAG, sessionTag(SESSION)];
 
 afterAll(async () => {
@@ -4427,6 +4428,17 @@ describe('ScalewayServerHost against the real account', () => {
   it('sees, then destroys, a flexible ip it owns', async () => {
     const created = await sdk.createIp({ zone, project: projectId, tags });
     expect(created.ip?.tags).toEqual(tags);
+
+    // Tranche 0 measured `tags=` exact on the flexible ip by querying the
+    // strict prefix `session:` and finding it empty (probe/RESULTS.md:226).
+    // Re-run here through the production translation, as a pair: the
+    // positive control proves the full-tag query reaches this ip at all — a
+    // query that errored, or came back empty for an unrelated reason, would
+    // make the negative below pass for the wrong reason.
+    const { ips: byFullTag } = await api.listIps({ tags: [sessionTag(SESSION)] });
+    expect(byFullTag.map((ip) => ip.id)).toContain(created.ip?.id);
+    const { ips: byPrefix } = await api.listIps({ tags: ['session:'] });
+    expect(byPrefix.map((ip) => ip.id)).not.toContain(created.ip?.id);
 
     const hosted = await host.list();
     expect(hosted.map((h) => h.sessionId)).toContain(SESSION);
@@ -4447,22 +4459,88 @@ describe('ScalewayServerHost against the real account', () => {
       image: await resolveImageId(),
       tags,
     });
-    const serverId = created.server?.id ?? '';
-    const volumeIds = Object.values(created.server?.volumes ?? {}).map((volume) => volume.id);
+    // A missing server means the contract itself is broken — fail loudly here
+    // rather than let `?? ''` and `?? {}` turn it into a confusing assertion
+    // failure three lines down.
+    if (created.server === undefined) throw new Error('createServer returned no server');
+    // `created.server` is `any` here (see the comment on `api.listServers`
+    // below): `open()` — the only place `InstanceApi` would grow a creation
+    // method — is tranche 2, so this setup has no checked boundary to route
+    // through, unlike everything else in this file. `CreatedServerShape`
+    // names the shape the vendor's docs promise, the same way
+    // `instance-api.ts` narrows the vendor's surface to what this library
+    // trusts — but a declaration proves nothing the compiler can't check.
+    // The assertions right after are the actual oracle.
+    const server = created.server as CreatedServerShape;
+    expect(typeof server.id).toBe('string');
+    expect(server.id.length).toBeGreaterThan(0);
+    const volumeIds = Object.values(server.volumes).map((volume) => volume.id);
+    for (const volumeId of volumeIds) {
+      expect(typeof volumeId).toBe('string');
+      expect(volumeId.length).toBeGreaterThan(0);
+    }
+    const serverId = server.id;
     // The server is created and never started: its state is `stopped`, which
     // is exactly the path terminate refuses and the one that strands disks.
     expect(volumeIds.length).toBeGreaterThan(0);
 
+    // The one moment a live, attached volume exists to check against — once
+    // `host.close` runs below, the disk is gone. `sweepUnclaimed()` decides
+    // stranded-versus-attached with exactly one expression,
+    // `volume.server?.id === undefined`, and that field was bound to the SDK
+    // by nothing at all until this. Checking the inverse — attached, not
+    // stranded — is the only way to check it without orphaning a disk on
+    // purpose.
+    const { volumes } = await api.listVolumes();
+    const attached = volumes.filter((volume) => volumeIds.includes(volume.id));
+    expect(attached.map((volume) => volume.id)).toEqual(expect.arrayContaining(volumeIds));
+    for (const volume of attached) {
+      expect(volume.server?.id).toBe(serverId);
+    }
+
+    // Tranche 0 measured `tags=` exact only on the flexible ip, never on a
+    // server — and the whole reconciliation's tag-based ownership rests on
+    // servers behaving the same way. Same pair as the ip case above: the
+    // positive control proves the full-tag query reaches this server, the
+    // negative — the strict prefix `session:` — is the actual measurement,
+    // extended here from ips to servers.
+    const { servers: byFullTag } = await api.listServers({ tags: [sessionTag(SESSION)] });
+    expect(byFullTag.map((s) => s.id)).toContain(serverId);
+    const { servers: byPrefix } = await api.listServers({ tags: ['session:'] });
+    expect(byPrefix.map((s) => s.id)).not.toContain(serverId);
+
     await host.close(SESSION);
 
-    const { servers } = await sdk.listServers({ zone, tags: [sessionTag(SESSION)] });
-    expect(servers.map((server) => server.id)).not.toContain(serverId);
+    // Through the translation, not `sdk.listServers` directly. Not because
+    // pagination is special: `Instancev1.API`'s own declaration file doesn't
+    // resolve under this project's module resolution — its barrel re-exports
+    // `./api.utils`, `./content.gen`, `./types.gen` and `./types.utils`
+    // without the `.js` extension `nodenext` requires — and `skipLibCheck`
+    // swallows that failure into `any` for every method on the class, this
+    // one included. `fromSdk`'s explicit `InstanceApi` return type is what
+    // restores checking at the boundary; routing through `api` keeps this
+    // assertion typed instead of trusting an `any`.
+    const { servers } = await api.listServers({ tags: [sessionTag(SESSION)] });
+    expect(servers.map((s) => s.id)).not.toContain(serverId);
 
     for (const volumeId of volumeIds) {
       await expect(sdk.getVolume({ zone, volumeId })).rejects.toThrow();
     }
   }, 300_000);
 });
+
+/**
+ * `Instancev1.API`'s `createServer` isn't behind `InstanceApi` — `open()` is
+ * tranche 2 — so this test's setup has no checked boundary to trust instead.
+ * Declared narrowly, next to its only use, for the reason `instance-api.ts`
+ * gives for existing at all: the vendor's surface isn't trusted directly. See
+ * the comment above `api.listServers` for why the compiler can't check this
+ * one either way — the assertions after the cast are what actually do.
+ */
+interface CreatedServerShape {
+  readonly id: string;
+  readonly volumes: Record<string, { readonly id: string }>;
+}
 
 /**
  * `image` on a server creation wants a uuid, zone- and type-specific;
@@ -4482,6 +4560,73 @@ async function resolveImageId(): Promise<string> {
   return image.id;
 }
 ```
+
+Quatre écarts avec la transcription d'origine de cette étape, découverts en
+l'écrivant et en la faisant tourner, pas en la concevant :
+
+**Les imports relatifs prennent `.js`** (`tsconfig.base.json` est `nodenext`),
+et `Zone` vient de `@scaleway/sdk-client`, pas de `@scaleway/sdk` — la tâche 6
+l'a déjà découvert pour `from-sdk.ts`, ce fichier hérite de la même règle.
+
+**Un défaut du SDK, pas de ce test, invalide la phrase du step 5 de la tâche
+6 : « le compilateur en dit la moitié, le test de contrat le reste ». Le
+compilateur n'en dit aucune moitié.** Le paquet publié
+`@scaleway/sdk-instance@2.16.0` réexporte `./api.utils`, `./content.gen`,
+`./types.gen` et `./types.utils` depuis son fichier `dist/v1/index.d.ts` sans
+l'extension `.js` que `moduleResolution: nodenext` exige — vérifiable avec
+`npx tsc --skipLibCheck false`, qui rend quatre `TS2307` là où `skipLibCheck:
+true` (nécessaire par ailleurs, pour ne pas vérifier tous les `.d.ts` du
+dépôt) les avale en silence. La conséquence n'est pas locale à une méthode :
+`Instancev1.API` tout entière type `any`, `new Instancev1.API(...)` y
+compris — vérifié en révélant le type construit, puis en appelant une méthode
+inexistante sans qu'aucune erreur ne sorte. `@scaleway/sdk-k8s` porte le même
+défaut dans son propre `dist/v1/index.d.ts`.
+
+Personne ne l'avait remarqué parce que `from-sdk.ts` et
+`apps/functions/src/container.ts` passent chacun le sdk construit à une
+fonction dont le paramètre et le retour sont explicitement typés
+(`Instancev1.API`, `InstanceApi`) — une annotation de type sur une frontière
+arrête la propagation de l'`any` de l'appelant, donc rien n'y avait jamais
+échoué. **`from-sdk.ts` n'est donc pas vérifié pour moitié par le compilateur :
+il ne l'est pas du tout, et ce test de contrat est son unique vérification.**
+`container.ts` a la même exposition, silencieuse depuis la tâche 6 ; rien n'y
+a été changé ici — un cast ou une annotation n'y répareraient rien, seul ce
+test lie réellement le SDK à la frontière — mais quiconque reprend la tranche
+2 doit le savoir avant d'y ajouter `open()`.
+
+**La couverture des sept méthodes d'`InstanceApi` par ce test reste
+partielle.** `listServers`, `listIps`, `deleteServer`, `deleteVolume` et
+`deleteIp` sont exercées par les deux cas (directement ou via `host.close`).
+`listVolumes` l'est directement, ci-dessus, mais seulement sur la branche
+attachée : elle prouve que `ScwVolume.server` existe et vaut l'id du serveur
+quand le disque est monté, l'inverse exact du prédicat que `sweepUnclaimed()`
+lit pour décider qu'un volume est errant. Produire un volume réellement
+détaché sur le compte réel signifierait en orpheliner un exprès, ce qui est
+hors budget et hors périmètre de ce test — **`sweepUnclaimed()` elle-même
+n'est donc jamais appelée ici, et sa branche détachée reste vérifiée par les
+seuls tests unitaires et le double.** `serverAction` (le `terminate` du
+serveur en cours d'exécution) n'est couverte par rien dans ce fichier non
+plus : le serveur créé ici ne démarre jamais, `destroyServer()` y prend
+toujours la voie `deleteServer` + `deleteVolume`, jamais `serverAction`.
+
+**La commanditaire a fait tourner ce test contre le compte réel — deux cas
+verts, inventaire revenu à l'identique sur les trois listes — et la première
+version de cette étape ne répondait pourtant pas à l'une des trois questions
+de son préambule : le filtre `tags=` est-il exact sur un serveur comme il
+l'est sur une IP ?** Chaque requête du fichier interrogeait le tag complet
+`session:contract-manual`, qui est un préfixe de lui-même — sous sémantique
+préfixe comme sous sémantique exacte, `host.list()`, `host.close()` et les
+requêtes de post-fermeture rendent alors le même résultat : rien dans le
+fichier ne distinguait les deux mondes. La tranche 0 avait mesuré
+l'exactitude en interrogeant `session:`, un préfixe **strict**, et en
+observant une liste vide (`probe/RESULTS.md:226`) — mais seulement sur l'IP
+flottante, jamais sur un serveur, alors que c'est sur les serveurs que repose
+toute la réconciliation par tag. Ajouté, pour chaque ressource et en lecture
+seule : un contrôle positif à côté de la mesure elle-même, jamais l'un sans
+l'autre — une assertion d'absence isolée passerait tout aussi bien si la
+requête avait échoué, était vide pour une raison sans rapport, ou si la
+ressource n'avait jamais existé, et c'est exactement pour ça que le contrôle
+positif doit tenir dans la même respiration que la mesure.
 
 - [ ] **Step 3: Vérifier l'inventaire avant — un agent peut le faire, c'est une lecture**
 
