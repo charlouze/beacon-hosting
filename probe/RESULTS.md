@@ -846,10 +846,26 @@ ci-dessus décrivent le monde qu'on n'a pas choisi.
 
 Le §6 porte désormais la limite de l'alerte sur absence.
 
-Les deux réponses de monitoring et d'identité fédérée ne dépendent pas de
-l'hébergeur : elles restent valides telles quelles. Le tarif, lui, est à
-recouper avec le catalogue du projet Scaleway — c'est une question ouverte du
-§12, pas une réponse.
+### Ce qui a été corrigé, le 2026-09-05
+
+Le déploiement réel de la tranche 1 a montré que le problème du premier
+passage ne dit pas toute la panne. La métrique citée ci-dessus,
+`cloudscheduler.googleapis.com/job/attempt_count`, **n'existe pas** —
+interrogée sur le projet réel via l'API Monitoring, elle ne porte aucun
+descripteur. Et sur la métrique qui, elle, existe —
+`cloudfunctions.googleapis.com/function/execution_count` — un point arrive
+chaque minute, valant zéro quand rien n'a tourné : la série n'est donc jamais
+*absente*, elle est *nulle*, et une condition d'absence ne s'y déclencherait
+jamais, pas seulement au tout premier passage. Le plan de la tranche 1 (tâche
+12, étape 10) pose désormais un seuil sur `execution_count` plutôt qu'une
+absence.
+
+L'identité fédérée ne dépend pas de l'hébergeur et reste valide telle quelle.
+Le monitoring, lui, vient d'être corrigé ci-dessus : la gratuité des
+politiques d'alerte et des canaux tient toujours, mais pas le choix de
+métrique ni la condition d'absence. Le tarif, lui, est à recouper avec le
+catalogue du projet Scaleway — c'est une question ouverte du §12, pas une
+réponse.
 
 ## J · Sunkenland, un second jeu
 

@@ -5078,6 +5078,12 @@ PowerShell, et un `firebase` nu supposant une CLI globale. Une commande qu'un
 humain tape fait partie du livrable, et se vérifie comme le reste — elle ne se
 suppose pas.
 
+Un **cinquième** suit à l'étape 10, sur l'alerte elle-même, et il diffère des
+quatre précédents d'une façon qui mérite d'être dite : eux ont échoué
+bruyamment, celui-là aurait échoué en silence — une commande qui ne tourne pas
+le dit tout de suite, une alerte qui ne peut jamais se déclencher ne dit rien,
+et on l'apprend quand ce qu'elle surveillait est cassé depuis longtemps.
+
 Puis, dans la console Firestore, vérifier que `health/watchdog.lastRunAt` porte
 un instant des dernières minutes. **Tant que ce champ n'existe pas, le watchdog
 n'a jamais tourné**, et rien de ce qui suit ne le signalera.
@@ -5094,16 +5100,59 @@ faut s'arrêter là.
 
 - [ ] **Step 10: Poser l'alerte de panne — geste humain**
 
+La prescription initiale de cette étape s'est révélée fausse deux fois, et la
+seconde est la dangereuse. **La métrique `cloudscheduler.googleapis.com/job/attempt_count`
+n'existe pas** — interrogée sur le projet réel via l'API Monitoring, elle ne
+porte aucun descripteur, là où `cloudfunctions.googleapis.com/function/execution_count`
+et `run.googleapis.com/request_count` en portent un chacun.
+
+Plus grave : **une condition d'absence ne s'y serait jamais déclenchée.**
+Mesuré sur la série réelle d'`execution_count`, `function_name="watchdog"`, un
+point brut arrive chaque minute, valant zéro quand rien n'a tourné :
+
+```
+15:02 -> 15:03 = 0
+15:01 -> 15:02 = 0
+14:58 -> 14:59 = 1     <- exécution
+14:57 -> 14:58 = 0
+14:53 -> 14:54 = 1     <- exécution
+```
+
+La métrique n'est donc jamais *absente* — elle est *nulle*. Une condition
+d'absence resterait posée sans jamais se déclencher : configurée en apparence,
+inerte en réalité, la même forme qu'un test vert qui ne prouve rien — le
+défaut que cette tranche rencontre déjà par ailleurs.
+
+`run.googleapis.com/request_count` a été envisagée et écartée : elle compte
+les requêtes HTTP reçues par le service Cloud Run du watchdog, y compris
+celles que l'IAM rejette. Le service a `ingress: all` et une URL publique —
+l'invocation est bien restreinte par IAM au compte de service du
+planificateur, ce n'est donc pas une faille — mais n'importe qui atteignant
+cette URL maintiendrait `request_count` en vie pendant que le watchdog ne
+tourne plus, masquant précisément la panne que l'alerte existe pour détecter.
+
 Dans Cloud Monitoring, *Alerting → Create policy* :
 
-- métrique : `cloudscheduler.googleapis.com/job/attempt_count`, filtrée sur le
-  job du watchdog ;
-- condition : **absence de métrique**, fenêtre **1 heure** — douze exécutions
-  attendues dans l'intervalle, donc une seule manquée ne réveille personne ;
+- métrique : `cloudfunctions.googleapis.com/function/execution_count` ;
+- filtre : `resource.labels.function_name = "watchdog"` et
+  `metric.labels.status = "ok"` ;
+- agrégation : somme, fenêtre d'alignement **1 heure** ;
+- condition : **seuil**, inférieur à 1 — jamais une absence ;
+- données manquantes : traitées comme une violation, ce qui couvre le cas où
+  la série disparaîtrait réellement ;
 - canal de notification : l'adresse de l'administrateur.
 
-Les politiques d'alerte et les canaux e-mail ne sont pas facturés, et cette
-métrique est gratuite — mesuré en tranche 0.
+Le filtre `status = "ok"` n'est pas un détail. Sans lui, un watchdog qui
+démarre et s'effondre à chaque passage continuerait d'incrémenter
+`execution_count` sans que l'alerte ne le voie jamais. Avec lui, l'alerte dit
+« le watchdog n'a terminé aucun passage avec succès en une heure » — douze
+exécutions attendues dans l'intervalle, donc une seule manquée ne réveille
+personne, ce qui était l'intention initiale et reste vrai.
+
+Les politiques d'alerte et les canaux e-mail ne sont pas facturés — mesuré en
+tranche 0 — et la gratuité vaut pour toute métrique Google Cloud de premier
+niveau, `execution_count` compris ; seul le nom de la métrique prescrite était
+faux, pas le postulat de gratuité.
 
 **Cette alerte est pour l'administrateur, jamais pour l'interface.** Un bandeau
 « le surveillant ne répond plus » sur l'écran des joueurs serait exactement la
