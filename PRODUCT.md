@@ -19,13 +19,16 @@ compte au niveau produit est la facturation à l'heure — c'est elle qui rend l
 serveur éphémère possible — et le fait qu'il soit français, la souveraineté des
 données de jeu étant une contrainte du commanditaire.
 
-Ce fichier a déjà été périmé une fois par un changement d'hébergeur ; il n'en
-nomme plus aucun.
+Ce fichier a déjà été périmé une fois par un changement d'hébergeur, et une
+seconde fois par l'arrivée d'un deuxième jeu. **Il ne nomme donc ni fournisseur
+ni jeu.** Les deux sont des détails d'implémentation qui vivent dans `STACK.md`
+et dans le spec ; ce qui reste vrai ici est qu'on héberge des serveurs de jeu à
+la demande.
 
 ## Users
 
-Trois à quatre amis qui jouent à Enshrouded ensemble, quelques soirées par mois.
-Groupe fermé, connu, sur liste blanche — pas d'inscription libre.
+Trois à quatre amis qui jouent ensemble, quelques soirées par mois. Groupe
+fermé, connu, sur liste blanche — pas d'inscription libre.
 
 Deux rôles seulement. **Player** : tout le monde, y compris les non
 techniciens. Un joueur doit pouvoir lancer une partie sans rien comprendre à
@@ -37,9 +40,9 @@ démarrer, prolonger ou arrêter. La ressource est commune.
 
 ## Product Purpose
 
-Remplacer un serveur Enshrouded dédié facturé 7,90 €/mois en continu par un
-serveur qui n'existe que pendant les sessions de jeu, en conservant les
-sauvegardes entre deux parties.
+Remplacer un serveur de jeu dédié facturé 7,90 €/mois en continu par un serveur
+qui n'existe que pendant les sessions de jeu, en conservant les sauvegardes
+entre deux parties.
 
 Réussite : la dépense mensuelle passe très en dessous de cette référence, et
 personne n'est jamais empêché de jouer par le dispositif. Un échec coûteux
@@ -64,7 +67,7 @@ fragile de toutes les approches examinées.
 L'état de l'art établi dans le spec (§2) n'a trouvé aucun équivalent : les
 panels de jeu pilotent des machines allumées en permanence, les projets
 Terraform n'ont ni interface ni échéance, et le seul hébergeur facturé à l'heure
-identifié ne propose pas Enshrouded.
+identifié ne proposait pas le jeu du groupe.
 
 ## Operating Context
 
@@ -73,23 +76,30 @@ d'un téléphone, depuis le canapé ; la prolongation de fin de session se fait 
 alt-tab depuis le jeu, sur le PC. **Les deux contextes portent des actions
 différentes et comptent autant l'un que l'autre.**
 
-Quelques minutes séparent le clic du serveur jouable : le jeu se télécharge par
-SteamCMD à chaque démarrage, et l'attente est incompressible. **Sa durée n'est
-pas mesurée** — l'estimation d'origine, environ quatre minutes, a été écrite
-avant que l'hébergeur change et n'a jamais été confrontée à une vraie session.
-L'interface ne doit donc pas l'annoncer comme une promesse tant que la tranche 0
-ne l'a pas relevée.
+Quelques minutes séparent le clic du serveur jouable, et l'attente est
+incompressible : le serveur se met en place à chaque démarrage. La durée varie
+d'une session à l'autre — l'interface annonce donc une heure de disponibilité,
+jamais une durée promise.
 
-Le serveur se rejoint par `enshrouded.beacon.charlouze.com`, dont l'IP change à
-chaque session. Afficher aussi l'IP brute est une exigence explicite du
-commanditaire : le DNS peut échouer sans que la partie soit perdue.
+**Ce qu'il faut pour rejoindre dépend du jeu**, et c'est une contrainte de
+conception, pas un détail. Certains jeux se rejoignent par une adresse — un nom
+de domaine dont l'IP change à chaque session, et l'IP brute affichée à côté,
+exigence explicite du commanditaire parce que le DNS peut échouer sans que la
+partie soit perdue. D'autres ne se rejoignent pas par une adresse du tout, mais
+par un identifiant que le serveur produit à son démarrage et qui change à chaque
+fois.
+
+L'interface ne peut donc pas traiter « rejoindre » comme un champ fixe. Ce qui
+est constant est le besoin : **le joueur doit pouvoir copier ce qu'il faut, et
+disposer d'un recours si le moyen principal échoue.**
 
 ## Capabilities and Constraints
 
-Ce que l'interface permet : démarrer une session, la prolonger, l'arrêter, et
-voir en temps réel l'état, le compte à rebours, le nom de domaine, l'IP brute,
-le coût estimé de la session en cours et le cumul du mois. L'état est partagé —
-il change simultanément chez tout le monde, sans rechargement.
+Ce que l'interface permet : choisir le jeu et démarrer une session, la
+prolonger, l'arrêter, et voir en temps réel l'état, le compte à rebours, ce
+qu'il faut pour rejoindre, le coût estimé de la session en cours et le cumul du
+mois. L'état est partagé — il change simultanément chez tout le monde, sans
+rechargement.
 
 Réservé à l'admin : la liste des membres, les réglages, le choix du gabarit
 d'instance.
@@ -99,14 +109,20 @@ Contraintes structurantes, détaillées dans le spec :
 - L'instance est **détruite**, jamais éteinte. **Il n'existe pas d'état arrêté à
   coût nul** : une machine conservée garde son disque et son adresse, facturés
   tant qu'ils existent. Il n'y a donc pas de « serveur en pause » à dessiner.
-- Un seul serveur à la fois. Le modèle ne prévoit pas de sessions parallèles.
-- Enshrouded seulement en v1.
+- Un seul serveur à la fois, donc **un seul jeu à la fois**. Le modèle ne prévoit
+  pas de sessions parallèles.
+- **Le jeu se choisit à l'ouverture de la session**, par n'importe quel membre,
+  et ne change plus jusqu'à la fin. Ce n'est pas un réglage d'administrateur :
+  celui qui lance la soirée décide à quoi on joue.
+- **La sauvegarde du serveur suit une cadence, et rien ne permet de la forcer.**
+  Selon le jeu, les dernières minutes d'une session peuvent manquer. L'interface
+  ne doit donc jamais affirmer que tout est sauvegardé à l'instant.
 - Authentification Google sur liste blanche. Pas d'auto-inscription : un
   visiteur non autorisé existe et doit être traité.
 
-Hors périmètre v1, à ne pas dessiner : les autres jeux, les notifications hors
-de l'interface (Discord, e-mail), la restauration d'une ancienne sauvegarde
-depuis l'interface, plusieurs serveurs simultanés.
+Hors périmètre v1, à ne pas dessiner : les notifications hors de l'interface
+(Discord, e-mail), la restauration d'une ancienne sauvegarde depuis l'interface,
+plusieurs serveurs simultanés.
 
 **Langues.** L'interface et le code sont en anglais. Le spec et la
 documentation restent en français. Le glossaire du spec (§4) fait le pont —
@@ -118,14 +134,14 @@ Le produit s'appelle **Beacon** : un feu qu'on allume pour appeler les autres,
 éteint après. Le nom raconte l'acte social — lancer le serveur, c'est convoquer
 la soirée — plutôt que la machine.
 
-L'app vit sur `beacon.charlouze.com`, les serveurs de jeu sur
-`<jeu>.beacon.charlouze.com`.
+L'app vit sur `beacon.charlouze.com`, et les serveurs de jeu sur
+`<jeu>.beacon.charlouze.com` quand le jeu se rejoint par une adresse.
 
 Aucun logo, aucune charte, aucun actif visuel n'existe à ce jour.
 
 ## Evidence on Hand
 
-- Le spec d'architecture, **validé le 2026-09-03** :
+- Le spec d'architecture, **validé le 2026-09-03 et révisé le 2026-09-05** :
   `docs/superpowers/specs/2026-09-02-game-hosting-design.md`.
   Il fait autorité sur l'architecture, le modèle de données et le vocabulaire.
 - Le rapport de sonde `probe/RESULTS.md`, qui porte les seuls faits réellement
@@ -159,8 +175,11 @@ première mesure, et l'hébergeur a changé. Ce qui n'est pas dans
 3. **L'échéance est une promesse, pas une sanction.** On sait toujours quand ça
    s'arrête, et on peut toujours prolonger tant qu'on est là.
 4. **Tout est emprunté sauf la session.** Le conteneur, le cycle de vie de la
-   VM, l'authentification, l'hébergement : rien de tout cela n'est notre
-   valeur. La session et son échéance, si. C'est aussi pourquoi le nom de
-   l'hébergeur n'a pas sa place dans ce document.
-5. **Une sauvegarde ne se perd jamais.** C'est la seule donnée irremplaçable du
-   système ; tout le reste est jetable par construction.
+   VM, l'authentification, l'hébergement, le jeu lui-même : rien de tout cela
+   n'est notre valeur. La session et son échéance, si. C'est aussi pourquoi ni
+   le nom de l'hébergeur ni celui d'un jeu n'ont leur place dans ce document.
+5. **La sauvegarde est la seule chose qu'on protège.** Tout le reste du système
+   est jetable par construction, et conçu pour l'être. Ce principe dit une
+   priorité et non une garantie : ce qu'on peut réellement tenir dépend de ce
+   que chaque jeu accepte d'écrire, et cette limite se mesure plutôt qu'elle ne
+   se promet.
