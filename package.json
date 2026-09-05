@@ -2,8 +2,10 @@
   "name": "@beacon/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
   "private": true,
+  "scripts": {
+    "predeploy:functions": "nx run @beacon/functions:prune-lockfile && node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
+  },
   "devDependencies": {
     "@eslint/js": "^9.8.0",
     "@firebase/rules-unit-testing": "^4.0.1",

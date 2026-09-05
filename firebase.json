@@ -7,10 +7,7 @@
     {
       "source": "apps/functions/dist",
       "codebase": "default",
-      "predeploy": [
-        "npx nx run @beacon/functions:prune-lockfile",
-        "node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
-      ]
+      "predeploy": ["npm run predeploy:functions"]
     }
   ],
   "emulators": {
