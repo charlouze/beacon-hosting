@@ -1202,8 +1202,33 @@ pas parce qu'elles étaient justes. Ce test est leur unique vérification.
   produire un vrai orphelin demanderait d'abandonner volontairement un disque
   facturé. La branche orpheline de `sweepUnclaimed()` reste couverte par les
   seuls tests unitaires et leur double.
-- **Le coût réel n'est pas relevé.** Deux passages ont eu lieu, chacun créant une
-  IP flottante, un serveur jamais démarré et son disque. La question qu'aucune
-  mesure de la tranche 0 n'a posée reste ouverte : un serveur jamais démarré
-  facture-t-il son heure de calcul, ou seulement son disque ? À relever sur la
-  facture, ligne par ligne.
+- **Le coût réel a été relevé, en lisant l'API de facturation Scaleway sur le
+  compte réel.** Mois en cours au 2026-09-05 14:59 UTC, comparé aux trois
+  lignes que la tranche 0 avait relevées le 2026-09-03 (plus haut, « La
+  première facture, et ce qu'elle a démenti » : instance 0,13 €, IP 0,05 €,
+  LocalSSD 0,02 €) :
+
+  | | tranche 0 | 2026-09-05 | delta, les deux passages de contrat |
+  |---|---|---|---|
+  | calcul (`DEV1-L`) | 0,13 € | 0,13 € | **0,00 €** |
+  | IP flexible | 0,05 € | 0,06 € | ~0,01 € |
+  | Local SSD | 0,02 € | 0,04 € | ~0,02 € |
+
+  **La réponse : un serveur créé et jamais démarré ne facture aucun calcul.**
+  La tranche 0 avait établi qu'une heure démarrée est due, minimum 60
+  minutes — mais *par heure d'activité*, et un serveur qui n'a jamais démarré
+  n'en a aucune. Le disque et l'IP, eux, courent de la création à la
+  destruction, démarré ou non, ce qui est exactement ce que disent les deux
+  petits deltas.
+
+  Les deux passages de contrat ont donc coûté environ 0,03 € ensemble, sous le
+  plafond de 0,06 € que le plan s'était fixé et proche de son estimation à
+  0,02 €.
+
+  Deux réserves d'honnêteté sur ces chiffres : les relevés de la tranche 0
+  étaient arrondis au centime, donc les deltas d'un et deux centimes sont dans
+  le bruit d'arrondi — **le résultat solide est le zéro sur le calcul**, c'est
+  lui qui répond à la question. Et l'API étiquette la ligne de calcul
+  `3 minute` alors que 0,13 € valent ~3 heures à 0,04284 €/h — **l'unité rendue
+  est fausse, seule la valeur en euros est fiable** ; à noter pour qui relira ce
+  champ un jour.
