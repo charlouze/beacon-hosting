@@ -12,9 +12,13 @@
     font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing:antialiased; padding:0 0 72px;
   }
+  ::selection { background:rgba(216,35,42,.2); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
   .note { max-width:900px; margin:0 auto; padding:28px 24px 4px; font-size:14px; color:#4d4a44; }
   .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:var(--ink); }
   .note p { max-width:70ch; }
+  .note p + p { margin-top:10px; }
   .stage { max-width:1180px; margin:0 auto; padding:20px 24px; }
   .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin:32px 0 10px; }
 
@@ -48,18 +52,30 @@
   .hero .right .v { font:700 34px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:8px; }
   .hero .right .v.sm { font-size:19px; font-weight:600; }
 
+  .blocklabel { padding:20px 0 0; }
   .cols { display:grid; grid-template-columns:repeat(3,1fr); }
+  .cols.join { grid-template-columns:2fr 1fr 1fr; }
   .cols > div { padding:20px 28px 22px; border-left:1px solid var(--rule); }
   .cols > div:first-child { padding-left:0; border-left:0; }
-  .cols .v { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:17px; margin-top:10px; word-break:break-all; }
+  .cols .head { display:flex; align-items:center; gap:14px; min-height:20px; }
+  .cols .v { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:17px; margin-top:10px; overflow-wrap:break-word; }
+  /* Each half stays whole so the line breaks on the ~, the only place it means something. */
+  .cols .v .seg { white-space:nowrap; }
   .cols .v.host { color:var(--blue); font-weight:600; }
   .cols .v.plain { font-family:inherit; font-size:18px; }
+  .cols .v .tail { color:var(--mute); }
+
+  .copy {
+    font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--mute); border:1px solid var(--rule); padding:6px 8px; background:transparent; cursor:pointer;
+    transition:color .12s ease-out, border-color .12s ease-out;
+  }
+  .copy:hover { color:var(--ink); border-color:var(--ink); }
+  .copy[data-done] { color:var(--red); border-color:var(--red); }
 
   .foot { display:flex; align-items:flex-end; justify-content:space-between; gap:40px; padding-top:26px; margin-top:auto; }
   .money { display:flex; gap:56px; }
   .money .v { font:700 26px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:10px; }
-  .money .cmp .v { color:var(--mute); font-weight:600; }
-  .money .win .v { color:var(--blue); }
 
   .acts { display:flex; gap:14px; align-items:flex-end; }
   .btncol { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
@@ -73,6 +89,21 @@
   .hint { font-size:13px; color:var(--red); }
   .hint.grey { color:var(--mute); }
 
+  /* ---------- the game, chosen before opening ---------- */
+  .pick { text-align:right; }
+  .pick .opts { display:flex; gap:10px; margin-top:9px; }
+  .pick button {
+    padding:14px 26px; background:transparent; cursor:pointer;
+    border:2px solid #d3cfc4; color:var(--mute);
+    font:700 12px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    transition:color .12s ease-out, border-color .12s ease-out;
+  }
+  .pick button:hover { color:var(--ink); border-color:#a8a49a; }
+  .pick button[aria-pressed="true"] {
+    color:var(--ink); border-color:var(--ink);
+    box-shadow:inset 0 -5px 0 var(--red);
+  }
+
   .empty { padding:52px 0 46px; display:flex; justify-content:space-between; align-items:flex-start; gap:80px; }
   .empty .big { font:800 76px/1.02 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.035em; max-width:11ch; }
   .empty .sub { margin-top:22px; font-size:19px; color:var(--mute); max-width:36ch; line-height:1.5; }
@@ -85,10 +116,14 @@
 <div class="note">
   <h1>Beacon — l'écran large</h1>
   <p>Le contexte desktop n'est pas le même que le mobile : on arrive en alt-tab depuis le jeu, vers 23 h 30,
-  pour prolonger. Le temps restant et le bouton doivent donc être atteignables sans lire. Le panneau devient
-  bord à bord, à l'échelle d'un tableau de gare, et la place gagnée sert à trois choses que le mobile ne peut
-  pas porter : l'adresse et l'IP côte à côte, le lieu réel de la machine, et la dernière sauvegarde datée.
-  Le coût reste affiché comme un fait, jamais comme une comparaison avec ce que coûtait l'ancien serveur.</p>
+  pour prolonger. Le temps restant et le bouton doivent donc être atteignables sans lire. Le panneau reste
+  bord à bord, à l'échelle d'un tableau de gare. Le coût reste affiché comme un fait, jamais comme une
+  comparaison avec ce que coûtait l'ancien serveur.</p>
+  <p>La session montrée est celle d'un jeu <strong>sans adresse</strong> : c'est le cas que la largeur sert le
+  mieux — l'identifiant de 55 caractères tient sur une seule ligne ici, là où le téléphone doit le replier.
+  Hors service, le choix du jeu se pose juste au-dessus du bouton, à droite, sur le chemin de la main.
+  La colonne « machine » a laissé la place au point de jonction : elle nommait un type d'instance chez un
+  hébergeur que le projet a quitté, et c'était du jargon que la contrainte n° 2 refuse.</p>
 </div>
 
 <div class="stage">
@@ -97,7 +132,7 @@
   <div class="fit"><div class="art">
     <div class="board">
       <div class="lede">
-        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="wordmark">Beacon <span>· Sunkenland</span></div>
         <div class="status live"><span class="dot"></span>En service</div>
       </div>
       <div class="rule"></div>
@@ -114,10 +149,17 @@
       </div>
 
       <div class="rule thin"></div>
-      <div class="cols">
-        <div><span class="k">Adresse</span><div class="v host">enshrouded.beacon.charlouze.com</div></div>
-        <div><span class="k">IP</span><div class="v">51.83.42.117</div></div>
-        <div><span class="k">Machine</span><div class="v plain">Gravelines · GRA · b3-8</div></div>
+      <div class="blocklabel"><span class="k">Comment rejoindre</span></div>
+      <div class="cols join">
+        <div>
+          <div class="head">
+            <span class="k">Identifiant de serveur</span>
+            <button class="copy" data-copy="4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241613967341807">Copier</button>
+          </div>
+          <div class="v"><span class="seg">4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~</span><wbr><span class="seg tail">639241613967341807</span></div>
+        </div>
+        <div><span class="k">Région</span><div class="v plain">Europe</div></div>
+        <div><span class="k">Ou dans la liste</span><div class="v plain">Beacon's World</div></div>
       </div>
       <div class="rule thin"></div>
 
@@ -141,7 +183,7 @@
   <div class="fit"><div class="art">
     <div class="board">
       <div class="lede">
-        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="wordmark">Beacon</div>
         <div class="status off"><span class="dot"></span>Hors service</div>
       </div>
       <div class="rule"></div>
@@ -160,9 +202,9 @@
 
       <div class="rule thin"></div>
       <div class="cols">
-        <div><span class="k">Adresse</span><div class="v host">enshrouded.beacon.charlouze.com</div></div>
-        <div><span class="k">Dernière sauvegarde</span><div class="v plain">hier, 00:29 · 412 Mo</div></div>
-        <div><span class="k">Machine</span><div class="v plain">Gravelines · GRA · b3-8</div></div>
+        <div><span class="k">Dernière sauvegarde</span><div class="v plain">hier, 00:29 · 586 Ko</div></div>
+        <div><span class="k">Monde</span><div class="v plain">Beacon's World</div></div>
+        <div><span class="k">Hébergement</span><div class="v plain">Paris · France</div></div>
       </div>
       <div class="rule thin"></div>
 
@@ -173,6 +215,13 @@
           <div><span class="k">Soirées</span><div class="v">6</div></div>
         </div>
         <div class="btncol">
+          <div class="pick">
+            <span class="k">Jeu</span>
+            <div class="opts" role="group" aria-label="Jeu de la prochaine session">
+              <button type="button" aria-pressed="false">Enshrouded</button>
+              <button type="button" aria-pressed="true">Sunkenland</button>
+            </div>
+          </div>
           <div class="acts"><div class="btn xl">Ouvrir le service</div></div>
           <div class="hint grey">On t'annoncera l'heure exacte.</div>
         </div>
@@ -205,4 +254,25 @@
     const s = String(left % 60).padStart(2, '0');
     el.innerHTML = h + ':' + m + '<span class="sec">:' + s + '</span>';
   }, 1000);
+
+  // The choice records; it never opens anything on its own.
+  document.querySelectorAll('.pick .opts').forEach(group => {
+    group.addEventListener('click', e => {
+      const hit = e.target.closest('button');
+      if (!hit) return;
+      group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === hit)));
+    });
+  });
+
+  // Copying is the whole point of a 55-character string nobody reads.
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.copy;
+      if (value && navigator.clipboard) navigator.clipboard.writeText(value).catch(() => {});
+      const label = btn.textContent;
+      btn.textContent = 'Copié';
+      btn.dataset.done = '';
+      setTimeout(() => { btn.textContent = label; delete btn.dataset.done; }, 1400);
+    });
+  });
 </script>

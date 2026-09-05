@@ -1,7 +1,8 @@
 # Rapport de sonde — tranche 0
 
-Chaque section répond à une question du §12 du spec. Une réponse sans la
-commande ou l'observation qui la fonde n'est pas une réponse.
+Chaque section répond à une question du §12 du spec — sauf la section J, qui
+mesure un second jeu que le §12 mettait précisément hors périmètre. Une réponse
+sans la commande ou l'observation qui la fonde n'est pas une réponse.
 
 > **L'hébergeur a changé le 2026-09-03, en cours de tranche.** Les sections T et
 > D portent des mesures faites sur OVH, et des « conséquences pour le spec »
@@ -849,4 +850,270 @@ Les deux réponses de monitoring et d'identité fédérée ne dépendent pas de
 l'hébergeur : elles restent valides telles quelles. Le tarif, lui, est à
 recouper avec le catalogue du projet Scaleway — c'est une question ouverte du
 §12, pas une réponse.
+
+## J · Sunkenland, un second jeu
+
+**Cette section ne répond à aucune question du §12**, qui exclut explicitement
+« tout jeu autre qu'Enshrouded ». Elle existe parce que le commanditaire veut
+Sunkenland **en plus** d'Enshrouded, et parce que la règle du projet est de
+mesurer avant d'écrire le spec plutôt qu'après.
+
+Mesuré dans la nuit du 2026-09-04 au 05 sur la machine de développement,
+Docker 29.6.2. **Aucune ressource facturée n'a été créée** : tout est local.
+
+- **Image amont :**
+  `melle2/sunkenland-ds@sha256:2b21e6f098c76f8da91a7c5f53e02ceb9af126fa93d05f7958fd189d759873b7`
+  — 1,5 Go, Wine 11 + Xvfb + SteamCMD, entrée `./startSunkenland.sh`.
+- **Monde d'essai :** `Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b`,
+  créé par le client en version `0.8.55`.
+- **Manuel de référence :** *Sunkenland Dedicated Server Manual (Steam)*, daté
+  du 2024-02-02, fourni par le commanditaire. **Périmé sur cinq points au
+  moins.** Ce n'est pas une source ; c'est un vestige.
+
+### Le résumé
+
+| Fait | Valeur | Déplace l'architecture |
+|---|---|---|
+| téléchargement anonyme du serveur | **non**, `Missing configuration` | oui |
+| taille du jeu installé | 2,3 Go | |
+| point de jonction | ServerID `<guidMonde>~<ticks>`, jamais une IP | **oui** |
+| découverte de session | Photon Fusion, région à faire correspondre | **oui** |
+| options de ligne de commande | 13, dont **5 non documentées** | **oui** |
+| régime de sauvegarde | autosave réglable, **uniquement si un joueur est connecté** | **oui** |
+| stockage du monde | tampon circulaire de 10 emplacements | **oui** |
+| personnages des joueurs | **côté client**, jamais sur le serveur | **oui** |
+| démarrage, jeu et monde déjà présents | 185 à 205 s | |
+| ressources à zéro joueur | ~1,9 cœur, 5,2 Gio | |
+| ressources à un joueur | ~1,4 cœur, 5,3 Gio, ~135 kbit/s | |
+
+### Le jeu ne se télécharge pas anonymement
+
+Le script amont lance `steamcmd +@sSteamCmdForcePlatformType windows +login
+anonymous +app_update 2667530 validate`. La connexion anonyme réussit,
+l'installation non :
+
+```text
+Connecting anonymously to Steam Public...OK
+ERROR! Failed to install app '2667530' (Missing configuration)
+```
+
+`app_info_print 2667530` rend `"type" "Tool"` et `"oslist" "windows"` : les
+métadonnées sont publiques, la licence est requise. Le même `app_update` avec un
+compte possédant le jeu installe **2,3 Go** sans incident. **Le `+login
+anonymous` de l'image amont est un bug**, et le manuel de 2024 avait raison sur
+ce point-là.
+
+Conséquence : soit un secret Steam vit sur la VM de jeu — ce que le §7 refuse
+partout ailleurs — soit les fichiers du jeu sont déposés une fois dans le
+stockage objet et restaurés comme une sauvegarde. Le second chemin réutilise
+`SaveStore` et ne coûte que ~0,03 €/mois de stockage.
+
+Une image privée sur GHCR a été envisagée et **écartée sur le coût** : GitHub
+facture 0,50 $/Go de transfert sortant hors Actions, soit ~10 $/mois pour huit
+soirées — plus que les 7,90 €/mois que le projet remplace. Une image *publique*
+contenant les fichiers du jeu redistribuerait une œuvre sous licence ; c'est
+pourquoi toutes les images communautaires téléchargent à l'exécution.
+
+### On ne rejoint pas par une adresse
+
+Le serveur annonce à la fin de son démarrage :
+
+```text
+Server Start Complete, Ready for Clients to Join.
+ServerID is '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241566479961657'.
+WorldName:Beacon's World, ServerID:…, Region:eu, IsPublic:True, Current/MaxPlayer 0/4
+```
+
+**Le ServerID vaut `<GUID du monde>~<ticks .NET de l'instant de démarrage>`.**
+La première moitié est connue d'avance, la seconde change à chaque démarrage —
+trois valeurs distinctes observées sur trois lancements. Le format des ticks est
+confirmé par les fichiers `.meta`, qui portent le même encodage.
+
+Le client ne propose pas de connexion par adresse : on saisit le ServerID, ou on
+cherche le serveur par son nom dans la liste, **et la région du client doit
+correspondre** — le défaut du jeu est `asia`. Vérifié par le commanditaire sur
+son propre client.
+
+La découverte passe par **Photon Fusion** (`AppIdFusion`, `FixedRegion=eu`,
+`Protocol=Udp`, `AuthMode=Auth`), avec `DisableNATPunchthrough=False` : le
+transport reste de l'UDP direct entre client et serveur, seule la découverte est
+relayée. La VM devra donc ouvrir `27015/udp` en entrée, **mais n'a pas besoin
+d'une adresse stable** : personne ne la saisit. Le sort de l'IP flottante et du
+`DnsUpdater` pour ce jeu reste à trancher — voir les options non testées plus
+bas.
+
+**Conséquence pour le spec :** le §4 ne peut plus écrire « rejoindre » comme une
+IP. Il lui faut un terme au glossaire pour *ce que le joueur copie pour
+rejoindre*, que l'adapter remplit selon le jeu. Et puisque seul l'agent voit le
+ServerID — il n'apparaît que dans la sortie standard du conteneur —, l'agent
+gagne une écriture que le §7 ne lui accorde pas aujourd'hui.
+
+### Treize options, dont cinq que le manuel ignore
+
+Extraites des chaînes UTF-16 de
+`Sunkenland-DedicatedServer_Data/Managed/Assembly-CSharp.dll` :
+
+```text
+-adminSteamIDs   -autoSaveIntervalInSeconds   -makeSessionInvisible
+-maxPlayerCapacity   -password   -port   -publicip   -publicport
+-region   -steamID   -worldGuid   -batchmode   -nographics
+```
+
+| Option | Ce qu'elle apporte | Testée |
+|---|---|---|
+| `-autoSaveIntervalInSeconds` | règle la cadence de sauvegarde | **oui**, à 60 |
+| `-adminSteamIDs` | admins en argument, plus par fichier | **oui** |
+| `-steamID` | fait lire la disposition `SteamCloudData/<id>/Worlds` | non |
+| `-port`, `-publicip`, `-publicport` | port choisi, adresse publique annoncée | **non** |
+
+Le code distingue explicitement `FromBatScript AdminSteamIDs:` de `FromFile
+AdminSteamIDs:` — l'argument l'emporte, et **Beacon n'a jamais à écrire dans le
+dossier de sauvegarde**, qui reste une donnée pure.
+
+Pour `-steamID`, le binaire porte ce message : *« Hint: if the world save file
+is in SteamCloudData folder, you need to configure SteamID in command line
+arguments correctly »*. Le serveur sait donc lire les deux dispositions ; la
+divergence de chemins entre client et serveur est un réglage, pas une fatalité.
+
+`-publicip` et `-publicport` **n'ont pas été testés** et rouvrent la question de
+la connexion directe. C'est la première chose à mesurer sur une vraie VM.
+
+### Le régime de sauvegarde
+
+C'est le résultat le plus important de la nuit, et il a demandé six essais.
+
+| Déclencheur | Sauvegarde |
+|---|---|
+| serveur à vide, 39 min | **non** |
+| autosave, un joueur connecté | **oui** |
+| un joueur clique « sauvegarder » | **oui**, immédiat |
+| déconnexion du dernier joueur, 5 min d'attente | **non** |
+| `SIGTERM` — ce que fait `docker stop` | **non** |
+| `WM_CLOSE` via `wine taskkill`, monde sale | **non** |
+
+**Rien ne permet à Beacon de provoquer une sauvegarde.** Le `trap` de l'image
+amont fait `wineserver -k -w`, qui décapite ; un arrêt poli par `WM_CLOSE` rend
+un `OnShutdown: Ok` propre et n'écrit pas davantage. Le manuel ne propose que
+`CTRL+C`, qui ne vaut pas mieux. Six minutes de jeu ont été perdues en le
+vérifiant.
+
+La sortie est l'intervalle. À la valeur par défaut de 600 s, la première
+écriture est tombée 593 s après la connexion du joueur. Relancé avec
+`-autoSaveIntervalInSeconds 60`, le jeu journalise `auto save interval: 60` et
+tient la cadence sur huit sauvegardes :
+
+```text
+01:33:27  connexion
+01:34:19  #1      +52 s
+01:35:19  #2      +60 s
+01:36:25  #3      +66 s
+01:36:39  #4      +14 s   ← déclenchée par l'admin
+01:36:53  #5      +14 s   ← déclenchée par l'admin
+01:37:25  #6      +32 s
+01:38:31  #7      +66 s
+01:39:34  #8      +63 s
+```
+
+**L'autosave ne tourne que si un joueur est connecté** — les 39 minutes à vide
+n'ont rien écrit. Ce n'est pas un problème : le cas dangereux serait que les
+joueurs partent et que l'échéance tombe plus tard, or à ce moment la dernière
+écriture date d'au plus un intervalle avant le départ du dernier joueur.
+
+**Un membre admin du jeu peut déclencher une sauvegarde depuis la console**,
+vérifié par le commanditaire — ce sont les entrées `#4` et `#5`.
+
+### Le monde est un tampon circulaire, et l'index ment
+
+Après dix sauvegardes, le dossier du monde contient `World~0.json` à
+`World~9.json`, et la onzième **écrase `World~0`**. Le dossier ne dépasse jamais
+586 Ko, quelle que soit la durée jouée : **Beacon n'a aucun élagage à faire.**
+
+```text
+World~0.json  60085  01:39:33   ← le plus récent
+World~1.json  57557  00:37:27   ← le plus ancien
+World~9.json  60087  01:38:30
+Cache.json → { "CacheLatestSaveIndex": 0 }
+```
+
+**Le numéro le plus élevé n'est pas le plus récent.** Seuls `Cache.json` et les
+horodatages des fichiers `.meta` font foi. Un code qui trierait par index
+restaurerait une sauvegarde vieille de dix intervalles.
+
+Corollaire : **l'intervalle et la profondeur d'historique sont le même
+réglage**, l'historique valant dix fois l'intervalle. À 60 s on perd au plus une
+minute mais on ne remonte qu'à dix ; à 600 s on perd dix minutes et on remonte à
+cent. La profondeur réelle se décide de toute façon dans le stockage objet, pas
+dans ce tampon.
+
+### La moitié de la sauvegarde vit chez le joueur
+
+Le personnage — inventaire, position, progression — est stocké sur la machine du
+joueur, sous `Characters/<nom>~<guid>/<GUID du monde>/`, avec exactement le même
+schéma d'instantanés numérotés et de pointeur `Cache.json` que le monde. Le
+serveur ne détient que le monde.
+
+Deux conséquences. **Beacon ne sauvegarde que le monde** ; les personnages
+dépendent de Steam Cloud, hors de son contrôle, et le principe 5 de `PRODUCT.md`
+ne couvre donc pour ce jeu que la moitié serveur. Et **le GUID du monde est la
+clé qui relie chaque personnage à son monde** : il doit survivre à toutes les
+sessions. Le restaurer à l'identique, oui ; le recréer, jamais, même pour
+réparer.
+
+Les chemins diffèrent entre client et serveur : le client écrit dans
+`SteamCloudData/<steamID64>/Worlds`, le serveur lit dans `Sunkenland/Worlds`
+(l'image y pose un lien symbolique vers `/sunkenland/Worlds`). La cause est
+visible au démarrage — `SaveManager.get_IsSteamCloudReady()` lève une
+`NullReferenceException`, le serveur n'ayant pas de Steam Cloud. L'option
+`-steamID` devrait réconcilier les deux.
+
+### Deux pièges d'exploitation
+
+**Le mot de passe vide corrompt les arguments.** Le script amont passe
+`-password "${GAME_PASSWORD}"` sans condition ; à vide, le parseur avale
+l'option suivante et le mot de passe du serveur devient littéralement
+`-region`, avec `HasPassword: True`. Avec une valeur non vide, la ligne est
+correcte. C'est le premier correctif à proposer en amont.
+
+**La ligne d'état ne s'imprime que lorsqu'un joueur est connecté.** Elle se tait
+à la déconnexion du dernier et n'affiche jamais `0/4` en régime établi. **Le log
+ne peut pas servir de battement de cœur à l'agent** : le silence ne veut pas
+dire mort. Vérifié — cinq minutes de silence sur un conteneur à 141 % de CPU.
+
+Enfin, la ligne `RPC_ServerValidatePlayer: PlayerRef […] steamID […] password
+[…]` **contient le mot de passe de session en clair**. Si l'agent remonte un
+jour des journaux, celle-ci ne sort pas de la machine.
+
+### Conséquences pour le spec
+
+1. **§4** — le point de jonction devient un terme du glossaire, rempli par
+   l'adapter selon le jeu. Une IP pour Enshrouded, un ServerID et une région
+   pour Sunkenland.
+2. **§4** — `Session` porte le jeu, figé à l'ouverture. Le catalogue technique
+   — image, ports, variables, gabarit conseillé — reste dans l'adapter.
+3. **§7** — l'agent gagne une écriture réservée : lui seul voit le ServerID.
+4. **§6** — rien ne change. La fermeture n'a aucune sauvegarde à attendre,
+   puisque rien ne permet d'en provoquer une : l'agent pousse ce qui est sur le
+   disque, vieux d'au plus un intervalle. La règle « `STOPPING` depuis plus de
+   10 min → destruction sans attendre l'agent » tient telle quelle, et la
+   tranche 1 n'est pas touchée.
+5. **§2** — la décision « fichiers du serveur téléchargés par SteamCMD à chaque
+   démarrage » ne tient pas pour un jeu dont le téléchargement exige une
+   licence. Les 2,3 Go passent par le stockage objet.
+6. **§3 et `PRODUCT.md`** — la promesse sur les sauvegardes est plus étroite
+   pour Sunkenland : le monde est garanti, les personnages appartiennent aux
+   joueurs.
+7. **Saves** — préfixe par jeu dans le seau, sans quoi un monde en écrase un
+   autre.
+
+### Ce qui reste ouvert
+
+- `-publicip`, `-publicport` et `-port` ne sont pas testés. Ils décident si l'IP
+  flottante et le `DynHost` servent à quelque chose pour ce jeu.
+- `-steamID` n'est pas testé.
+- La cadence n'a été vérifiée qu'à 60 s. La valeur retenue par le commanditaire
+  est 300 s.
+- Le débit et la facturation d'un transfert intra-région pour 2,3 Go restent la
+  même question ouverte que pour les sauvegardes, section S.
+- Aucune mesure n'a été faite sur une VM. Tout ce qui précède vient d'un
+  conteneur local.
 

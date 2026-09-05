@@ -22,6 +22,32 @@ stratégie de l'écran est dans
 | `desktop.html` | Départ · écran large 1440 px · les deux états |
 | `compare.html` | Les deux mondes finalistes écartés, en 1440 px |
 
+## Mise à jour du 2026-09-05 — un second jeu
+
+Le monde n'a pas bougé ; les maquettes, si. La session porte désormais un jeu,
+choisi à son ouverture par n'importe quel membre. Deux conséquences se voient dans
+`desktop.html` et `directions.html` :
+
+- **Hors service, le jeu se choisit juste avant le bouton.** C'est un
+  enregistrement et non un catalogue — la soirée s'est décidée sur Discord, l'écran
+  ne participe pas à ce choix-là.
+- **Le bloc « comment rejoindre » varie selon le jeu**, et certains n'ont aucune
+  adresse : on les rejoint par un identifiant de 55 caractères régénéré à chaque
+  démarrage. C'est ce cas difficile que les maquettes montrent ; la forme
+  « adresse + IP » ne change pas.
+
+Sur téléphone, la ligne à deux colonnes ne survivait pas à cette chaîne : le libellé
+passe au-dessus, la valeur prend toute la largeur, et chaque moitié est insécable
+pour que la coupure tombe sur le `~` — seul endroit où elle sépare deux choses
+différentes plutôt que de couper un identifiant en deux.
+
+La colonne « machine » a disparu de l'écran en service. Elle nommait un type
+d'instance chez un hébergeur que le projet a quitté, et c'était le jargon
+d'infrastructure que la contrainte n° 2 refuse.
+
+`compare.html` n'est pas touché : c'est une trace des mondes écartés, elle se lit
+telle qu'elle a été présentée.
+
 ## Écarté, et pourquoi
 
 **The Lido Board** et **The Pay-and-Display** — éliminés par une relance du

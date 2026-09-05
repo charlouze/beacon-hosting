@@ -13,12 +13,16 @@
     -webkit-font-smoothing:antialiased;
     padding:0 0 80px;
   }
+  ::selection { background:rgba(216,35,42,.2); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
   .note {
     max-width:760px; margin:0 auto; padding:28px 24px 8px;
     font-size:14px; color:#4d4a44;
   }
   .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:#16181b; }
   .note p { max-width:66ch; }
+  .note p + p { margin-top:10px; }
   .stage { max-width:760px; margin:0 auto; padding:24px; display:grid; gap:40px; }
   .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin-bottom:10px; }
 
@@ -53,17 +57,34 @@
   .closes { display:flex; align-items:baseline; gap:10px; margin-top:14px; }
   .closes .v { font:700 22px/1 ui-sans-serif, system-ui, sans-serif; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
 
-  .rows { padding:4px 0 2px; }
-  .row { display:flex; gap:14px; align-items:baseline; padding:13px 0; border-bottom:1px solid var(--rule); }
-  .row:last-child { border-bottom:0; }
+  /* ---------- how to join ---------- */
+  .join { padding:16px 0 2px; }
+  .join > .k { display:block; margin-bottom:4px; }
+  .jrow { padding:13px 0; border-bottom:1px solid var(--rule); }
+  .jrow:last-child { border-bottom:0; }
+  .jrow .top { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:24px; }
+  .jrow .val {
+    margin-top:7px;
+    font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12px; line-height:1.5;
+    letter-spacing:.01em; overflow-wrap:break-word;
+  }
+  /* Each half stays whole so the line breaks on the ~, the only place it means something. */
+  .jrow .val .seg { white-space:nowrap; }
+  .jrow .val.plain { font-family:inherit; font-size:15px; letter-spacing:0; }
+  .jrow .val .host { color:var(--blue); font-weight:600; }
+  .jrow .val .tail { color:var(--mute); }
+
+  .row { display:flex; gap:14px; align-items:baseline; padding:13px 0; border-top:1px solid var(--rule); }
   .row .k { width:86px; flex:none; padding-top:2px; }
   .row .v { flex:1; font-size:15px; font-variant-numeric:tabular-nums; }
-  .row .v.mono { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:13.5px; letter-spacing:.01em; word-break:break-all; }
-  .row .v .host { color:var(--blue); font-weight:600; }
+
   .copy {
     font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
     color:var(--mute); border:1px solid var(--rule); padding:5px 7px; background:transparent; cursor:pointer;
+    transition:color .12s ease-out, border-color .12s ease-out;
   }
+  .copy:hover { color:var(--ink); border-color:var(--ink); }
+  .copy[data-done] { color:var(--red); border-color:var(--red); }
 
   .plate {
     margin-top:18px; border:1px solid var(--rule); background:rgba(18,69,127,.045);
@@ -74,9 +95,25 @@
   .money { display:flex; gap:26px; padding:16px 0 20px; }
   .money div .k { display:block; }
   .money div .v { font:700 19px/1.2 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:6px; }
-  .money .cmp .v { color:var(--mute); font-weight:600; }
 
-  .acts { margin-top:auto; display:flex; gap:10px; padding-top:8px; }
+  /* ---------- the game, chosen before opening ---------- */
+  .pick { margin-top:auto; padding-top:20px; }
+  .pick > .k { display:block; }
+  .pick .opts { display:flex; gap:9px; margin-top:9px; }
+  .pick button {
+    flex:1; padding:14px 8px; background:transparent; cursor:pointer;
+    border:2px solid #d3cfc4; color:var(--mute);
+    font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    transition:color .12s ease-out, border-color .12s ease-out;
+  }
+  .pick button:hover { color:var(--ink); border-color:#a8a49a; }
+  .pick button[aria-pressed="true"] {
+    color:var(--ink); border-color:var(--ink);
+    box-shadow:inset 0 -5px 0 var(--red);
+  }
+
+  .acts { display:flex; gap:10px; padding-top:14px; }
+  .acts.push { margin-top:auto; }
   .btn {
     flex:1; text-align:center; padding:16px 8px; border:2px solid var(--ink); background:var(--ink); color:var(--paper);
     font:700 12px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
@@ -95,14 +132,23 @@
     .headline { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
     .headline .closes { margin-top:0; flex-direction:column; align-items:flex-end; gap:6px; text-align:right; }
     .money { gap:44px; }
+    .jrow .top { justify-content:flex-start; gap:16px; }
+    .jrow .top .k { width:150px; flex:none; }
+    .jrow .val { font-size:13px; }
   }
 </style>
 
 <div class="note">
-  <h1>Direction 1 — The Departure Board, reconstruite</h1>
-  <p>Plus aucun objet dessiné : la matière est l'impression elle-même — filets épais et fins, capitales
-  espacées, chiffres tabulaires, un seul rouge. À taille réelle, et responsive : élargis la fenêtre pour voir
-  la version large. Les deux autres mondes attendent, je peux les rebâtir au même niveau.</p>
+  <h1>Direction 1 — The Departure Board, avec un second jeu</h1>
+  <p>La session porte désormais un jeu, choisi à son ouverture. Deux conséquences se voient ici :
+  hors service, le jeu se choisit juste avant d'appuyer — c'est un enregistrement, pas un catalogue ;
+  en service, il devient un fait affiché dans le bandeau.</p>
+  <p>La session montrée est celle d'un jeu <strong>qui n'a pas d'adresse</strong> : on le rejoint par un
+  identifiant de 55 caractères que le serveur produit à chaque démarrage. C'est le cas difficile, et c'est
+  pour ça qu'il est ici — la forme « adresse + IP » ne change pas et reste celle des versions précédentes.
+  Sur téléphone, la ligne à deux colonnes ne survivait pas à cette chaîne : le libellé passe au-dessus, la
+  valeur prend toute la largeur, et la coupure tombe sur le <code>~</code>, seul endroit où elle veut dire
+  quelque chose.</p>
 </div>
 
 <div class="stage">
@@ -111,7 +157,7 @@
     <div class="label">En service — l'écran pendant la partie</div>
     <div class="screen">
       <div class="lede">
-        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="wordmark">Beacon <span>· Sunkenland</span></div>
         <div class="status live"><span class="dot"></span>En service</div>
       </div>
 
@@ -129,21 +175,31 @@
       </div>
 
       <div class="band thin"></div>
-      <div class="rows">
-        <div class="row">
-          <span class="k">Adresse</span>
-          <span class="v mono"><span class="host">enshrouded.beacon.charlouze.com</span></span>
-          <button class="copy">Copier</button>
+      <div class="join">
+        <span class="k">Comment rejoindre</span>
+
+        <div class="jrow">
+          <div class="top">
+            <span class="k">Identifiant de serveur</span>
+            <button class="copy" data-copy="4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241613967341807">Copier</button>
+          </div>
+          <div class="val"><span class="seg">4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~</span><wbr><span class="seg tail">639241613967341807</span></div>
         </div>
-        <div class="row">
-          <span class="k">IP</span>
-          <span class="v mono">51.83.42.117</span>
-          <button class="copy">Copier</button>
+
+        <div class="jrow">
+          <div class="top"><span class="k">Région</span></div>
+          <div class="val plain">Europe</div>
         </div>
-        <div class="row">
-          <span class="k">Ouvert</span>
-          <span class="v">20:14 par Charlouze</span>
+
+        <div class="jrow">
+          <div class="top"><span class="k">Ou dans la liste</span></div>
+          <div class="val plain">Beacon's World</div>
         </div>
+      </div>
+
+      <div class="row">
+        <span class="k">Ouvert</span>
+        <span class="v">20:14 par Charlouze</span>
       </div>
 
       <div class="band thin"></div>
@@ -152,7 +208,7 @@
         <div><span class="k">Ce mois</span><span class="v">1,42 €</span></div>
       </div>
 
-      <div class="acts">
+      <div class="acts push">
         <div class="btn off">+ 1 heure</div>
         <div class="btn ghost">Fermer</div>
       </div>
@@ -164,7 +220,7 @@
     <div class="label">Hors service — l'écran le plus souvent vu</div>
     <div class="screen">
       <div class="lede">
-        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="wordmark">Beacon</div>
         <div class="status off"><span class="dot"></span>Hors service</div>
       </div>
 
@@ -187,6 +243,14 @@
         <div><span class="k">Soirées</span><span class="v">6</span></div>
       </div>
 
+      <div class="pick">
+        <span class="k">Jeu</span>
+        <div class="opts" role="group" aria-label="Jeu de la prochaine session">
+          <button type="button" aria-pressed="false">Enshrouded</button>
+          <button type="button" aria-pressed="true">Sunkenland</button>
+        </div>
+      </div>
+
       <div class="acts">
         <div class="btn">Ouvrir le service</div>
       </div>
@@ -207,4 +271,25 @@
     const s = String(left % 60).padStart(2, '0');
     el.innerHTML = h + ':' + m + '<span class="sec">:' + s + '</span>';
   }, 1000);
+
+  // The choice records; it never opens anything on its own.
+  document.querySelectorAll('.pick .opts').forEach(group => {
+    group.addEventListener('click', e => {
+      const hit = e.target.closest('button');
+      if (!hit) return;
+      group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === hit)));
+    });
+  });
+
+  // Copying is the whole point of a 55-character string nobody reads.
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.copy;
+      if (value && navigator.clipboard) navigator.clipboard.writeText(value).catch(() => {});
+      const label = btn.textContent;
+      btn.textContent = 'Copié';
+      btn.dataset.done = '';
+      setTimeout(() => { btn.textContent = label; delete btn.dataset.done; }, 1400);
+    });
+  });
 </script>
