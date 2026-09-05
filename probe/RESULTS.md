@@ -1232,3 +1232,60 @@ pas parce qu'elles étaient justes. Ce test est leur unique vérification.
   `3 minute` alors que 0,13 € valent ~3 heures à 0,04284 €/h — **l'unité rendue
   est fausse, seule la valeur en euros est fiable** ; à noter pour qui relira ce
   champ un jour.
+
+
+## V · Sunkenland sur une vraie machine
+
+**Section de la tranche 1 bis**, écrite dans ce rapport parce qu'elle continue la
+section J : même jeu, mêmes questions, et ce que la section J n'avait pas pu
+trancher sans machine — les options de publication d'adresse, la disposition des
+dossiers, la cadence à sa valeur retenue, et le comportement du tout derrière un
+vrai NAT. Mesuré le AAAA-MM-JJ.
+
+### Le script de démarrage, monté plutôt que construit
+
+Relevé sur l'image, sans rien lancer, le 2026-09-05 :
+
+- **Ligne de lancement de l'image amont** — `/etc/init.d/xvfb start` (un
+  `start-stop-daemon` sur `Xvfb :1`), puis
+  `wine /sunkenland/game/Sunkenland-DedicatedServer.exe … &` suivi de `wait`,
+  sous un `trap … HUP INT QUIT TERM` qui fait `wineserver -k -w`. **Pas de
+  `xvfb-run`** : `DISPLAY=:1` est posé dans l'image.
+- **Chemin d'installation du jeu (`GAME_DIR`)** — `/sunkenland/game`, présent
+  mais **vide** dans l'image : c'est un point de montage.
+- **Chemin des mondes (`WORLD_DIR`), et le lien symbolique observé** —
+  `/sunkenland/.wine/drive_c/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland/Worlds`
+  → `/sunkenland/Worlds`, qui **n'existe pas** dans l'image. La variable
+  `WORLD_FOLDER` de l'image pointe le dossier parent du lien.
+- **Le conteneur tourne en `uid 7000` (`sunkenland`)**, pas en root. Le dossier
+  des mondes monté doit lui appartenir, sans quoi l'autosave n'a nulle part où
+  écrire — vrai sur une VM Linux, invisible sur Docker Desktop.
+- **Variables déjà déclarées par l'image** — `GAME_WORLD_GUID`, `GAME_REGION`,
+  `GAME_MAX_PLAYER`, `GAME_SESSION_INVISIBLE`, `GAME_UPDATE`,
+  `GAME_BETA_VERSION`, `GAME_PASSWORD`, `WORLD_FOLDER`, `USER_NAME`, `APP_ID`,
+  `DISPLAY`, `WINEDEBUG`, `XDG_RUNTIME_DIR`. Le script de Beacon n'en reprend
+  qu'une sous le même nom, `GAME_PASSWORD`, et pour le même sens ; les autres
+  sont inertes puisque l'entrée est remplacée.
+
+### Un `$` dans le mot de passe ne survit pas à `docker compose`
+
+La valeur passe par l'interpolation du compose, qui lit `$bc` comme une variable
+vide : `a$bc${REGION}d` arrive au serveur comme `aeud`. Compose prévient d'une
+variable inconnue, jamais d'un mot de passe amputé, et `env_file` n'y change rien
+— la même interpolation s'y applique.
+
+C'est le frère du piège du mot de passe vide de la section J, en pire : celui-là,
+personne ne peut le relire dans le journal. Deux défenses, parce qu'aucune ne
+couvre les deux chemins — le rendeur du `cloud-init` refuse un `$` **avant**
+qu'une machine facturée existe, et `start.sh` imprime la longueur du mot de passe
+au démarrage.
+
+Mesures demandant les 2,3 Go du jeu, à faire par un humain :
+
+- `-autoSaveIntervalInSeconds 300` accepté et journalisé :
+- `-adminSteamIDs` lu `FromBatScript` :
+- Mot de passe non corrompu, `HasPassword` :
+- Port UDP réellement en écoute :
+- Durée du démarrage, jeu et monde déjà présents :
+
+**Verdict sur qui porte le script :**
