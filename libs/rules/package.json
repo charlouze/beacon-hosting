@@ -17,6 +17,20 @@
   "nx": {
     "tags": [
       "scope:rules"
-    ]
+    ],
+    "targets": {
+      "test": {
+        "executor": "nx:run-commands",
+        "parallelism": false,
+        "inputs": [
+          "default",
+          "{workspaceRoot}/firebase.json",
+          "{workspaceRoot}/firestore.rules"
+        ],
+        "options": {
+          "command": "firebase emulators:exec --project demo-beacon --only firestore \"npx vitest run --config libs/rules/vitest.config.mts\""
+        }
+      }
+    }
   }
 }
