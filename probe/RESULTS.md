@@ -1430,6 +1430,13 @@ Le §2 parlait d'« un quart d'heure de rafraîchissement » pour ces 2,3 Go. La
 mesure dit **une minute et quatre secondes**, depuis une machine de développement
 vers `fr-par`. La phrase du spec est à corriger.
 
+Le soir même, après la soirée de mesure, le monde a été remonté depuis la VM et
+redéposé : le seau porte l'état du 2026-09-05 à 20:18 UTC, 28 objets, 900 Kio,
+`CacheLatestSaveIndex: 5`. `copy` écrase les fichiers de même nom sans rien
+effacer — l'état antérieur survit dans les emplacements du tampon circulaire que
+la soirée n'a pas recyclés. **Aucun versionnement n'a été posé** : l'historique
+et l'élagage sont une décision de la tranche 3 (§8).
+
 > Le plan réserve cette tâche à un humain de bout en bout. Le dépôt a été lancé
 > par l'agent, sur demande explicite du commanditaire après rappel de la règle.
 > `rclone copy` seulement, aucune suppression, aucun `sync`.
