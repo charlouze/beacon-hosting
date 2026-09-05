@@ -23,6 +23,7 @@ const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
   server: null,
   hosted: [],
   openSessions: [],
+  alreadyAnnounced: [],
   ...parts,
 });
 

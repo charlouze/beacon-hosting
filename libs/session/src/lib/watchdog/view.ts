@@ -28,6 +28,12 @@ export interface WatchdogView {
   readonly hosted: readonly HostedServer[];
   /** Sessions whose provisioning intent is written and not yet closed. */
   readonly openSessions: readonly SessionId[];
+  /**
+   * Volumes a previous pass already announced stranded. An input like any
+   * other, so that deciding stays a pure function of the world as read: what
+   * is stranded *now* is a state, and reading it belongs to whoever stores it.
+   */
+  readonly alreadyAnnounced: readonly string[];
 }
 
 export interface WatchdogLimits {

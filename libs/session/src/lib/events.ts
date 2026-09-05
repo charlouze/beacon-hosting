@@ -16,8 +16,10 @@ export type DomainEvent =
   | { type: 'SessionReclaimed'; sessionId: SessionId | null; detail: string }
   /**
    * A detached volume nothing can be traced to. Nothing was destroyed and
-   * nothing will be: this event is the whole action (§6). It always has a null
-   * subject — a volume carries no tag, which is exactly the problem.
+   * nothing will be: announcing is the whole action (§6), and it happens once,
+   * when the volume appears — what is stranded now is a state, and it is
+   * `health/watchdog` that holds it. It always has a null subject — a volume
+   * carries no tag, which is exactly the problem.
    */
   | { type: 'ResourceStranded'; sessionId: null; detail: string }
   | { type: 'CleanupFailed'; sessionId: SessionId | null; detail: string }
