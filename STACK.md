@@ -24,10 +24,14 @@ déployer les règles touche directement la base que les joueurs utilisent — e
 c'est la raison pour laquelle leurs tests de refus sont une barrière de
 déploiement.
 
-**Serveur de jeu** — **Scaleway**, région `fr-par` (Paris) : Instances pour le
-calcul (`DEV1-L` par défaut, repli `PRO2-XXS`, sélecteur réservé à l'admin),
-Object Storage pour les sauvegardes. Le **DNS reste chez OVH**, en DynHost : le
-domaine y est, et un enregistrement A pointe où l'on veut.
+**Serveur de jeu** — **Scaleway**, région `fr-par` (Paris), zone `fr-par-1` :
+Instances pour le calcul, Object Storage pour les sauvegardes. Le gabarit est
+libre et réservé à l'admin ; `DEV1-L` est le défaut, et **il n'a pas de repli** —
+c'est le seul calibre à 8 Gio de la zone à la fois disponible et livré avec son
+disque local, tout substitut demandant un volume bloc. Le `PRO2-XXS` que ce
+fichier nommait n'est commandable dans aucune zone parisienne. Le **DNS reste
+chez OVH**, en DynHost : le domaine y est, et un enregistrement A pointe où l'on
+veut.
 
 Trois services, trois protocoles, trois jeux d'identifiants — donc trois
 adapters, `scaleway-compute`, `scaleway-storage`, `ovh-dns`. Ils sont nommés par
@@ -62,10 +66,17 @@ compte réel, jamais en intégration continue — voir les identifiants, plus ba
 SteamCMD, Wine, supervisord et les backups périodiques. La forker nous priverait
 des mises à jour amont pour un bénéfice nul.
 
+`melle2/sunkenland-ds` est consommée **sous réserve** : son script de démarrage
+ignore les options dont Beacon a besoin et son `+login anonymous` ne peut pas
+fonctionner pour cette app. Qui porte le script — contribution en amont ou image
+mince à nous — est une question ouverte du §12 du spec. Les fichiers de ce jeu
+ne passent jamais par SteamCMD sur la VM : ils sont déposés dans le seau par
+`tools/game-depot`, depuis la machine d'un administrateur.
+
 La **seule image maison** est le compagnon (`rclone` + `curl`), poussée sur
 ghcr.io par son propre workflow.
 
-Les deux images sont référencées par un **tag immuable, jamais `latest`**. Le
+Toutes sont référencées par un **tag immuable, jamais `latest`**. Le
 `cloud-init` est écrit au moment du provisionnement : avec un tag mobile, la
 session de ce soir pourrait tirer une image différente de celle qui a été
 testée. Changer de version est un commit, pas un effet de bord.
