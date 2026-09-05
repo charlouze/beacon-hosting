@@ -28,6 +28,12 @@
   ],
   "references": [
     {
+      "path": "../../libs/scaleway-compute/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/session-record/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/session/tsconfig.lib.json"
     }
   ]

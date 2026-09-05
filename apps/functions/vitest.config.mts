@@ -10,6 +10,10 @@ export default defineConfig(() => ({
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     passWithNoTests: true,
+    // Spec files share one Firestore emulator and overlapping top-level
+    // collections (provisioning, events); run them one at a time so a
+    // beforeEach in one file cannot clear data a concurrent file just wrote.
+    fileParallelism: false,
     reporters: ['default'],
     coverage: {
       reportsDirectory: './test-output/vitest/coverage',
