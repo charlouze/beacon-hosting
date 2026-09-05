@@ -1117,3 +1117,77 @@ jour des journaux, celle-ci ne sort pas de la machine.
 - Aucune mesure n'a été faite sur une VM. Tout ce qui précède vient d'un
   conteneur local.
 
+
+## C · Le contrat de `scaleway-compute`, éprouvé en vivo
+
+Question : `InstanceApi` décrit-elle vraiment le SDK, le filtre par tag est-il
+exact sur les **serveurs** comme il l'est sur les IP, et les deux façons de
+mourir sont-elles les bonnes sur le compte réel ?
+
+Commande : `npx nx run @beacon/scaleway-compute:test-contract`
+
+Mesuré le 2026-09-05, zone `fr-par-1`, sur deux passages — le second après
+ajout des assertions d'exactitude que le premier n'avait pas.
+
+| Cas | Attendu | Observé |
+|---|---|---|
+| une IP taguée est vue par `list()` puis détruite | oui | **oui** |
+| `listServers` filtré par le tag de session rend ce serveur | oui | **oui** |
+| un préfixe strict du tag ne rend **ni** l'IP **ni** le serveur | oui | **oui** |
+| un serveur jamais démarré meurt par `deleteServer` | oui | **oui** |
+| ses volumes sont détruits explicitement | oui | **oui** |
+| un volume attaché porte bien `server.id` | oui | **oui** |
+| inventaire revenu à l'identique sur les trois listes | oui | **oui**, deux fois |
+
+**Le filtre `tags=` est exact sur les serveurs, comme il l'est sur les IP.**
+C'était la dernière inférence du plan de la tranche 1, et elle est levée :
+`listServers({ tags: ['session:'] })` ne rend pas le serveur que
+`listServers({ tags: ['session:contract-manual'] })` rend. La mesure est faite
+**par paire** — contrôle positif puis mesure — parce qu'une assertion négative
+seule passerait aussi si l'appel avait échoué ou rendu vide pour une autre
+raison. C'est la leçon du cas de contrôle de la suite de refus, appliquée ici.
+
+**Le premier passage était vert et ne prouvait pas cela.** Toutes ses requêtes
+employaient le tag complet, qui est un préfixe de lui-même : chaque assertion se
+serait comportée à l'identique sous une sémantique de préfixe. Un test peut être
+vert et muet sur la question qu'il est censé trancher.
+
+**Le serveur jamais démarré meurt bien par `deleteServer`, et ses disques
+demandent une destruction explicite.** Si `close()` avait pris le chemin
+`terminate`, l'API l'aurait refusé et le test aurait cassé. Le piège mesuré en
+section T est confirmé sur le compte réel, par le code qui tourne en production
+et non par une copie.
+
+**Le SDK de Scaleway ne se type pas sous `nodenext`.** Le baril publié par
+`@scaleway/sdk-instance@2.16.0` — `dist/v1/index.d.ts` — réexporte
+`./api.utils`, `./content.gen`, `./types.gen` et `./types.utils` **sans
+l'extension `.js`** que `nodenext` exige. `skipLibCheck: true`, nécessaire pour
+ne pas typer tous les `.d.ts` du monde, avale les `TS2307` qui en résultent et
+les transforme en `any` : **toute la surface de `Instancev1.API` est `any` dans
+ce dépôt**. `@scaleway/sdk-k8s` porte le même défaut.
+
+La conséquence est plus large que le confort de typage. Le plan de la tranche 1
+justifiait l'absence de test unitaire sur `from-sdk.ts` en disant que « le
+compilateur en dit la moitié, le test de contrat le reste ». **Le compilateur
+n'en dit rien** : il a accepté les sept délégations parce que tout était `any`,
+pas parce qu'elles étaient justes. Ce test est leur unique vérification.
+`apps/functions/src/container.ts` porte la même exposition silencieuse.
+
+### Ce qui reste ouvert
+
+- **`serverAction` — le `terminate` — n'est exercé par rien.** Le serveur du
+  test ne démarre jamais, ce qui est tout l'argument de son coût ; or `terminate`
+  est le chemin de mort d'un serveur *en marche*, donc de toute session normale.
+  Depuis que le compilateur est aveugle au SDK, cette délégation n'est rattachée
+  à rien. La couvrir demande de démarrer un serveur, donc une heure de calcul
+  facturée.
+- **Le cas du volume *détaché* n'est pas mesuré.** Le test vérifie l'inverse — un
+  disque attaché porte `server.id`, donc n'est pas vu comme orphelin — parce que
+  produire un vrai orphelin demanderait d'abandonner volontairement un disque
+  facturé. La branche orpheline de `sweepUnclaimed()` reste couverte par les
+  seuls tests unitaires et leur double.
+- **Le coût réel n'est pas relevé.** Deux passages ont eu lieu, chacun créant une
+  IP flottante, un serveur jamais démarré et son disque. La question qu'aucune
+  mesure de la tranche 0 n'a posée reste ouverte : un serveur jamais démarré
+  facture-t-il son heure de calcul, ou seulement son disque ? À relever sur la
+  facture, ligne par ligne.
