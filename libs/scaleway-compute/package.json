@@ -13,7 +13,10 @@
     },
     "./package.json": "./package.json"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@scaleway/sdk": "^4.0.8",
+    "@scaleway/sdk-client": "^2.7.0"
+  },
   "nx": {
     "tags": [
       "scope:adapter"
