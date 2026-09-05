@@ -1587,6 +1587,16 @@ rien dans le démarrage** — 16 s sur les cinq minutes que met une session
 Sunkenland à devenir jouable, le jeu mettant dix fois plus à booter que son
 propre transfert.
 
+Le tarif public annonce l'intra-régional gratuit, **sans plafond**, et réserve
+les 75 Go mensuels offerts — puis 0,01 €/Go — au trafic *sortant de Scaleway*.
+Si la facture le confirme, deux conséquences pour ce tableau. La restauration
+d'une session ne coûte rien **quel que soit son volume**, ce qui retire tout
+enjeu de coût au choix « télécharger à chaud ou restaurer depuis le seau » et
+laisse ce choix se décider sur le seul argument du §2, le secret Steam. Et le
+quota de 75 Go ne protège que ce qu'un administrateur tire du seau vers sa propre
+machine — huit soirées de restauration valant ~18 Go s'il fallait les compter,
+elles ne s'en approcheraient de toute façon pas.
+
 **Sunkenland n'a pas besoin d'une IP flexible réservée**, mesuré le 2026-09-05 :
 il se rejoint derrière le NAT sans annoncer d'adresse. La ligne IPv4 du tableau
 reste due — la machine doit être joignable en UDP entrant — mais elle n'a pas à
@@ -1650,12 +1660,17 @@ d'équivalent dans la conception. Aucune ne se devine : la leçon de la question
 tag est qu'un fournisseur ne fait pas ce qu'on suppose.
 
 - **Le trafic Object Storage vers une instance de la même région est-il
-  facturé**, et à quel prix ? **L'expérience est faite, la facture pas encore
-  lue.** Le 2026-09-05 à 19:51 UTC, une VM de `fr-par-1` a tiré 2,3 Go du seau
-  `fr-par` en 16 s ; le compteur `rx_bytes` de son interface rend
-  4 050 602 394 octets entrants sur toute sa vie, paquets `apt` compris. Ces deux
-  chiffres se confrontent à la consommation deux jours plus tard — la
-  facturation Scaleway n'est pas instantanée.
+  facturé** ? **La documentation dit non, la facture n'a pas encore confirmé.**
+  Le tarif public annonce l'intra-régional `PAR ↔ PAR` *free of charge*, sans
+  plafond, et réserve les 75 Go gratuits mensuels — puis 0,01 €/Go — au trafic
+  **sortant de Scaleway**. Notre restauration est intra-régionale : elle ne
+  toucherait donc pas ce quota. L'expérience est faite — le 2026-09-05 à
+  19:51 UTC une VM de `fr-par-1` a tiré 2,3 Go du seau `fr-par` en 16 s, et le
+  compteur `rx_bytes` de son interface rend 4 050 602 394 octets entrants sur
+  toute sa vie, paquets `apt` compris. **Reste à lire la consommation**, deux
+  jours plus tard : c'est précisément parce qu'un fournisseur ne fait pas
+  toujours ce que sa documentation annonce que cette ligne n'est pas encore dans
+  le tableau du dessus — la question du tag OVH est née de la même confiance.
 - **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,

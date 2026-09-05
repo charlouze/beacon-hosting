@@ -1545,6 +1545,14 @@ pour l'humain qui doit choisir laquelle restaurer.
   2,3 Go tirés du seau vers une VM de la même région, 4 050 602 394 octets
   entrants au compteur d'interface — mais la consommation Scaleway n'est pas
   instantanée. À lire deux jours après le 2026-09-05.
+
+  **Ce que la documentation en dit**, relevé le 2026-09-05 sur la grille
+  tarifaire publique : l'intra-régional `PAR ↔ PAR` est *free of charge*, sans
+  plafond, et les 75 Go mensuels offerts — puis 0,01 €/Go — portent sur le
+  trafic **sortant de Scaleway**. Notre restauration serait donc gratuite par la
+  première règle, pas par le quota. C'est une lecture de tarif, **pas une
+  mesure** : la question du tag OVH est née d'une documentation qui annonçait ce
+  que l'API ne faisait pas, et c'est la raison d'être de la tâche 6.
 - **Le décalage de version Photon n'est pas mesuré**, et le plan l'avait exclu du
   périmètre : il demanderait deux versions du client. La déduction du §2 reste
   une déduction.
