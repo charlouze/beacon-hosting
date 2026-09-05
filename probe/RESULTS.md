@@ -1304,11 +1304,10 @@ Mesuré le 2026-09-05, jeu et monde montés depuis l'hôte :
   GUID du monde en préfixe, conforme.
 - **`SaveManager.get_IsSteamCloudReady()` lève toujours sa `NullReferenceException`**
   et le serveur trouve le monde quand même, dans la disposition `Worlds`.
-- **À vérifier avec un joueur** : la ligne `StartGame` annonce
-  `MaxPlayerCapacity: 0` alors que `-maxPlayerCapacity 4` est passé. La section J
-  lisait `Current/MaxPlayer 0/4` sur la ligne d'état, qui ne s'imprime qu'avec un
-  joueur connecté — donc rien ne tranche encore entre un champ mal journalisé et
-  une option non appliquée.
+- **La ligne `StartGame` annonce `MaxPlayerCapacity: 0`** alors que
+  `-maxPlayerCapacity 4` est passé. C'est un champ mal journalisé, pas une option
+  ignorée : l'essai de `-steamID` plus bas imprime les arguments que Fusion reçoit
+  réellement, et ils portent `PlayerCount=4`.
 
 **Verdict sur qui porte le script : le fichier monté suffit.** L'image amont est
 consommée telle quelle, à son digest, avec `start.sh` monté sur son point
@@ -1341,3 +1340,45 @@ et la ligne de commande complète, visible dans `ps` de tout processus du
 conteneur. **Conséquence pour le §7 :** ce n'est pas une ligne de journal à
 filtrer, c'est le journal entier et la table des processus. Si l'agent remonte un
 jour quoi que ce soit de cette machine, rien de tout cela n'en sort.
+
+### `-steamID` et la disposition des dossiers
+
+Mesuré le 2026-09-05, même conteneur, monde monté dans la disposition du client
+et `-steamID` renseigné. **L'option fonctionne.**
+
+- **Dossier parent où l'image attend `Worlds`** —
+  `/sunkenland/.wine/drive_c/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland`,
+  qui porte le lien symbolique `Worlds` → `/sunkenland/Worlds`. C'est aussi là
+  que `SteamCloudData` doit être posé, en frère du lien.
+- **Disposition client essayée** —
+  `SteamCloudData/76561197965918116/Worlds/Beacon's World~4db51c84-…`, copie
+  conforme du monde, `/sunkenland/Worlds` **non monté**.
+- **Le serveur trouve le monde** — `Valid SteamID: 76561197965918116`, puis :
+
+```text
+World Save File Exist: C:/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland\SteamCloudData\76561197965918116\Worlds\Beacon's World~4db51c84-…/World~0.json
+Server Start Complete, Ready for Clients to Join. ServerID is '4db51c84-…~639242328214082922'.
+```
+
+- **Message d'erreur s'il ne le trouve pas** — sans objet, il l'a trouvé. La
+  `NullReferenceException` de `SaveManager.get_IsSteamCloudReady()` est levée
+  dans les deux dispositions et n'empêche rien : elle dit que le serveur n'a pas
+  de Steam Cloud, pas qu'il ne sait pas lire un dossier.
+- Démarrage : 129 s, du lancement à `Server Start Complete`.
+
+**Conséquence pour l'amorçage d'un monde (§2, §13) : c'est une copie, plus un
+rangement.** Le §2 tenait la divergence de chemins entre client et serveur pour
+la raison d'un geste manuel hors périmètre v1 ; elle est un réglage. La tranche 3
+peut restaurer le dossier du client tel quel et passer `-steamID`, sans réarranger
+quoi que ce soit — et **rien n'est réécrit dans le dossier du monde**, qui reste
+une donnée pure.
+
+Trois relevés qui n'étaient pas demandés et qui servent à la tâche 5 :
+
+- `PlayerCount=4` dans les arguments que Fusion reçoit — `-maxPlayerCapacity` est
+  bien appliqué, c'est la ligne `StartGame` qui journalise mal.
+- **`CustomPublicAddress=` est vide**, et `DisableNATPunchthrough=False`. C'est ce
+  champ-là que `-publicip` doit remplir : sur la VM, il dira en une ligne si
+  l'option a pris, sans attendre qu'un joueur essaie de se connecter.
+- `SessionName` vaut le ServerID, et les `SessionProperties` portent le nom du
+  monde et son GUID — c'est ce sur quoi la recherche par la liste s'appuie.
