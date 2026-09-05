@@ -1366,12 +1366,29 @@ Server Start Complete, Ready for Clients to Join. ServerID is '4db51c84-…~6392
   de Steam Cloud, pas qu'il ne sait pas lire un dossier.
 - Démarrage : 129 s, du lancement à `Server Start Complete`.
 
-**Conséquence pour l'amorçage d'un monde (§2, §13) : c'est une copie, plus un
-rangement.** Le §2 tenait la divergence de chemins entre client et serveur pour
-la raison d'un geste manuel hors périmètre v1 ; elle est un réglage. La tranche 3
-peut restaurer le dossier du client tel quel et passer `-steamID`, sans réarranger
-quoi que ce soit — et **rien n'est réécrit dans le dossier du monde**, qui reste
-une donnée pure.
+**Conséquence pour l'amorçage d'un monde (§2, §13) : la divergence de chemins est
+un réglage, pas une fatalité — et Beacon ne s'en sert pas.** Le §2 tenait cette
+divergence pour la raison d'un geste manuel hors périmètre v1 ; la mesure la
+dissout. Reste que la question fermée l'est dans les deux sens :
+
+**Décision du commanditaire, 2026-09-05 : `-steamID` n'est pas utilisé.**
+Indexer le monde *du serveur* sous le `steamID64` d'un *joueur* accroche la
+disposition du seau au compte d'une personne — celle qui a créé le monde, et qui
+peut quitter le groupe sans que le monde lui appartienne pour autant. Le serveur
+n'a pas de compte Steam, c'est précisément ce que dit sa
+`NullReferenceException` ; lui en prêter un serait une fiction, et le §5 ne
+cloisonne le seau que par jeu.
+
+Ce que ce refus coûte : rien. Le monde se dépose sous `saves/sunkenland/` et se
+restaure dans `Worlds/`, et l'amorçage reste une copie — vers un autre chemin,
+pas dans un dossier réarrangé. **Rien n'est réécrit dans le dossier du monde**,
+qui reste une donnée pure dans les deux dispositions.
+
+L'option est mesurée et documentée ici parce qu'elle ferme une question ouverte
+du §12, pas parce qu'elle sera employée. Ce qu'elle laisse au projet est le
+chemin de retour : une sauvegarde de Beacon se remet chez un joueur sans
+traduction, la disposition serveur et la disposition client tenant le même
+dossier.
 
 Trois relevés qui n'étaient pas demandés et qui servent à la tâche 5 :
 
