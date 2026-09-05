@@ -1003,7 +1003,7 @@ Ajouter les tags dans les `package.json` de projet, sous `nx` :
 | `apps/functions` | `["scope:app"]` |
 
 Puis, dans `eslint.config.mjs` à la racine, remplacer le `depConstraints` par
-défaut et ajouter l'interdiction d'import :
+défaut :
 
 ```js
   {
@@ -1027,12 +1027,30 @@ défaut et ajouter l'interdiction d'import :
       ],
     },
   },
+```
+
+L'interdiction d'import, elle, ne va pas là. En flat config ESLint 9, un
+`files` se résout contre le chemin de base du fichier de configuration
+chargé — jamais contre la racine du dépôt. `nx lint` lance `eslint .` depuis
+le répertoire du projet : pour `libs/session`, c'est donc
+`libs/session/eslint.config.mjs` qui charge, avec `libs/session/` pour seule
+base, et un `files: ['libs/session/**/*.ts']` écrit là viserait
+`libs/session/libs/session/**` — rien. Réécrire le glob à la racine ne répare
+rien non plus : le chemin de base ne remonte pas jusqu'à la racine. Mesuré
+pendant la tranche, pas supposé : la même violation lève l'erreur attendue
+depuis la racine et reste silencieuse depuis `libs/session`. Une règle portée
+par un seul projet vit donc dans la configuration de ce projet, ou elle ne vit
+nulle part — et c'est ce qui attend `apps/web` en tranche 5.
+
+Dans `libs/session/eslint.config.mjs` :
+
+```js
   {
     // §9 of the spec, as a lint rule and not a test: the decision core must run
     // in a browser, in a Function and in a test with no infrastructure at all.
     // The day a client library reaches in here, §4's claim that swapping the
     // store costs one adapter stops being true, and nothing else would say so.
-    files: ['libs/session/**/*.ts'],
+    files: ['**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

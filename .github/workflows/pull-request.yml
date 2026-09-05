@@ -1,0 +1,42 @@
+name: pull-request
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read is all this job does. Without the block it inherits whatever the
+# repository default grants, which is a write token on many repositories.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Three test targets shell out to `firebase emulators:exec`, and the
+      # Firestore emulator is a Java program. Without this the barrier rests on
+      # the runner image happening to ship a jdk.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      # Sets the base and head shas nx affected compares against.
+      - uses: nrwl/nx-set-shas@v4
+
+      - run: npx nx affected -t lint test build typecheck

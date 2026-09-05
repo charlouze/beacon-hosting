@@ -1,0 +1,5 @@
+# La sonde de la tranche 0 est un projet npm autonome, avec son propre verrou de
+# dependances. Ses scripts appellent le compte Scaleway reel et creent ou
+# detruisent des ressources facturees : elle ne doit jamais etre atteinte par un
+# `nx run-many`.
+probe
