@@ -1518,3 +1518,41 @@ copie** — et la section J a établi que le numéro le plus élevé n'est pas l
 récent, que seuls `Cache.json` et les `.meta` font foi. Un compagnon qui
 remonterait les sauvegardes en écrasant les dates rendrait le dossier illisible
 pour l'humain qui doit choisir laquelle restaurer.
+
+### Conséquences pour le spec
+
+1. **§12** — quatre des cinq questions du second jeu passent de « encore ouvert »
+   à « vérifié », avec leurs réponses et la date de mesure. La cinquième, l'egress
+   objet, a désormais son expérience et attend sa facture.
+2. **§2, ligne « Conteneur du jeu »** — la forme est tranchée : un script **monté**
+   dans l'image amont, ni fork ni image maison. Avec les deux contraintes que
+   l'image impose, l'`uid 7000` et le `trap`.
+3. **§2 ligne « DNS » et §11** — mesuré et non plus déduit : ce jeu se rejoint
+   derrière le NAT sans annoncer d'adresse. Il lui faut une IP publique, pas une
+   IP stable, et `DnsUpdater` n'est pas appelé.
+4. **§2, ligne « Mise à jour »** — « un quart d'heure de rafraîchissement »
+   devient une minute : 64 s pour 2,3 Go.
+5. **§2, ligne « Amorçage d'un monde »** — la divergence de chemins entre client
+   et serveur est un réglage, et `-steamID` est écarté par décision.
+6. **§4** — la réserve sur `melle2/sunkenland-ds` tombe. Rien d'autre n'y bouge :
+   aucune mesure de cette sonde ne demande que `ServerHost` rende un détail de
+   fournisseur au domaine, ni que `libs/session` connaisse un port. Le §11 gagne
+   le chiffre du transfert, pas une frontière de moins.
+
+### Ce qui reste ouvert
+
+- **L'egress objet intra-région n'est pas chiffré.** L'expérience est faite —
+  2,3 Go tirés du seau vers une VM de la même région, 4 050 602 394 octets
+  entrants au compteur d'interface — mais la consommation Scaleway n'est pas
+  instantanée. À lire deux jours après le 2026-09-05.
+- **Le décalage de version Photon n'est pas mesuré**, et le plan l'avait exclu du
+  périmètre : il demanderait deux versions du client. La déduction du §2 reste
+  une déduction.
+- **La charge à quatre joueurs** n'est toujours pas mesurée. À un joueur,
+  Sunkenland tient sur un cœur des quatre et 5,3 Gio.
+- **Qu'une clé `ObjectStorageReadOnly` ne sache pas supprimer** est lu dans la
+  politique, pas mesuré — le vérifier demanderait de viser un objet réel.
+- **Le second essai de la tâche 5 n'a pas eu lieu** : conditionné à l'échec du
+  premier, qui a réussi. `-publicip`, `-publicport` et `-port` restent donc
+  *inutiles* et non *inopérants* — on sait qu'on n'en a pas besoin, pas ce qu'ils
+  feraient.

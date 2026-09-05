@@ -83,12 +83,24 @@ compte réel, jamais en intégration continue — voir les identifiants, plus ba
 SteamCMD, Wine, supervisord et les backups périodiques. La forker nous priverait
 des mises à jour amont pour un bénéfice nul.
 
-`melle2/sunkenland-ds` est consommée **sous réserve** : son script de démarrage
-ignore les options dont Beacon a besoin et son `+login anonymous` ne peut pas
-fonctionner pour cette app. Qui porte le script — contribution en amont ou image
-mince à nous — est une question ouverte du §12 du spec. Les fichiers de ce jeu
-ne passent jamais par SteamCMD sur la VM : ils sont déposés dans le seau par
-`tools/game-depot`, depuis la machine d'un administrateur.
+`melle2/sunkenland-ds` est consommée **telle quelle, avec son point d'entrée
+remplacé par un script monté**. Le sien ignore les options dont Beacon a besoin
+et son `+login anonymous` ne peut pas fonctionner pour cette app ; un fichier
+monté suffit à le remplacer, ce qui évite un fork comme une image maison —
+mesuré le 2026-09-05, section V de `probe/RESULTS.md`.
+
+Deux contraintes que cette image impose à qui monte un script dedans, et qui ne
+se devinent pas :
+
+- **le serveur tourne en `uid 7000`**, pas en root. Le dossier des mondes
+  restauré doit lui appartenir, sinon l'autosave n'écrit rien — sans message ;
+- **son `trap` doit être repris.** En PID 1, un processus sans gestionnaire ne
+  reçoit jamais `SIGTERM` : un `exec` transformerait chaque arrêt en dix secondes
+  d'attente puis un `SIGKILL`, éventuellement au milieu d'une sauvegarde.
+
+Les fichiers de ce jeu ne passent jamais par SteamCMD sur la VM : ils sont
+déposés dans le seau par `tools/game-depot`, depuis la machine d'un
+administrateur.
 
 La **seule image maison** est le compagnon (`rclone` + `curl`), poussée sur
 ghcr.io par son propre workflow.
