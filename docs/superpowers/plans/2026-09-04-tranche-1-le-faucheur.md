@@ -5196,6 +5196,17 @@ git commit -m "feat(functions): seme server/current sans jamais toucher l'exista
 qu'un manque qu'on découvre en l'écrivant coûte moins cher qu'un manque qu'on
 découvre en l'exécutant.
 
+- **`serverAction` — le chemin `terminate` — n'est exercé par rien.** Le
+  serveur du test de contrat ne démarre jamais, ce qui est tout l'argument de
+  son coût nul, et le compilateur est aveugle au SDK Scaleway (`probe/RESULTS.md`,
+  section C) : cette délégation n'est donc bornée par rien de réel. C'est la
+  plus grave des deux lacunes de cette liste, parce que `terminate` est comment
+  meurt un serveur *en marche* — la fin de toute session normale, pas un cas de
+  bord. **La tranche 2 la ferme gratuitement** : `open()` fait naître des
+  serveurs qui démarrent pour de vrai, et l'arrêt de la première vraie session
+  exerce `terminate` contre l'API réelle. Mais seulement si quelqu'un vérifie
+  que ça a marché plutôt que le supposer parce que la session s'est terminée
+  sans erreur visible.
 - **`ServerHost.open()`**, qui **reçoit le jeu et le gabarit** (§4), et avec lui
   la création de l'IP puis de l'instance, les deux tags posés dès la création,
   le catalogue `deploy/cloud-init/games/` et le `cloud-init` de `deploy/`.
