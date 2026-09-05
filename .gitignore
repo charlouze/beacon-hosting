@@ -20,6 +20,11 @@ dist/
 .nx/
 .firebase/
 *-debug.log
+out-tsc/
+tmp/
+coverage/
+test-output/
+vitest.config.*.timestamp*
 
 # Fichiers de travail du serveur de questions Impeccable
 .impeccable/questions/

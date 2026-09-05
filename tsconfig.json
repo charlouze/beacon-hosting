@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/functions"
+    },
+    {
+      "path": "./libs/session"
+    },
+    {
+      "path": "./libs/session-record"
+    },
+    {
+      "path": "./libs/scaleway-compute"
+    },
+    {
+      "path": "./libs/rules"
+    }
+  ],
+  "compilerOptions": {}
+}

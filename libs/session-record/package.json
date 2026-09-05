@@ -1,0 +1,38 @@
+{
+  "name": "@beacon/session-record",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.10.0"
+  },
+  "nx": {
+    "tags": [
+      "scope:record"
+    ],
+    "targets": {
+      "test": {
+        "executor": "nx:run-commands",
+        "parallelism": false,
+        "inputs": [
+          "default",
+          "{workspaceRoot}/firebase.json",
+          "{workspaceRoot}/firestore.rules"
+        ],
+        "options": {
+          "command": "firebase emulators:exec --project demo-beacon --only firestore \"npx vitest run --config libs/session-record/vitest.config.mts\""
+        }
+      }
+    }
+  }
+}

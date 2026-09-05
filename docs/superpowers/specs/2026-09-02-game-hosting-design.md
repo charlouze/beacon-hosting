@@ -57,7 +57,7 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Cadence de sauvegarde Sunkenland | `-autoSaveIntervalInSeconds 300` | **Rien ne permet à Beacon de provoquer une sauvegarde** : ni l'arrêt du conteneur, ni un `WM_CLOSE` poli, ni la déconnexion du dernier joueur. Mesuré six fois. Le seul levier est la cadence, et elle est réglable par une option que le manuel de l'éditeur ne mentionne pas. À 300 s, on perd au plus cinq minutes de jeu, ce que le §3 accepte déjà pour un crash. Le jeu ne garde que dix instantanés glissants, donc l'intervalle fixe aussi la profondeur d'historique sur la machine — 50 minutes ici ; la profondeur réelle vit dans le stockage objet. |
 | Rôle d'administrateur dans le jeu | **Tous les membres**, via `-adminSteamIDs` | Le SteamID est demandé au membre à son premier passage dans l'app et rangé dans son profil. « La ressource est commune » : donner le rôle à tous suit le même principe que « n'importe qui démarre, prolonge et arrête ». Un admin du jeu peut déclencher une sauvegarde depuis la console, ce qui rend le pire cas meilleur que les 300 s pour qui y pense. Contrepartie assumée : il peut aussi exclure un autre joueur, ce qui est la seule autorité d'un membre sur un autre dans tout le système. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
-| Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter à la fois le gabarit retenu et son repli, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
+| Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter le gabarit retenu, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
 | Gabarit d'instance | **Libre**, sélecteur réservé à l'admin. `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux) en v1, **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. `DEV1-L` est aussi, au 2026-09-03, le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture réelle a montré et que le catalogue ne dit pas. |
 | Modes de stockage | **Les deux**, disque local et volume bloc | Le gabarit ne serait pas vraiment libre si le système n'acceptait qu'une famille : à 8 Gio, tout calibre autre que `DEV1-L` demande un volume bloc attaché. La différence n'est d'ailleurs pas tarifaire — **aucun disque n'est compris dans un prix d'instance chez Scaleway**, local ou bloc — mais structurelle : un volume local naît et meurt avec son instance, un volume bloc est une ressource indépendante à créer, réconcilier et détruire. Le coût est contenu par le §4 : `ServerHost` ouvre et ferme *un serveur*, pas des ressources, et la fermeture se dit par le tag. **La v1 n'implémente que le disque local.** |
 
@@ -248,7 +248,7 @@ changements d'état s'affichent simultanément chez tout le monde sans polling.
 | Créer et détruire l'instance et l'IP | Function | Clé secrète Scaleway. |
 | Mettre à jour DynHost | Function | Identifiants DynHost, chez OVH. |
 | `instanceId`, `ipId`, `ip`, et `agentTokens/{sessionId}` | Function | Valeurs que le client ne doit ni connaître ni forger. |
-| `provisioning/{sessionId}`, `health/watchdog` | Function | Comptabilité interne : l'intention de création taguée et le battement de cœur. Aucun client n'y lit ni n'y écrit. |
+| `provisioning/{sessionId}`, `health/watchdog` | Function | Comptabilité interne : l'intention de création taguée, le battement de cœur et les volumes orphelins déjà signalés. Aucun client n'y lit ni n'y écrit. |
 | `saves/{id}` | Function, via `agentReport` | La VM n'a pas d'identité Firebase. |
 | Arrêts forcés et réconciliation | Function, via le watchdog | Clé secrète Scaleway. |
 
@@ -339,8 +339,10 @@ générique et emprunté.
 `Session` ne voit jamais les champs réservés de `server/current`
 (`instanceId`, `ipId`, `ip`, `provisionClaimedAt`, `lastError`) : ce sont des
 faits d'infrastructure, que seul le watchdog confronte à ce que déclare
-`ServerHost`. La traduction du document vers le modèle est le travail de
-`libs/session-record`, décrit plus bas.
+`ServerHost`. `joinInfo` est réservé lui aussi, mais **en écriture seule** :
+c'est le seul que le domaine transporte, et `ServerFacts` dit pourquoi. La
+traduction du document vers le modèle est le travail de `libs/session-record`,
+décrit plus bas.
 
 **Le jeu se fige à l'ouverture.** `game` est écrit avec le passage à
 `PROVISIONING` et ne change plus jusqu'à la destruction. C'est un invariant et
@@ -388,7 +390,7 @@ vie du bucket, jamais du code.
 
 **Les événements sont des faits au passé** — `SessionStarted`,
 `SessionExtended`, `SessionStopRequested`, `SessionStopped`, `DeadlineClamped`,
-`ProvisioningFailed`, `CleanupFailed`, `SessionReclaimed`.
+`ProvisioningFailed`, `CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
 
 Deux d'entre eux se ressemblent et ne disent pas la même chose.
 `SessionStopRequested` est écrit par le navigateur, dans la même écriture que le
@@ -397,6 +399,19 @@ l'arrêt, sans quoi couper la soirée d'un autre serait le seul geste anonyme du
 système. `SessionStopped` est écrit par la Function au passage à `IDLE`, quand
 la machine est réellement détruite, et c'est lui qui porte le coût de la
 session (§11).
+
+**Trois événements peuvent porter un `sessionId` nul, et ce sont les seuls.**
+`SessionReclaimed` quand la ressource détruite portait le tag d'appartenance
+sans tag de session : elle n'appartient à aucune session — c'est même ce qui la
+condamne — mais sa destruction engage de l'argent et doit se lire dans l'audit.
+`ResourceStranded` à l'apparition d'un volume détaché qui ne peut être rattaché
+à personne — le seul des trois dont le sujet soit *toujours* nul : là, rien
+n'est détruit, et le signalement *est* toute l'action. Ce qui est orphelin à
+l'instant se lit dans `health/watchdog`, jamais dans le journal — un fait au
+passé ne se réécrit pas toutes les cinq minutes (§5). `CleanupFailed` peut lui
+aussi n'avoir aucun sujet, pour la même raison que le premier. Un événement dont
+l'acteur est le système et le sujet « ce que personne ne réclamait » est plus
+honnête qu'un `sessionId` inventé pour remplir la colonne.
 
 `events` est un **journal d'audit**, et rien d'autre. Aucun code ne s'y abonne :
 le seul déclencheur du système est le trigger sur `server/current`. Prétendre
@@ -427,9 +442,12 @@ glossaire est la langue omniprésente :
 | l'ouvrant | `startedBy` | le membre qui a lancé la session |
 | hors service | `Idle` | aucune machine ; on peut ouvrir une session |
 | en préparation | `Provisioning` | la machine naît ; l'heure de disponibilité est annoncée |
-| en service | `Running` | le serveur répond, l'échéance court |
+| en service | `Running` | le point de jonction est publié, l'échéance court |
 | en fermeture | `Stopping` | la save part, la machine va être détruite |
 | bloqué | `Failed` | le nettoyage n'a pas pu être garanti ; le watchdog y revient |
+| réclamation | `Reclamation` | la décision de détruire ce qu'une session ne peut plus justifier : aucune intention ouverte, un délai d'état dépassé, ou un nettoyage à retenter |
+| remise d'équerre | `reconcile()` | ramener `server/current` à ce que le fournisseur déclare réellement |
+| volume orphelin | `ResourceStranded` | un disque détaché dont aucun tag ne dit l'origine : signalé à son apparition, jamais détruit |
 
 Tout terme apparaissant dans l'interface doit figurer dans ce tableau. Un mot
 qu'on peine à nommer dans les deux colonnes est le signe que le modèle est
@@ -583,16 +601,24 @@ par `firebase-admin`. Même traduction, mêmes noms de champs, deux transports.
 Sans cette symétrie, le mapping s'écrirait deux fois et divergerait — le défaut
 qu'on refuse aux règles.
 
-Les champs réservés n'entrent pas dans `Session`, qui ne les voit jamais. Ils
-ont leur propre vue, `ServerFacts` — un constat d'infrastructure et non un
-modèle de domaine, dans le même document mais pas dans le même objet.
+Les champs réservés n'entrent pas dans `Session` — `joinInfo` excepté, pour la
+raison dite deux paragraphes plus bas — et elle ne voit jamais les autres.
+Ceux-là ont leur propre vue, `ServerFacts` — un constat d'infrastructure et non
+un modèle de domaine, dans le même document mais pas dans le même objet.
 
-`ServerFacts` est **manipulée** par le watchdog et les Functions seuls, mais deux
-de ses valeurs sont **affichées** : l'`ip`, que l'écran montre à côté du nom de
-domaine, et `lastError`, qui dit qu'une tentative précédente a échoué. La face
-client en expose donc une vue en lecture seule, réduite à ces deux champs. Le
+`ServerFacts` est **manipulée** par le watchdog et les Functions seuls, mais
+trois de ses valeurs sont **affichées** : l'`ip`, que l'écran montre à côté du
+nom de domaine, le `joinInfo`, que l'écran rend lisible et copiable (§6,
+étape 8), et `lastError`, qui dit qu'une tentative précédente a échoué. La face
+client en expose donc une vue en lecture seule, réduite à ces trois champs. Le
 reste — `instanceId`, `ipId`, `provisionClaimedAt` — ne quitte jamais le côté
 serveur, où il n'a d'ailleurs de sens que pour la réconciliation.
+
+`joinInfo` est le seul champ réservé que le domaine transporte : réservé **en
+écriture**, parce que seules les Functions et l'agent constatent qu'un serveur
+est joignable, et affiché en lecture, parce que c'est exactement ce que le
+joueur copie. Les deux ne se contredisent pas — c'est la même asymétrie que
+`lastError`, poussée d'un cran.
 
 **`members` n'appartient pas au contexte `session`.** C'est le registre des
 personnes autorisées, et le navigateur y accède. Cet accès a sa propre ACL,
@@ -646,7 +672,7 @@ invariant, où il tient et en combien de temps :
 |---|---|---|
 | Seul un membre écrit ; personne ne s'octroie `admin` ; les champs réservés sont hors de portée | règles Firestore | immédiat, incontournable |
 | Une seule session naît d'un double clic | transaction Firestore du navigateur, puis réclamation transactionnelle de la Function | immédiat |
-| `RUNNING` implique qu'une machine existe | Functions seules — le navigateur ne peut pas écrire cet état | immédiat |
+| `RUNNING` implique qu'une machine existe et que son point de jonction est publié | Functions seules — le navigateur ne peut pas écrire cet état | immédiat |
 | Transition légale, pas de `IDLE` vers `STOPPING` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
 | `deadline - maintenant ≤ durée de session` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
 | Aucune ressource Scaleway ne survit à sa session | watchdog, par réconciliation sur le tag | jusqu'à 5 min |
@@ -686,14 +712,14 @@ tout le monde sans le savoir.
 
 | Document | Contenu | Écrivain |
 |---|---|---|
-| `server/current` | champs *demandés* : `state`, `sessionId`, `startedBy`, `startedAt`, `deadline`, `game` | navigateur (membre) |
+| `server/current` | champs *demandés* : `state`, `stateSince`, `sessionId`, `startedBy`, `startedAt`, `deadline`, `game` | navigateur (membre) |
 | `server/current` | `instanceSize` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
 | `server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `joinInfo`, `provisionClaimedAt`, `lastError` | Functions |
-| `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, puis `instanceId`, `ipId`, `ip`, `closedAt` — l'intention de création ; ni lue ni écrite par un client | Functions |
+| `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, `closedAt` — nul à la création —, puis `instanceId`, `ipId`, `ip` : l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
 | `config/settings` | champ *réservé* : `rulesVersion` | le déploiement, via l'Admin SDK (§10) |
-| `health/watchdog` | `lastRunAt` — battement de cœur du watchdog | Functions |
+| `health/watchdog` | `lastRunAt` — battement de cœur du watchdog — et `stranded`, les volumes orphelins que le dernier passage a vus | Functions |
 | `members/{uid}` | `email`, `role` : `admin` \| `player` | navigateur (admin) ; jamais par le sujet lui-même |
 | `members/{uid}` | `steamId` | **le sujet lui-même**, et personne d'autre — seule écriture du système qu'un membre fait sur son propre document |
 | `saves/{id}` | `createdAt`, `game`, `objectKey`, `sizeBytes`, `origin` : `auto` \| `manual` \| `pre-shutdown` | Functions |
@@ -804,6 +830,18 @@ D'où la règle générale — **le TTL d'une collection ne descend jamais sous
 l'horizon de ce qu'on affiche à partir d'elle.** À quelques dizaines d'entrées
 par mois, totaliser par requête ne coûte rien et évite un compteur à tenir.
 
+**`health/watchdog` porte aussi ce qu'un passage du watchdog doit retenir pour
+le suivant** : `stranded`, les volumes orphelins que son dernier balayage a vus.
+Ce n'est pas dans `events` parce que personne ne détruit un volume orphelin — il
+l'est donc encore au passage d'après, et à tous les autres. Un événement toutes
+les cinq minutes ferait 8 600 entrées par mois là où cette collection en attend
+quelques dizaines : un seul disque abandonné suffirait à faire d'elle ce que le
+paragraphe ci-dessus interdit, et à noyer le journal qu'on ouvre pour comprendre
+un mois. Un événement est un fait au passé (§4) ; « ce qui est orphelin
+maintenant » est un état, et un état vit dans un document. Le champ est réécrit
+en entier à chaque passage et jamais fusionné : un disque que l'administrateur a
+fini par supprimer doit en sortir.
+
 Le tarif horaire nécessaire à ce calcul — le `tariff` de `estimatedCost()` —
 vit dans `config/settings`, par gabarit. Il ne peut pas être compilé dans le
 bundle : l'hébergeur change ses prix, et un tarif faux fausserait silencieusement le
@@ -812,6 +850,19 @@ seul chiffre que l'interface affiche sur l'argent.
 `server/current` est un document unique dont les champs ont deux propriétaires.
 Les règles l'imposent champ par champ : une écriture du navigateur qui touche un
 champ réservé est refusée en bloc, même si le reste de l'écriture est légitime.
+
+**`stateSince` dit quand l'état courant a commencé**, et il est réécrit à chaque
+changement d'état, quel qu'en soit l'auteur. C'est ce qui rend mesurables les
+délais du §6 — « `PROVISIONING` depuis plus de 15 min », « `STOPPING` depuis
+plus de 10 min ». `startedAt` date la session entière et ne répond pas à cette
+question ; `provisionClaimedAt` est un verrou, dont la présence est le mécanisme
+et non une durée.
+
+Il est *demandé* et non *réservé* parce que le navigateur écrit lui-même deux
+états. Les règles le traitent comme `startedAt` : `stateSince == request.time`,
+ce qui interdit l'antidatage sans rien connaître du métier. Un client qui
+mentirait sur cette valeur n'obtiendrait qu'une destruction plus tôt ou plus
+tard de quelques minutes, jamais une machine.
 
 Le hachage du jeton d'agent n'y figure pas, et c'est délibéré. Les règles
 Firestore filtrent la lecture au niveau du document, pas du champ : posé dans
@@ -843,18 +894,22 @@ rend la question posable.
 La réconciliation est alors une comparaison en deux temps : lister par
 `tags=beacon`, puis, pour chaque ressource, lire son `session:{id}` et vérifier
 que `provisioning/{id}` existe et est ouvert. Une ressource dont le document
-n'existe pas, porte un `closedAt`, ou qui n'a pas de tag de session du tout, est
-orpheline et se détruit. Le document est fermé au passage à `IDLE`, jamais
-supprimé : c'est ce qui distingue « session terminée proprement » de « ressource
-dont personne n'a jamais entendu parler ».
+n'existe pas, dont le `closedAt` n'est plus nul, ou qui n'a pas de tag de session
+du tout, est orpheline et se détruit. Le document est fermé au passage à `IDLE` —
+`closedAt` reçoit un instant —, jamais supprimé : c'est ce qui distingue
+« session terminée proprement » de « ressource dont personne n'a jamais entendu
+parler ». **`closedAt` vaut `null` dès la création et non pas rien**, sans quoi
+« les intentions ouvertes » ne serait pas une requête : Firestore n'interroge pas
+l'absence d'un champ, et le watchdog devrait rapatrier la collection entière à
+chaque passage.
 
 `tags` est un champ natif de l'API Instance Scaleway, présent sur le serveur
 **et** sur l'IP flottante, posable à la création et modifiable ensuite. C'est
 cette capacité, et son absence de l'API OVH v1, qui a fait changer d'hébergeur
-(§2). La **sémantique exacte du filtre** — exact ou préfixe, et son
-comportement quand plusieurs tags sont demandés — reste à mesurer en vivo
-(§12) : c'est elle qui décide si le premier temps de la réconciliation coûte
-une requête ou un rapatriement.
+(§2). La sémantique du filtre est mesurée (§12) : il est **exact, pas par
+préfixe**. Le premier temps de la réconciliation coûte donc une requête et non un
+rapatriement — et c'est exactement ce qui rend le tag d'appartenance
+indispensable, deux paragraphes plus haut.
 
 Le `sessionId` est tiré par le navigateur, ce qui pose la question de sa
 réutilisation. Elle est fermée par construction : la Function crée
@@ -870,7 +925,7 @@ les écrire.
 | Valeur de `state` | Écrivain autorisé | Fait affirmé |
 |---|---|---|
 | `PROVISIONING`, `STOPPING` | navigateur et Functions | une intention de l'utilisateur |
-| `RUNNING` | Functions seules | une machine existe et répond |
+| `RUNNING` | Functions seules | le point de jonction est publié |
 | `IDLE` | Functions seules | la machine et l'IP sont détruites |
 | `FAILED` | Functions seules | une opération cloud a échoué **et** le nettoyage n'a pas pu être garanti |
 
@@ -891,13 +946,14 @@ Function.
 stateDiagram-v2
     [*] --> IDLE : semé au déploiement
     IDLE --> PROVISIONING : un membre ouvre une session
-    PROVISIONING --> RUNNING : l'agent rapporte que le serveur répond
+    PROVISIONING --> RUNNING : le point de jonction est publié
     RUNNING --> STOPPING : bouton, ou échéance atteinte
     STOPPING --> IDLE : instance et IP détruites
     PROVISIONING --> IDLE : échec, mais nettoyage réussi
     RUNNING --> IDLE : watchdog, la machine a disparu chez l'hebergeur
     PROVISIONING --> FAILED : échec, et nettoyage impossible
     STOPPING --> FAILED : destruction refusée
+    RUNNING --> FAILED : destruction refusée
     FAILED --> IDLE : watchdog, dès qu'aucune ressource taguée ne survit
 ```
 
@@ -923,9 +979,10 @@ jamais bloqué ».
 
 1. Le navigateur exécute une transaction Firestore qui fait passer
    `server/current` de `IDLE` à `PROVISIONING`, en y inscrivant `sessionId`,
-   `startedBy`, `startedAt`, `deadline` — et `instanceSize` seulement s'il est admin,
-   sinon la Function appliquera le gabarit par défaut — plus l'événement
-   `SessionStarted` dans la même écriture, c'est lui qui porte le nom affiché.
+   `game`, `stateSince`, `startedBy`, `startedAt`, `deadline` — et `instanceSize`
+   seulement s'il est admin, sinon la Function appliquera le gabarit par défaut —
+   plus l'événement `SessionStarted` dans la même écriture, c'est lui qui porte
+   le nom affiché.
    L'échéance est calculée par `libs/session` à partir de `config/settings`.
    Lire l'état et écrire dans la même transaction est le verrou contre deux
    personnes qui cliquent simultanément : la seconde transaction rejoue sa
@@ -941,10 +998,16 @@ jamais bloqué ».
 4. Elle génère un jeton d'agent aléatoire de 32 octets, dont seul le hachage est
    stocké, dans `agentTokens/{sessionId}`, puis écrit l'**intention de
    création** dans `provisioning/{sessionId}` — tag `session:{sessionId}`,
-   instant, gabarit — **avant** d'appeler Scaleway. Sans cela, un crash entre l'appel
-   et l'enregistrement de l'`instanceId` laisserait une machine facturée dont
-   plus personne ne connaît l'existence. Les deux documents sont créés en
-   création stricte : un `sessionId` déjà vu fait échouer la transaction.
+   instant, gabarit, **`closedAt` à `null`** — **avant** d'appeler Scaleway. Sans
+   cela, un crash entre l'appel et l'enregistrement de l'`instanceId` laisserait
+   une machine facturée dont plus personne ne connaît l'existence. Les deux
+   documents sont créés en création stricte : un `sessionId` déjà vu fait échouer
+   la transaction.
+
+   `closedAt` est écrit nul dès la création et non laissé absent : c'est ce qui
+   fait des intentions ouvertes une requête d'égalité (§5). Une intention créée
+   sans ce champ est invisible du watchdog, qui détruira la machine en plein
+   provisionnement.
 5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
    avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, des
    identifiants S3 restreints au seul préfixe des saves, la configuration
@@ -1007,9 +1070,11 @@ jamais bloqué ».
    `enshrouded.beacon.charlouze.com` où elle veut. Elle recopie ensuite
    `instanceId`, `ipId`, `ip` et le gabarit `instanceSize` effectivement
    provisionné de `provisioning/{sessionId}` vers `server/current`, et fait
-   passer l'état à `RUNNING`. Recopier le gabarit évite que l'estimation
-   affichée dérive si un admin change le gabarit par défaut en cours de session. C'est ce recopiage qui donne au watchdog de quoi comparer l'état
-   affiché à ce que Scaleway déclare, et à l'arrêt propre de quoi effacer.
+   passer l'état à `RUNNING`, `stateSince` avec lui. Recopier le gabarit évite
+   que l'estimation affichée dérive si un admin change le gabarit par défaut en
+   cours de session. C'est ce recopiage qui donne au watchdog de quoi comparer
+   l'état affiché à ce que Scaleway déclare, et à l'arrêt propre de quoi
+   effacer.
 
    **Pour Sunkenland, le rapport porte une valeur que la Function ne peut pas
    recalculer.** L'identifiant de serveur ne vient que de la VM, et le §7 tient
@@ -1074,8 +1139,8 @@ donc il apprend la prolongation en moins d'une minute.
 
 Déclenché par le bouton ou par l'atteinte de l'échéance.
 
-1. L'état passe à `STOPPING` : écrit par le navigateur si quelqu'un clique, par
-   le watchdog si l'échéance est atteinte.
+1. L'état passe à `STOPPING`, `stateSince` avec lui : écrit par le navigateur si
+   quelqu'un clique, par le watchdog si l'échéance est atteinte.
 2. L'agent arrête le serveur de jeu **puis** pousse la save finale — dans cet
    ordre, pour que la sauvegarde soit cohérente — et rapporte `saved`.
 
@@ -1087,8 +1152,8 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
    que le disque contient déjà. Le `pre-shutdown` du §5 n'a, pour ce jeu, pas
    d'autre sens que « la dernière que le jeu a bien voulu écrire ».
 3. La Function détruit l'instance **et l'IP**.
-4. L'état repasse à `IDLE`, et les champs réservés de `server/current` sont
-   remis à vide par la Function.
+4. L'état repasse à `IDLE`, `stateSince` avec lui, et les champs réservés de
+   `server/current` sont remis à vide par la Function.
 
 ### Watchdog
 
@@ -1105,11 +1170,20 @@ système pour le budget.
 | État `FAILED` | Nouvelle tentative de destruction ; retour à `IDLE` dès qu'aucune ressource taguée ne survit |
 | Ressource taguée `beacon` sans `provisioning/{sessionId}` ouvert | Destruction |
 
-Chaque passage écrit `health/watchdog.lastRunAt`. La dernière ligne est la
-réconciliation : elle rattrape toute ressource orpheline, quelle qu'en soit la
-cause, en confrontant ce que Scaleway déclare aux intentions de création
-enregistrées. Elle énumère par le tag d'appartenance et apparie par le tag de
-session (§5).
+**Les deux délais se comptent sur `stateSince`**, jamais sur `startedAt` : c'est
+la durée passée dans l'état courant qui dit qu'une opération est bloquée, pas
+l'âge de la session. Un `stateSince` absent — un document semé avant que le
+champ existe — ne déclenche aucun délai : le watchdog ne devine pas une durée
+qu'on ne lui a pas donnée, et la ligne de réconciliation par tag rattrape de
+toute façon toute ressource qu'aucune intention ouverte n'explique.
+
+`FAILED` n'a pas de délai : il se retente à chaque passage.
+
+Chaque passage écrit `health/watchdog` — `lastRunAt`, et les volumes orphelins
+qu'il vient de voir (§5). La dernière ligne est la réconciliation : elle
+rattrape toute ressource orpheline, quelle qu'en soit la cause, en confrontant
+ce que Scaleway déclare aux intentions de création enregistrées. Elle énumère
+par le tag d'appartenance et apparie par le tag de session (§5).
 
 **Détruire une instance, c'est deux gestes différents selon son état, et le
 watchdog doit connaître les deux.** Mesuré en tranche 0 :
@@ -1141,6 +1215,18 @@ détruit d'office : c'est la seule ressource du système qu'on ne peut pas
 rattacher — elle ne porte aucun tag — et supprimer le disque d'autrui n'est pas
 une erreur que le watchdog a le droit de commettre.
 
+**Signalé une fois, à son apparition.** `ResourceStranded` n'est écrit que pour
+un volume que le passage précédent n'avait pas vu. Puisque rien ne le détruit,
+il est encore orphelin à tous les passages suivants : le signaler à chacun
+d'eux écrirait 288 faits par jour dans une collection qui en attend quelques
+dizaines par mois. Un événement est un fait au passé (§4) ; une condition qui
+dure est un état, et l'état se lit dans `health/watchdog.stranded`, réécrit à
+chaque passage (§5). Le journal dit donc *quand* un volume est apparu, le
+document dit *ce qui est orphelin maintenant*. L'option écartée était de
+continuer à l'écrire à chaque fois et de dédoublonner à la lecture : elle
+laissait grossir sans fin la collection dont §11 totalise le mois, pour un
+affichage.
+
 ### Qui surveille le watchdog
 
 Le watchdog est déclaré composant le plus critique du système pour le budget,
@@ -1166,7 +1252,9 @@ La fenêtre d'absence est configurable jusqu'à 23,5 h.
 garde-fou : rien ne le lit automatiquement. C'est une trace de diagnostic — elle
 répond à « depuis quand ? » une fois l'alerte reçue. Un marqueur que personne ne
 surveille ne surveille rien, et le présenter autrement donnerait une fausse
-impression de redondance.
+impression de redondance. L'autre champ du document, `stranded`, est bien relu —
+par le watchdog lui-même, au passage suivant (§5) — et il ne surveille rien non
+plus.
 
 Cette alerte est **destinée à l'administrateur, jamais affichée dans
 l'interface**. Un bandeau « le surveillant ne répond plus » sur l'écran des

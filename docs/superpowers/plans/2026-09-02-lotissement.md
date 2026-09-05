@@ -104,6 +104,16 @@ laissé traîner.
 **Sortie** : plus aucune ressource Scaleway ne peut survivre à sa session, y compris
 si tout le reste du système est absent.
 
+**Trois pièces sont remontées de plus loin**, et la tranche 2 rétrécit d'autant.
+La face **admin** de `libs/session-record` vient ici parce que les délais d'état
+du §6 lisent et corrigent `server/current`, et que le §4 impose à cette
+collection de passer par son module `*-record` ; la face client reste en
+tranche 2. Les **tests de règles dans la CI** viennent ici parce que la
+tranche 1 déploie des règles — fermées — et qu'un jeu de règles déployé sans sa
+suite de refus n'est pas une barrière. Et le **semis de `server/current`** vient
+ici parce qu'un watchdog déployé sans document à corriger n'est surveillé par
+personne ; `config/settings` et le premier membre restent en tranche 4.
+
 ### 2 · Le cycle
 
 `libs/session`, `libs/session-record`, `onServerStateChange`, `agentReport`,
@@ -147,7 +157,9 @@ celle qui en a besoin.
 | Morceau du §10 | Naît en |
 |---|---|
 | CI de pull request — lint, tests unitaires, build | 1 |
-| Tests de règles dans la CI, puis le workflow de déploiement et le semis idempotent | 4 |
+| Tests de règles dans la CI | 1 |
+| Semis de `server/current` | 1 |
+| Workflow de déploiement, et semis du reste | 4 |
 | Workflow de construction du compagnon vers ghcr.io, tag immuable, test de fumée | 3 |
 | Tag immuable sur l'image amont dans le `cloud-init` | 0 |
 
