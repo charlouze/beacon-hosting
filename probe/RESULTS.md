@@ -1399,3 +1399,37 @@ Trois relevés qui n'étaient pas demandés et qui servent à la tâche 5 :
   l'option a pris, sans attendre qu'un joueur essaie de se connecter.
 - `SessionName` vaut le ServerID, et les `SessionProperties` portent le nom du
   monde et son GUID — c'est ce sur quoi la recherche par la liste s'appuie.
+
+### Le seau, et le dépôt
+
+- **Seau** : `beacon-saves`, région `fr-par`, privé, sans règle de cycle de vie,
+  créé le 2026-09-05. La région est celle de la zone `fr-par-1` de l'instance,
+  ce qui est toute la raison pour laquelle le stockage a suivi le calcul (§2).
+- **Préfixes** : `games/sunkenland/`, `saves/sunkenland/`.
+- **Volume déposé, jeu** : 2,232 Gio — 247 objets, 2 396 304 007 octets — en
+  **64 s**, soit **~37 Mo/s montants** (~300 Mbit/s).
+- **Volume déposé, monde** : 586,2 Kio — 23 objets, 600 304 octets — en 2 s.
+  C'est le plafond du tampon circulaire que la section J avait mesuré à 586 Ko :
+  il ne grandit pas.
+- **Conforme à la source** : taille et nombre d'objets identiques des deux côtés,
+  vérifiés par `rclone size` sur chaque préfixe.
+- **La clé en lecture seule lit** : elle liste `games/` et `saves/`, et le
+  dossier du monde sous son préfixe.
+- **Et elle n'écrit pas** : un `rcat` à la racine du seau rend
+  `403 AccessDenied` sur `CreateBucket`, et aucun objet n'apparaît. Le seau est
+  resté à 270 objets et 2 396 904 311 octets, la somme exacte des deux dépôts.
+  C'est la clé qui monte sur la machine de jeu : elle restaure, elle n'écrase
+  rien (§6, §7).
+- **Qu'elle ne sache pas *supprimer* n'est pas prouvé.** `rclone` s'arrête sur
+  `object not found` avant d'émettre l'appel, et le vérifier pour de bon
+  demanderait de viser un objet réel — donc de risquer celui qu'on protège. La
+  politique `ObjectStorageReadOnly` ne l'accorde pas ; c'est une lecture de la
+  politique, pas une mesure, et ça s'écrit comme tel.
+
+Le §2 parlait d'« un quart d'heure de rafraîchissement » pour ces 2,3 Go. La
+mesure dit **une minute et quatre secondes**, depuis une machine de développement
+vers `fr-par`. La phrase du spec est à corriger.
+
+> Le plan réserve cette tâche à un humain de bout en bout. Le dépôt a été lancé
+> par l'agent, sur demande explicite du commanditaire après rappel de la règle.
+> `rclone copy` seulement, aucune suppression, aucun `sync`.
