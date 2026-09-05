@@ -1232,3 +1232,335 @@ pas parce qu'elles étaient justes. Ce test est leur unique vérification.
   `3 minute` alors que 0,13 € valent ~3 heures à 0,04284 €/h — **l'unité rendue
   est fausse, seule la valeur en euros est fiable** ; à noter pour qui relira ce
   champ un jour.
+
+
+## V · Sunkenland sur une vraie machine
+
+**Section de la tranche 1 bis**, écrite dans ce rapport parce qu'elle continue la
+section J : même jeu, mêmes questions, et ce que la section J n'avait pas pu
+trancher sans machine — les options de publication d'adresse, la disposition des
+dossiers, la cadence à sa valeur retenue, et le comportement du tout derrière un
+vrai NAT. Mesuré le AAAA-MM-JJ.
+
+### Le script de démarrage, monté plutôt que construit
+
+Relevé sur l'image, sans rien lancer, le 2026-09-05 :
+
+- **Ligne de lancement de l'image amont** — `/etc/init.d/xvfb start` (un
+  `start-stop-daemon` sur `Xvfb :1`), puis
+  `wine /sunkenland/game/Sunkenland-DedicatedServer.exe … &` suivi de `wait`,
+  sous un `trap … HUP INT QUIT TERM` qui fait `wineserver -k -w`. **Pas de
+  `xvfb-run`** : `DISPLAY=:1` est posé dans l'image.
+- **Chemin d'installation du jeu (`GAME_DIR`)** — `/sunkenland/game`, présent
+  mais **vide** dans l'image : c'est un point de montage.
+- **Chemin des mondes (`WORLD_DIR`), et le lien symbolique observé** —
+  `/sunkenland/.wine/drive_c/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland/Worlds`
+  → `/sunkenland/Worlds`, qui **n'existe pas** dans l'image. La variable
+  `WORLD_FOLDER` de l'image pointe le dossier parent du lien.
+- **Le conteneur tourne en `uid 7000` (`sunkenland`)**, pas en root. Le dossier
+  des mondes monté doit lui appartenir, sans quoi l'autosave n'a nulle part où
+  écrire — vrai sur une VM Linux, invisible sur Docker Desktop.
+- **Variables déjà déclarées par l'image** — `GAME_WORLD_GUID`, `GAME_REGION`,
+  `GAME_MAX_PLAYER`, `GAME_SESSION_INVISIBLE`, `GAME_UPDATE`,
+  `GAME_BETA_VERSION`, `GAME_PASSWORD`, `WORLD_FOLDER`, `USER_NAME`, `APP_ID`,
+  `DISPLAY`, `WINEDEBUG`, `XDG_RUNTIME_DIR`. Le script de Beacon n'en reprend
+  qu'une sous le même nom, `GAME_PASSWORD`, et pour le même sens ; les autres
+  sont inertes puisque l'entrée est remplacée.
+
+### Un `$` dans le mot de passe ne survit pas à `docker compose`
+
+La valeur passe par l'interpolation du compose, qui lit `$bc` comme une variable
+vide : `a$bc${REGION}d` arrive au serveur comme `aeud`. Compose prévient d'une
+variable inconnue, jamais d'un mot de passe amputé, et `env_file` n'y change rien
+— la même interpolation s'y applique.
+
+C'est le frère du piège du mot de passe vide de la section J, en pire : celui-là,
+personne ne peut le relire dans le journal. Deux défenses, parce qu'aucune ne
+couvre les deux chemins — le rendeur du `cloud-init` refuse un `$` **avant**
+qu'une machine facturée existe, et `start.sh` imprime la longueur du mot de passe
+au démarrage.
+
+Mesuré le 2026-09-05, jeu et monde montés depuis l'hôte :
+
+- **`-autoSaveIntervalInSeconds 300` accepté et journalisé** — `Auto Save Enabled,
+  auto save interval: 300`. La section J n'avait tenu la cadence qu'à 60 ; la
+  valeur retenue par le commanditaire est lue telle quelle.
+- **`-adminSteamIDs` pris en argument** — `AdminSteamIDs: 76561197965918116`,
+  imprimé trois fois. **Ni `FromBatScript` ni `FromFile` n'apparaissent** dans le
+  journal de cette version : les deux chaînes existent dans le binaire, aucune
+  n'est journalisée. Ce qui fonde la conclusion est ailleurs, et c'est plus
+  solide — le dossier du monde ne contient aucun fichier d'admins, et l'argument
+  est repris tel quel. **Beacon n'écrit rien dans le dossier de sauvegarde.**
+- **Mot de passe non corrompu** — `HasPassword: True`, et la ligne résolue se
+  termine par `-password probe`, jamais par `-region`. La longueur imprimée par
+  `start.sh` valait 5.
+- **Port UDP réellement en écoute : `27015`**, sans avoir passé `-port`. Deux
+  ports éphémères l'accompagnent (sortants, Photon). Ni `ss` ni `netstat` dans
+  l'image : lu dans `/proc/net/udp`.
+- **Durée du démarrage, jeu et monde déjà présents : 121 s** — de
+  `beacon: launching with` à `Server Start Complete`. La section J en annonçait
+  185 à 205 avec les fichiers dans un volume Docker.
+- **ServerID** — `4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638`, le
+  GUID du monde en préfixe, conforme.
+- **`SaveManager.get_IsSteamCloudReady()` lève toujours sa `NullReferenceException`**
+  et le serveur trouve le monde quand même, dans la disposition `Worlds`.
+- **La ligne `StartGame` annonce `MaxPlayerCapacity: 0`** alors que
+  `-maxPlayerCapacity 4` est passé. C'est un champ mal journalisé, pas une option
+  ignorée : l'essai de `-steamID` plus bas imprime les arguments que Fusion reçoit
+  réellement, et ils portent `PlayerCount=4`.
+
+**Verdict sur qui porte le script : le fichier monté suffit.** L'image amont est
+consommée telle quelle, à son digest, avec `start.sh` monté sur son point
+d'entrée. Ni fork chez `melle2`, ni image mince à nous, ni registre, ni workflow,
+ni artefact de plus à maintenir — la troisième forme tient, donc les deux autres
+sont sans objet.
+
+Deux choses que la reprise du script amont a imposées, et qui ne se déduisaient
+pas :
+
+- **Le serveur tourne en `uid 7000`.** Le dossier des mondes monté doit lui
+  appartenir. Sur Docker Desktop la question ne se pose pas ; sur une VM Linux,
+  `rclone` écrit en root et l'autosave n'a plus où écrire — d'où le `chown` du
+  `cloud-init`.
+- **L'arrêt n'est propre que par le `trap` amont.** En PID 1, un processus sans
+  gestionnaire ne reçoit jamais `SIGTERM` : un `exec` ferait de chaque
+  `docker stop` dix secondes puis un `SIGKILL`, possiblement au milieu d'une
+  sauvegarde.
+
+### Un troisième endroit où le mot de passe fuit
+
+La section J en connaissait un, `RPC_ServerValidatePlayer`. Il y en a deux de
+plus, et tous deux avant qu'un joueur se connecte :
+
+```text
+Start Resolving : Z:\sunkenland\game\Sunkenland-DedicatedServer.exe … -password probe
+```
+
+et la ligne de commande complète, visible dans `ps` de tout processus du
+conteneur. **Conséquence pour le §7 :** ce n'est pas une ligne de journal à
+filtrer, c'est le journal entier et la table des processus. Si l'agent remonte un
+jour quoi que ce soit de cette machine, rien de tout cela n'en sort.
+
+### `-steamID` et la disposition des dossiers
+
+Mesuré le 2026-09-05, même conteneur, monde monté dans la disposition du client
+et `-steamID` renseigné. **L'option fonctionne.**
+
+- **Dossier parent où l'image attend `Worlds`** —
+  `/sunkenland/.wine/drive_c/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland`,
+  qui porte le lien symbolique `Worlds` → `/sunkenland/Worlds`. C'est aussi là
+  que `SteamCloudData` doit être posé, en frère du lien.
+- **Disposition client essayée** —
+  `SteamCloudData/76561197965918116/Worlds/Beacon's World~4db51c84-…`, copie
+  conforme du monde, `/sunkenland/Worlds` **non monté**.
+- **Le serveur trouve le monde** — `Valid SteamID: 76561197965918116`, puis :
+
+```text
+World Save File Exist: C:/users/sunkenland/AppData/LocalLow/Vector3 Studio/Sunkenland\SteamCloudData\76561197965918116\Worlds\Beacon's World~4db51c84-…/World~0.json
+Server Start Complete, Ready for Clients to Join. ServerID is '4db51c84-…~639242328214082922'.
+```
+
+- **Message d'erreur s'il ne le trouve pas** — sans objet, il l'a trouvé. La
+  `NullReferenceException` de `SaveManager.get_IsSteamCloudReady()` est levée
+  dans les deux dispositions et n'empêche rien : elle dit que le serveur n'a pas
+  de Steam Cloud, pas qu'il ne sait pas lire un dossier.
+- Démarrage : 129 s, du lancement à `Server Start Complete`.
+
+**Conséquence pour l'amorçage d'un monde (§2, §13) : la divergence de chemins est
+un réglage, pas une fatalité — et Beacon ne s'en sert pas.** Le §2 tenait cette
+divergence pour la raison d'un geste manuel hors périmètre v1 ; la mesure la
+dissout. Reste que la question fermée l'est dans les deux sens :
+
+**Décision du commanditaire, 2026-09-05 : `-steamID` n'est pas utilisé.**
+Indexer le monde *du serveur* sous le `steamID64` d'un *joueur* accroche la
+disposition du seau au compte d'une personne — celle qui a créé le monde, et qui
+peut quitter le groupe sans que le monde lui appartienne pour autant. Le serveur
+n'a pas de compte Steam, c'est précisément ce que dit sa
+`NullReferenceException` ; lui en prêter un serait une fiction, et le §5 ne
+cloisonne le seau que par jeu.
+
+Ce que ce refus coûte : rien. Le monde se dépose sous `saves/sunkenland/` et se
+restaure dans `Worlds/`, et l'amorçage reste une copie — vers un autre chemin,
+pas dans un dossier réarrangé. **Rien n'est réécrit dans le dossier du monde**,
+qui reste une donnée pure dans les deux dispositions.
+
+L'option est mesurée et documentée ici parce qu'elle ferme une question ouverte
+du §12, pas parce qu'elle sera employée. Ce qu'elle laisse au projet est le
+chemin de retour : une sauvegarde de Beacon se remet chez un joueur sans
+traduction, la disposition serveur et la disposition client tenant le même
+dossier.
+
+Trois relevés qui n'étaient pas demandés et qui servent à la tâche 5 :
+
+- `PlayerCount=4` dans les arguments que Fusion reçoit — `-maxPlayerCapacity` est
+  bien appliqué, c'est la ligne `StartGame` qui journalise mal.
+- **`CustomPublicAddress=` est vide**, et `DisableNATPunchthrough=False`. C'est ce
+  champ-là que `-publicip` doit remplir : sur la VM, il dira en une ligne si
+  l'option a pris, sans attendre qu'un joueur essaie de se connecter.
+- `SessionName` vaut le ServerID, et les `SessionProperties` portent le nom du
+  monde et son GUID — c'est ce sur quoi la recherche par la liste s'appuie.
+
+### Le seau, et le dépôt
+
+- **Seau** : `beacon-saves`, région `fr-par`, privé, sans règle de cycle de vie,
+  créé le 2026-09-05. La région est celle de la zone `fr-par-1` de l'instance,
+  ce qui est toute la raison pour laquelle le stockage a suivi le calcul (§2).
+- **Préfixes** : `games/sunkenland/`, `saves/sunkenland/`.
+- **Volume déposé, jeu** : 2,232 Gio — 247 objets, 2 396 304 007 octets — en
+  **64 s**, soit **~37 Mo/s montants** (~300 Mbit/s).
+- **Volume déposé, monde** : 586,2 Kio — 23 objets, 600 304 octets — en 2 s.
+  C'est le plafond du tampon circulaire que la section J avait mesuré à 586 Ko :
+  il ne grandit pas.
+- **Conforme à la source** : taille et nombre d'objets identiques des deux côtés,
+  vérifiés par `rclone size` sur chaque préfixe.
+- **La clé en lecture seule lit** : elle liste `games/` et `saves/`, et le
+  dossier du monde sous son préfixe.
+- **Et elle n'écrit pas** : un `rcat` à la racine du seau rend
+  `403 AccessDenied` sur `CreateBucket`, et aucun objet n'apparaît. Le seau est
+  resté à 270 objets et 2 396 904 311 octets, la somme exacte des deux dépôts.
+  C'est la clé qui monte sur la machine de jeu : elle restaure, elle n'écrase
+  rien (§6, §7).
+- **Qu'elle ne sache pas *supprimer* n'est pas prouvé.** `rclone` s'arrête sur
+  `object not found` avant d'émettre l'appel, et le vérifier pour de bon
+  demanderait de viser un objet réel — donc de risquer celui qu'on protège. La
+  politique `ObjectStorageReadOnly` ne l'accorde pas ; c'est une lecture de la
+  politique, pas une mesure, et ça s'écrit comme tel.
+
+Le §2 parlait d'« un quart d'heure de rafraîchissement » pour ces 2,3 Go. La
+mesure dit **une minute et quatre secondes**, depuis une machine de développement
+vers `fr-par`. La phrase du spec est à corriger.
+
+Le soir même, après la soirée de mesure, le monde a été remonté depuis la VM et
+redéposé : le seau porte l'état du 2026-09-05 à 20:18 UTC, 28 objets, 900 Kio,
+`CacheLatestSaveIndex: 5`. `copy` écrase les fichiers de même nom sans rien
+effacer — l'état antérieur survit dans les emplacements du tampon circulaire que
+la soirée n'a pas recyclés. **Aucun versionnement n'a été posé** : l'historique
+et l'élagage sont une décision de la tranche 3 (§8).
+
+> Le plan réserve cette tâche à un humain de bout en bout. Le dépôt a été lancé
+> par l'agent, sur demande explicite du commanditaire après rappel de la règle.
+> `rclone copy` seulement, aucune suppression, aucun `sync`.
+
+### Derrière un vrai NAT
+
+Machine `beacon-probe-sunkenland01`, `DEV1-L` en `fr-par-1`, allumée le
+2026-09-05 à 19:49 UTC, détruite à 20:25. Le second essai **n'a pas eu lieu** :
+il était conditionné à l'échec du premier.
+
+| Essai | Options annoncées | Rejoint par ServerID | Rejoint par la liste |
+|---|---|---|---|
+| 1 | aucune | non essayé, le second chemin a suffi | **oui** |
+| 2 | `-publicip`, `-publicport`, `-port` | sans objet | sans objet |
+
+- **Port UDP en écoute sur la VM** : `27015`, publié par `docker-proxy`, sans
+  qu'aucun `-port` ait été passé.
+- **ServerID observé** : `4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242347875710917`,
+  le GUID du monde en préfixe.
+- **Le groupe de sécurité par défaut laisse passer ce port** — rien n'a été
+  ouvert à la main, et le joueur est entré.
+- **`CustomPublicAddress=` est vide** dans les arguments que Fusion reçoit :
+  le serveur n'a annoncé aucune adresse, et la preuve de la jonction est dans son
+  journal — `RPC_ServerValidatePlayer: PlayerRef [Player:0] steamID …`.
+
+**Conséquence pour l'IP flottante et `DnsUpdater` : ce jeu n'en a besoin
+d'aucune des deux.** La découverte passe par Photon, le transport par de l'UDP
+direct que le NAT de Scaleway traverse sans rien annoncer. Le §2 le déduisait,
+la mesure le confirme : `DnsUpdater` n'est pas appelé pour ce jeu, il n'a pas de
+sous-domaine, et l'adapter n'a pas de branche à écrire. Une IP publique reste
+nécessaire — la machine doit être joignable en UDP entrant — mais **stable, non**.
+
+### Le transfert depuis le seau
+
+- **Volume restauré : 2,3 Go en 16 s** — `19:51:04` → `19:51:20` d'après le
+  journal de la sonde —, soit ~150 Mo/s, intra-région et depuis le seau.
+- Le compteur `rx_bytes` de l'interface rend **4 050 602 394 octets** entrants
+  sur toute la vie de la machine : les 2,4 Go du seau, plus les paquets `apt` de
+  `docker.io`, `docker-compose-v2` et `rclone`, plus le trafic de jeu. C'est ce
+  chiffre que la tâche 6 confronte à la facture.
+- **Démarrage complet, du `poweron` au `Server Start Complete`** : allumage à
+  19:49, `cloud-init` fini vers 19:51, conteneur lancé, jeu prêt à 19:54:15 —
+  **environ 5 minutes**, dont 16 s de restauration.
+
+Le §2 parle d'« un quart d'heure de rafraîchissement » pour ces 2,3 Go. Le dépôt
+depuis une machine de développement prend 64 s, la restauration intra-région 16 s.
+**Restaurer les fichiers de jeu n'est pas le coût du démarrage de ce jeu** — le
+jeu lui-même met dix fois plus à booter que son propre téléchargement.
+
+### La cadence à 300 s
+
+| Sauvegarde | Horodatage (UTC) | Écart |
+|---|---|---|
+| `World~1.json` | 20:00:23 | — |
+| `World~2.json` | 20:05:23 | **300 s** |
+| `World~3.json` | 20:10:23 | **300 s** |
+| `World~4.json` | 20:15:23 | **300 s** |
+| `World~5.json` | 20:18:08 | 165 s — déclenchée par l'admin |
+
+Quatre intervalles pleins à la valeur retenue, là où le plan n'en demandait deux
+et où la section J n'avait tenu que 60 s.
+
+- **Charge à un joueur** : CPU **100 %** d'un cœur — la `DEV1-L` en a quatre —,
+  mémoire **5,27 Gio sur 7,75**. Conforme à la section J.
+- **`-adminSteamIDs` donne réellement les droits d'admin**, prouvé par l'effet :
+  la sauvegarde manuelle de 20:18:08 a été déclenchée depuis la console du jeu
+  par le compte passé en argument. C'est plus solide que la ligne `FromBatScript`
+  que la section J cherchait et que cette version n'imprime pas.
+- **Le `chown 7000:7000` du `cloud-init` est ce qui rend ces écritures
+  possibles.** `rclone` remplit le dossier en root, le serveur y écrit en 7000 :
+  sans cette ligne, aucune de ces cinq sauvegardes n'existerait, et la panne
+  serait muette.
+
+### Un piège pour le compagnon de la tranche 3
+
+Le monde a été rapatrié de la VM avant destruction, pour garder la partie jouée
+ce soir-là. **`scp` sans `-p` horodate tous les fichiers à l'instant de la
+copie** — et la section J a établi que le numéro le plus élevé n'est pas le plus
+récent, que seuls `Cache.json` et les `.meta` font foi. Un compagnon qui
+remonterait les sauvegardes en écrasant les dates rendrait le dossier illisible
+pour l'humain qui doit choisir laquelle restaurer.
+
+### Conséquences pour le spec
+
+1. **§12** — quatre des cinq questions du second jeu passent de « encore ouvert »
+   à « vérifié », avec leurs réponses et la date de mesure. La cinquième, l'egress
+   objet, a désormais son expérience et attend sa facture.
+2. **§2, ligne « Conteneur du jeu »** — la forme est tranchée : un script **monté**
+   dans l'image amont, ni fork ni image maison. Avec les deux contraintes que
+   l'image impose, l'`uid 7000` et le `trap`.
+3. **§2 ligne « DNS » et §11** — mesuré et non plus déduit : ce jeu se rejoint
+   derrière le NAT sans annoncer d'adresse. Il lui faut une IP publique, pas une
+   IP stable, et `DnsUpdater` n'est pas appelé.
+4. **§2, ligne « Mise à jour »** — « un quart d'heure de rafraîchissement »
+   devient une minute : 64 s pour 2,3 Go.
+5. **§2, ligne « Amorçage d'un monde »** — la divergence de chemins entre client
+   et serveur est un réglage, et `-steamID` est écarté par décision.
+6. **§4** — la réserve sur `melle2/sunkenland-ds` tombe. Rien d'autre n'y bouge :
+   aucune mesure de cette sonde ne demande que `ServerHost` rende un détail de
+   fournisseur au domaine, ni que `libs/session` connaisse un port. Le §11 gagne
+   le chiffre du transfert, pas une frontière de moins.
+
+### Ce qui reste ouvert
+
+- **L'egress objet intra-région n'est pas chiffré.** L'expérience est faite —
+  2,3 Go tirés du seau vers une VM de la même région, 4 050 602 394 octets
+  entrants au compteur d'interface — mais la consommation Scaleway n'est pas
+  instantanée. À lire deux jours après le 2026-09-05.
+
+  **Ce que la documentation en dit**, relevé le 2026-09-05 sur la grille
+  tarifaire publique : l'intra-régional `PAR ↔ PAR` est *free of charge*, sans
+  plafond, et les 75 Go mensuels offerts — puis 0,01 €/Go — portent sur le
+  trafic **sortant de Scaleway**. Notre restauration serait donc gratuite par la
+  première règle, pas par le quota. C'est une lecture de tarif, **pas une
+  mesure** : la question du tag OVH est née d'une documentation qui annonçait ce
+  que l'API ne faisait pas, et c'est la raison d'être de la tâche 6.
+- **Le décalage de version Photon n'est pas mesuré**, et le plan l'avait exclu du
+  périmètre : il demanderait deux versions du client. La déduction du §2 reste
+  une déduction.
+- **La charge à quatre joueurs** n'est toujours pas mesurée. À un joueur,
+  Sunkenland tient sur un cœur des quatre et 5,3 Gio.
+- **Qu'une clé `ObjectStorageReadOnly` ne sache pas supprimer** est lu dans la
+  politique, pas mesuré — le vérifier demanderait de viser un objet réel.
+- **Le second essai de la tâche 5 n'a pas eu lieu** : conditionné à l'échec du
+  premier, qui a réussi. `-publicip`, `-publicport` et `-port` restent donc
+  *inutiles* et non *inopérants* — on sait qu'on n'en a pas besoin, pas ce qu'ils
+  feraient.

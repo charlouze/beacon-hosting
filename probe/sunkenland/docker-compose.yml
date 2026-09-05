@@ -1,0 +1,43 @@
+services:
+  sunkenland:
+    # Immutable digest, never a moving tag (§10). This one is the image the
+    # night of 2026-09-04 measured; anything else is a different experiment.
+    image: melle2/sunkenland-ds@sha256:2b21e6f098c76f8da91a7c5f53e02ceb9af126fa93d05f7958fd189d759873b7
+    container_name: beacon-probe-sunkenland
+    # Our script replaces upstream's, mounted rather than baked. If this holds,
+    # neither a fork nor an image of our own has to exist.
+    entrypoint: ["/opt/beacon/start.sh"]
+    # A probe never restarts a crash: a container that comes back on its own
+    # hides the very thing we are here to observe.
+    restart: "no"
+    ports:
+      - "${GAME_PORT:-27015}:${GAME_PORT:-27015}/udp"
+    # Every value below goes through compose's interpolation, and `env_file`
+    # would not escape it — measured: a password holding `$` arrives truncated,
+    # `a$bc` as `a`, with a warning about an unset variable and none about the
+    # password. Hence the guard in the renderer, and the length printed at
+    # launch: this is the sibling of the empty-password trap of section J, and
+    # it corrupts the one thing nobody can check from the log.
+    environment:
+      WORLD_GUID: ${WORLD_GUID}
+      GAME_PASSWORD: ${GAME_PASSWORD:-}
+      ADMIN_STEAM_IDS: ${ADMIN_STEAM_IDS:-}
+      AUTOSAVE_SECONDS: ${AUTOSAVE_SECONDS:-300}
+      REGION: ${REGION:-eu}
+      MAX_PLAYERS: ${MAX_PLAYERS:-4}
+      GAME_PORT: ${GAME_PORT:-}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+      PUBLIC_PORT: ${PUBLIC_PORT:-}
+      STEAM_ID: ${STEAM_ID:-}
+      GAME_DIR: ${GAME_DIR:-/sunkenland/game}
+      WORLD_DIR: ${WORLD_DIR:-/sunkenland/Worlds}
+    volumes:
+      - ./start.sh:/opt/beacon/start.sh:ro
+      # Read-only on purpose: these 2.3 GB are licensed files deposited once,
+      # and nothing on a game machine has any business rewriting them.
+      - ${GAME_FILES}:${GAME_DIR:-/sunkenland/game}:ro
+      # The mount point is the variable, so that changing WORLD_DIR moves the
+      # world where the image expects it. The image symlinks the game's own
+      # LocalLow folder to /sunkenland/Worlds; the SteamCloudData layout the
+      # client writes lives one level up, which is exactly what task 3 tries.
+      - ${WORLD_FILES}:${WORLD_DIR:-/sunkenland/Worlds}

@@ -11,7 +11,8 @@
     "scw:inventory": "tsx scaleway/inventory-report.ts",
     "scw:reap": "tsx scaleway/reap.ts",
     "scw:tag": "tsx scaleway/tag-probe.ts",
-    "scw:session": "tsx scaleway/session-probe.ts"
+    "scw:session": "tsx scaleway/session-probe.ts",
+    "scw:sunkenland": "tsx scaleway/sunkenland-probe.ts"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",

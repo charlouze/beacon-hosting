@@ -2,3 +2,7 @@
 node = "22"
 java = "temurin-21"
 python = "3.14.7"
+# Le transfert vers le stockage objet, à la main comme dans le cloud-init d'une
+# machine de jeu. Épinglé parce que c'est l'outil qui touche la seule donnée
+# irremplaçable du système.
+rclone = "1.75.1"

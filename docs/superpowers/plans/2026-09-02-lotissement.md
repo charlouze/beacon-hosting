@@ -114,6 +114,18 @@ suite de refus n'est pas une barrière. Et le **semis de `server/current`** vien
 ici parce qu'un watchdog déployé sans document à corriger n'est surveillé par
 personne ; `config/settings` et le premier membre restent en tranche 4.
 
+### 1 bis · Sonder le second jeu
+
+Intercalée le 2026-09-05, après que Sunkenland est entré dans le périmètre et
+avant que le plan de la tranche 2 s'écrive. Elle mesure ce que la section J de
+la sonde n'avait pas pu mesurer sans machine : la connexion derrière un vrai
+NAT, la disposition des dossiers, la cadence retenue, et l'egress objet
+intra-région. Le seau des sauvegardes naît avec elle.
+
+Elle n'ajoute pas de tranche au découpage : c'est une sonde, du même genre que
+la tranche 0, et son plan est
+[`2026-09-05-tranche-1-bis-sonder-le-second-jeu.md`](2026-09-05-tranche-1-bis-sonder-le-second-jeu.md).
+
 ### 2 · Le cycle
 
 `libs/session`, `libs/session-record`, `onServerStateChange`, `agentReport`,
@@ -168,5 +180,7 @@ celle qui en a besoin.
 - La typographie définitive, le rouge de signalisation, et la ligne « prêt vers
   20:18 » qui annonce une prédiction que la tranche 0 permettra enfin de fonder.
   Voir le dossier de surface dans `.impeccable/surfaces/`.
-- Si la tranche 0 invalide une hypothèse d'architecture, le spec est corrigé
-  **avant** d'écrire le plan de la tranche 1.
+- Si **une sonde** invalide une hypothèse d'architecture, le spec est corrigé
+  **avant** d'écrire le plan de la tranche suivante. Écrite pour la tranche 0,
+  la règle vaut pour toute sonde : la tranche 1 bis en est la deuxième
+  démonstration, et elle s'est intercalée exactement pour ça.
