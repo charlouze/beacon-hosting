@@ -4373,12 +4373,12 @@ La seule façon de le lancer est de le nommer.
 
 ```ts
 import { config as loadEnv } from 'dotenv';
-import { Instancev1, Marketplacev2, type Zone } from '@scaleway/sdk';
-import { createClient } from '@scaleway/sdk-client';
+import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
+import { createClient, type Zone } from '@scaleway/sdk-client';
 import { afterAll, describe, expect, it } from 'vitest';
-import { fromSdk } from './from-sdk';
-import { ScalewayServerHost } from './scaleway-server-host';
-import { OWNERSHIP_TAG, sessionTag } from './tags';
+import { fromSdk } from './from-sdk.js';
+import { ScalewayServerHost } from './scaleway-server-host.js';
+import { OWNERSHIP_TAG, sessionTag } from './tags.js';
 
 // Not `dotenv/config`, which reads the .env of the current directory — the
 // workspace root. The keys live next to the library that uses them, and a
@@ -4415,7 +4415,8 @@ const marketplace = new Marketplacev2.API(client);
 // The very translation that runs in production, not a copy of it. That is the
 // point: this test answers "does InstanceApi describe the sdk", and it could
 // not answer it about a second translation nobody deploys.
-const host = new ScalewayServerHost(fromSdk(sdk, zone));
+const api = fromSdk(sdk, zone);
+const host = new ScalewayServerHost(api);
 const tags = [OWNERSHIP_TAG, sessionTag(SESSION)];
 
 afterAll(async () => {
@@ -4427,6 +4428,17 @@ describe('ScalewayServerHost against the real account', () => {
   it('sees, then destroys, a flexible ip it owns', async () => {
     const created = await sdk.createIp({ zone, project: projectId, tags });
     expect(created.ip?.tags).toEqual(tags);
+
+    // Tranche 0 measured `tags=` exact on the flexible ip by querying the
+    // strict prefix `session:` and finding it empty (probe/RESULTS.md:226).
+    // Re-run here through the production translation, as a pair: the
+    // positive control proves the full-tag query reaches this ip at all — a
+    // query that errored, or came back empty for an unrelated reason, would
+    // make the negative below pass for the wrong reason.
+    const { ips: byFullTag } = await api.listIps({ tags: [sessionTag(SESSION)] });
+    expect(byFullTag.map((ip) => ip.id)).toContain(created.ip?.id);
+    const { ips: byPrefix } = await api.listIps({ tags: ['session:'] });
+    expect(byPrefix.map((ip) => ip.id)).not.toContain(created.ip?.id);
 
     const hosted = await host.list();
     expect(hosted.map((h) => h.sessionId)).toContain(SESSION);
@@ -4447,22 +4459,88 @@ describe('ScalewayServerHost against the real account', () => {
       image: await resolveImageId(),
       tags,
     });
-    const serverId = created.server?.id ?? '';
-    const volumeIds = Object.values(created.server?.volumes ?? {}).map((volume) => volume.id);
+    // A missing server means the contract itself is broken — fail loudly here
+    // rather than let `?? ''` and `?? {}` turn it into a confusing assertion
+    // failure three lines down.
+    if (created.server === undefined) throw new Error('createServer returned no server');
+    // `created.server` is `any` here (see the comment on `api.listServers`
+    // below): `open()` — the only place `InstanceApi` would grow a creation
+    // method — is tranche 2, so this setup has no checked boundary to route
+    // through, unlike everything else in this file. `CreatedServerShape`
+    // names the shape the vendor's docs promise, the same way
+    // `instance-api.ts` narrows the vendor's surface to what this library
+    // trusts — but a declaration proves nothing the compiler can't check.
+    // The assertions right after are the actual oracle.
+    const server = created.server as CreatedServerShape;
+    expect(typeof server.id).toBe('string');
+    expect(server.id.length).toBeGreaterThan(0);
+    const volumeIds = Object.values(server.volumes).map((volume) => volume.id);
+    for (const volumeId of volumeIds) {
+      expect(typeof volumeId).toBe('string');
+      expect(volumeId.length).toBeGreaterThan(0);
+    }
+    const serverId = server.id;
     // The server is created and never started: its state is `stopped`, which
     // is exactly the path terminate refuses and the one that strands disks.
     expect(volumeIds.length).toBeGreaterThan(0);
 
+    // The one moment a live, attached volume exists to check against — once
+    // `host.close` runs below, the disk is gone. `sweepUnclaimed()` decides
+    // stranded-versus-attached with exactly one expression,
+    // `volume.server?.id === undefined`, and that field was bound to the SDK
+    // by nothing at all until this. Checking the inverse — attached, not
+    // stranded — is the only way to check it without orphaning a disk on
+    // purpose.
+    const { volumes } = await api.listVolumes();
+    const attached = volumes.filter((volume) => volumeIds.includes(volume.id));
+    expect(attached.map((volume) => volume.id)).toEqual(expect.arrayContaining(volumeIds));
+    for (const volume of attached) {
+      expect(volume.server?.id).toBe(serverId);
+    }
+
+    // Tranche 0 measured `tags=` exact only on the flexible ip, never on a
+    // server — and the whole reconciliation's tag-based ownership rests on
+    // servers behaving the same way. Same pair as the ip case above: the
+    // positive control proves the full-tag query reaches this server, the
+    // negative — the strict prefix `session:` — is the actual measurement,
+    // extended here from ips to servers.
+    const { servers: byFullTag } = await api.listServers({ tags: [sessionTag(SESSION)] });
+    expect(byFullTag.map((s) => s.id)).toContain(serverId);
+    const { servers: byPrefix } = await api.listServers({ tags: ['session:'] });
+    expect(byPrefix.map((s) => s.id)).not.toContain(serverId);
+
     await host.close(SESSION);
 
-    const { servers } = await sdk.listServers({ zone, tags: [sessionTag(SESSION)] });
-    expect(servers.map((server) => server.id)).not.toContain(serverId);
+    // Through the translation, not `sdk.listServers` directly. Not because
+    // pagination is special: `Instancev1.API`'s own declaration file doesn't
+    // resolve under this project's module resolution — its barrel re-exports
+    // `./api.utils`, `./content.gen`, `./types.gen` and `./types.utils`
+    // without the `.js` extension `nodenext` requires — and `skipLibCheck`
+    // swallows that failure into `any` for every method on the class, this
+    // one included. `fromSdk`'s explicit `InstanceApi` return type is what
+    // restores checking at the boundary; routing through `api` keeps this
+    // assertion typed instead of trusting an `any`.
+    const { servers } = await api.listServers({ tags: [sessionTag(SESSION)] });
+    expect(servers.map((s) => s.id)).not.toContain(serverId);
 
     for (const volumeId of volumeIds) {
       await expect(sdk.getVolume({ zone, volumeId })).rejects.toThrow();
     }
   }, 300_000);
 });
+
+/**
+ * `Instancev1.API`'s `createServer` isn't behind `InstanceApi` — `open()` is
+ * tranche 2 — so this test's setup has no checked boundary to trust instead.
+ * Declared narrowly, next to its only use, for the reason `instance-api.ts`
+ * gives for existing at all: the vendor's surface isn't trusted directly. See
+ * the comment above `api.listServers` for why the compiler can't check this
+ * one either way — the assertions after the cast are what actually do.
+ */
+interface CreatedServerShape {
+  readonly id: string;
+  readonly volumes: Record<string, { readonly id: string }>;
+}
 
 /**
  * `image` on a server creation wants a uuid, zone- and type-specific;
@@ -4482,6 +4560,73 @@ async function resolveImageId(): Promise<string> {
   return image.id;
 }
 ```
+
+Quatre écarts avec la transcription d'origine de cette étape, découverts en
+l'écrivant et en la faisant tourner, pas en la concevant :
+
+**Les imports relatifs prennent `.js`** (`tsconfig.base.json` est `nodenext`),
+et `Zone` vient de `@scaleway/sdk-client`, pas de `@scaleway/sdk` — la tâche 6
+l'a déjà découvert pour `from-sdk.ts`, ce fichier hérite de la même règle.
+
+**Un défaut du SDK, pas de ce test, invalide la phrase du step 5 de la tâche
+6 : « le compilateur en dit la moitié, le test de contrat le reste ». Le
+compilateur n'en dit aucune moitié.** Le paquet publié
+`@scaleway/sdk-instance@2.16.0` réexporte `./api.utils`, `./content.gen`,
+`./types.gen` et `./types.utils` depuis son fichier `dist/v1/index.d.ts` sans
+l'extension `.js` que `moduleResolution: nodenext` exige — vérifiable avec
+`npx tsc --skipLibCheck false`, qui rend quatre `TS2307` là où `skipLibCheck:
+true` (nécessaire par ailleurs, pour ne pas vérifier tous les `.d.ts` du
+dépôt) les avale en silence. La conséquence n'est pas locale à une méthode :
+`Instancev1.API` tout entière type `any`, `new Instancev1.API(...)` y
+compris — vérifié en révélant le type construit, puis en appelant une méthode
+inexistante sans qu'aucune erreur ne sorte. `@scaleway/sdk-k8s` porte le même
+défaut dans son propre `dist/v1/index.d.ts`.
+
+Personne ne l'avait remarqué parce que `from-sdk.ts` et
+`apps/functions/src/container.ts` passent chacun le sdk construit à une
+fonction dont le paramètre et le retour sont explicitement typés
+(`Instancev1.API`, `InstanceApi`) — une annotation de type sur une frontière
+arrête la propagation de l'`any` de l'appelant, donc rien n'y avait jamais
+échoué. **`from-sdk.ts` n'est donc pas vérifié pour moitié par le compilateur :
+il ne l'est pas du tout, et ce test de contrat est son unique vérification.**
+`container.ts` a la même exposition, silencieuse depuis la tâche 6 ; rien n'y
+a été changé ici — un cast ou une annotation n'y répareraient rien, seul ce
+test lie réellement le SDK à la frontière — mais quiconque reprend la tranche
+2 doit le savoir avant d'y ajouter `open()`.
+
+**La couverture des sept méthodes d'`InstanceApi` par ce test reste
+partielle.** `listServers`, `listIps`, `deleteServer`, `deleteVolume` et
+`deleteIp` sont exercées par les deux cas (directement ou via `host.close`).
+`listVolumes` l'est directement, ci-dessus, mais seulement sur la branche
+attachée : elle prouve que `ScwVolume.server` existe et vaut l'id du serveur
+quand le disque est monté, l'inverse exact du prédicat que `sweepUnclaimed()`
+lit pour décider qu'un volume est errant. Produire un volume réellement
+détaché sur le compte réel signifierait en orpheliner un exprès, ce qui est
+hors budget et hors périmètre de ce test — **`sweepUnclaimed()` elle-même
+n'est donc jamais appelée ici, et sa branche détachée reste vérifiée par les
+seuls tests unitaires et le double.** `serverAction` (le `terminate` du
+serveur en cours d'exécution) n'est couverte par rien dans ce fichier non
+plus : le serveur créé ici ne démarre jamais, `destroyServer()` y prend
+toujours la voie `deleteServer` + `deleteVolume`, jamais `serverAction`.
+
+**La commanditaire a fait tourner ce test contre le compte réel — deux cas
+verts, inventaire revenu à l'identique sur les trois listes — et la première
+version de cette étape ne répondait pourtant pas à l'une des trois questions
+de son préambule : le filtre `tags=` est-il exact sur un serveur comme il
+l'est sur une IP ?** Chaque requête du fichier interrogeait le tag complet
+`session:contract-manual`, qui est un préfixe de lui-même — sous sémantique
+préfixe comme sous sémantique exacte, `host.list()`, `host.close()` et les
+requêtes de post-fermeture rendent alors le même résultat : rien dans le
+fichier ne distinguait les deux mondes. La tranche 0 avait mesuré
+l'exactitude en interrogeant `session:`, un préfixe **strict**, et en
+observant une liste vide (`probe/RESULTS.md:226`) — mais seulement sur l'IP
+flottante, jamais sur un serveur, alors que c'est sur les serveurs que repose
+toute la réconciliation par tag. Ajouté, pour chaque ressource et en lecture
+seule : un contrôle positif à côté de la mesure elle-même, jamais l'un sans
+l'autre — une assertion d'absence isolée passerait tout aussi bien si la
+requête avait échoué, était vide pour une raison sans rapport, ou si la
+ressource n'avait jamais existé, et c'est exactement pour ça que le contrôle
+positif doit tenir dans la même respiration que la mesure.
 
 - [ ] **Step 3: Vérifier l'inventaire avant — un agent peut le faire, c'est une lecture**
 
@@ -4737,10 +4882,15 @@ composant.
 
 - [ ] **Step 5: Vérifier que le projet Firebase est prêt — geste humain**
 
+**`firebase` n'est pas installé globalement, et une commande nue échoue.**
+`firebase-tools@^13.35.1` est une dépendance de développement à la racine, pas
+un binaire du PATH : préfixer par `npx`, qui le trouve dans
+`node_modules/.bin`.
+
 ```bash
-firebase login
-firebase use <projectId>
-firebase projects:list
+npx firebase login
+npx firebase use <projectId>
+npx firebase projects:list
 ```
 
 Trois prérequis, à vérifier dans la console avant d'aller plus loin :
@@ -4755,8 +4905,11 @@ Trois prérequis, à vérifier dans la console avant d'aller plus loin :
 
 - [ ] **Step 6: Poser le secret et les paramètres — geste humain**
 
+Même remarque qu'à l'étape 5 : la CLI n'est pas globale, la commande passe par
+`npx`.
+
 ```bash
-firebase functions:secrets:set SCW_SECRET_KEY
+npx firebase functions:secrets:set SCW_SECRET_KEY
 ```
 
 La commande demande la valeur sur l'entrée standard ; **elle ne se passe pas en
@@ -4782,21 +4935,47 @@ restauration du cache Nx remplace en entier. Une configuration ne se range pas
 dans un répertoire que l'outillage a le droit d'effacer.
 
 La source de déploiement se recopie donc à chaque déploiement, par le
-`predeploy` qui reconstruit déjà la charge utile. Dans `firebase.json` :
+`predeploy` qui reconstruit déjà la charge utile.
+
+**Mesuré à l'essai réel : le hook tel qu'écrit plus haut ne tourne pas.**
+`firebase deploy` a rendu `NX Cannot find project '@beacon\functions'` puis
+`Error: spawn npx nx run @beacon\functions:prune-lockfile ENOENT`. Le
+mécanisme est dans `lib/deploy/lifecycleHooks.js` de `firebase-tools` : chaque
+commande de `predeploy` est relancée à travers `cross-env-shell`, et quelque
+part sur ce chemin la barre oblique de `@beacon/functions` devient une
+contre-oblique, et les guillemets internes à la commande ne survivent pas. Une
+commande sans barre oblique passe (`npx nx report`, essayé pour contrôle) ; la
+même avec la barre oblique échoue toujours, qu'elle soit nue ou enveloppée
+dans un `node -e`. **L'idiome `node -e` des étapes 8 et 11 reste correct là où
+il est écrit — un humain le tape dans son propre shell — mais il ne survit pas
+à ce hook précis** : les guillemets qu'il porte sont exactement ce que le hook
+avale.
+
+Le remède est de ne rien laisser de fragile dans la chaîne que ce hook
+retransmet : la barre oblique et les guillemets vivent dans un script npm
+racine, dont le hook n'invoque que le nom, sans slash ni guillemet.
+
+`package.json`, à la racine :
 
 ```json
-"predeploy": [
-  "npx nx run @beacon/functions:prune-lockfile",
-  "node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
-]
+"scripts": {
+  "predeploy:functions": "nx run @beacon/functions:prune-lockfile && node -e \"require('fs').copyFileSync('apps/functions/.env','apps/functions/dist/.env')\""
+}
 ```
 
-**Une recopie en `node -e` et non en `cp`, et ce n'est pas un maniérisme :**
-Firebase lance ses hooks dans le shell de la plateforme — `cmd.exe` sous
-Windows, où `cp` n'existe pas — et non dans celui que supposent les blocs
-`bash` du reste de ce plan. Node est déjà un prérequis du déploiement, donc
-cette forme n'ajoute rien à installer, et son jeu de guillemets tient dans
-`cmd.exe` comme dans un shell POSIX.
+Le nom évite délibérément `predeploy` seul : ce mot est un hook de cycle de
+vie npm, lancé automatiquement avant tout script `deploy` — un piège pour plus
+tard, pas un problème aujourd'hui, mais aucune raison de le poser quand même.
+
+`firebase.json` :
+
+```json
+"predeploy": ["npm run predeploy:functions"]
+```
+
+Reproduit et vérifié par un harnais qui imite `runCommand` de `firebase-tools`
+(sans jamais appeler `firebase deploy`) : cette forme rend un code de sortie 0
+et exécute réellement les deux étapes.
 
 L'ordre compte : la recopie suit le build, sans quoi elle écrit dans un
 répertoire que le build va reconstruire. Écarté au passage : donner un défaut à
@@ -4819,12 +4998,21 @@ Vérifier avant de continuer que `git status` ne propose pas `apps/functions/.en
 - [ ] **Step 7: Déployer les règles, puis les Functions — geste humain**
 
 Les règles d'abord, et seules. Elles ferment la base ; les poser après les
-Functions laisserait une fenêtre où la base existe sans être fermée.
+Functions laisserait une fenêtre où la base existe sans être fermée. Même
+remarque qu'aux étapes 5 et 6, `firebase` passe par `npx`.
 
 ```bash
 npx nx test @beacon/rules
-firebase deploy --only firestore:rules,firestore:indexes
+npx firebase deploy --only firestore:rules,firestore:indexes
 ```
+
+**`npm exec firebase deploy --only …` n'est pas un substitut acceptable à
+`npx firebase deploy --only …`.** npm avale `--only` comme sa propre option de
+configuration — `npm warn invalid config only=…` — et ne la transmet jamais à
+`firebase` : le déploiement part sans filtre et déploie tout, exactement ce
+que cette étape existe pour empêcher en posant les règles seules avant les
+Functions. `npx` transmet la ligne de commande telle quelle ; `npm exec` ne le
+fait pas dès qu'un nom d'option coïncide avec une option npm.
 
 La suite de refus est la barrière du §10 : **si elle n'est pas verte, on ne
 déploie pas.**
@@ -4833,7 +5021,7 @@ Puis les Functions. Le `predeploy` de `firebase.json` reconstruit la charge
 utile ; il n'y a pas à lancer le build à la main.
 
 ```bash
-firebase deploy --only functions
+npx firebase deploy --only functions
 ```
 
 Attendu : une seule Function, `watchdog`, en `europe-west1`, runtime
@@ -4864,9 +5052,37 @@ son absence de départ. Un job mal créé ou jamais exécuté ne déclencherait 
 et personne ne le saurait.
 
 ```bash
-gcloud scheduler jobs list --project <projectId> --location europe-west1
-gcloud scheduler jobs run <jobName> --project <projectId> --location europe-west1
+mise exec python -- gcloud scheduler jobs list --project <projectId> --location europe-west1
+mise exec python -- gcloud scheduler jobs run <jobName> --project <projectId> --location europe-west1
 ```
+
+**Mesuré sur le poste de l'administrateur : `gcloud` ne démarre pas tel quel.**
+Le SDK résout son interpréteur Python sur `PATH` et échoue avant même de lire
+ses arguments — `Python est introuvable`. L'outillage de ce poste est géré par
+mise, qui a `python 3.14.7` installé mais pas activé globalement : le `PATH`
+que `gcloud` regarde ne le voit jamais. Préfixer l'appel par `mise exec python
+--`, comme ci-dessus, le fait voir. Poser `CLOUDSDK_PYTHON` sur l'interpréteur
+de mise atteint le même résultat, mais se répète à chaque invocation là où
+`mise exec` se pose une fois sur la ligne.
+
+**Ni cette étape ni la 11 n'ont réellement besoin de `gcloud`.** La console
+Firebase répond aux deux : le navigateur de données Firestore pour
+`health/watchdog`, l'onglet *TTL* de Firestore pour `expiresAt` sur le groupe
+de collections `events`. Un lecteur bloqué par un SDK qui ne démarre pas n'a
+donc pas à le réparer d'abord — il a un chemin plus court sous la main.
+
+C'est le **quatrième** défaut de la même famille que cette tranche rencontre :
+une commande qu'un humain doit taper et qui ne tourne pas là où il la tape,
+après un `cp` dans un hook de predeploy, un préfixe POSIX `VAR=valeur` sous
+PowerShell, et un `firebase` nu supposant une CLI globale. Une commande qu'un
+humain tape fait partie du livrable, et se vérifie comme le reste — elle ne se
+suppose pas.
+
+Un **cinquième** suit à l'étape 10, sur l'alerte elle-même, et il diffère des
+quatre précédents d'une façon qui mérite d'être dite : eux ont échoué
+bruyamment, celui-là aurait échoué en silence — une commande qui ne tourne pas
+le dit tout de suite, une alerte qui ne peut jamais se déclencher ne dit rien,
+et on l'apprend quand ce qu'elle surveillait est cassé depuis longtemps.
 
 Puis, dans la console Firestore, vérifier que `health/watchdog.lastRunAt` porte
 un instant des dernières minutes. **Tant que ce champ n'existe pas, le watchdog
@@ -4884,16 +5100,59 @@ faut s'arrêter là.
 
 - [ ] **Step 10: Poser l'alerte de panne — geste humain**
 
+La prescription initiale de cette étape s'est révélée fausse deux fois, et la
+seconde est la dangereuse. **La métrique `cloudscheduler.googleapis.com/job/attempt_count`
+n'existe pas** — interrogée sur le projet réel via l'API Monitoring, elle ne
+porte aucun descripteur, là où `cloudfunctions.googleapis.com/function/execution_count`
+et `run.googleapis.com/request_count` en portent un chacun.
+
+Plus grave : **une condition d'absence ne s'y serait jamais déclenchée.**
+Mesuré sur la série réelle d'`execution_count`, `function_name="watchdog"`, un
+point brut arrive chaque minute, valant zéro quand rien n'a tourné :
+
+```
+15:02 -> 15:03 = 0
+15:01 -> 15:02 = 0
+14:58 -> 14:59 = 1     <- exécution
+14:57 -> 14:58 = 0
+14:53 -> 14:54 = 1     <- exécution
+```
+
+La métrique n'est donc jamais *absente* — elle est *nulle*. Une condition
+d'absence resterait posée sans jamais se déclencher : configurée en apparence,
+inerte en réalité, la même forme qu'un test vert qui ne prouve rien — le
+défaut que cette tranche rencontre déjà par ailleurs.
+
+`run.googleapis.com/request_count` a été envisagée et écartée : elle compte
+les requêtes HTTP reçues par le service Cloud Run du watchdog, y compris
+celles que l'IAM rejette. Le service a `ingress: all` et une URL publique —
+l'invocation est bien restreinte par IAM au compte de service du
+planificateur, ce n'est donc pas une faille — mais n'importe qui atteignant
+cette URL maintiendrait `request_count` en vie pendant que le watchdog ne
+tourne plus, masquant précisément la panne que l'alerte existe pour détecter.
+
 Dans Cloud Monitoring, *Alerting → Create policy* :
 
-- métrique : `cloudscheduler.googleapis.com/job/attempt_count`, filtrée sur le
-  job du watchdog ;
-- condition : **absence de métrique**, fenêtre **1 heure** — douze exécutions
-  attendues dans l'intervalle, donc une seule manquée ne réveille personne ;
+- métrique : `cloudfunctions.googleapis.com/function/execution_count` ;
+- filtre : `resource.labels.function_name = "watchdog"` et
+  `metric.labels.status = "ok"` ;
+- agrégation : somme, fenêtre d'alignement **1 heure** ;
+- condition : **seuil**, inférieur à 1 — jamais une absence ;
+- données manquantes : traitées comme une violation, ce qui couvre le cas où
+  la série disparaîtrait réellement ;
 - canal de notification : l'adresse de l'administrateur.
 
-Les politiques d'alerte et les canaux e-mail ne sont pas facturés, et cette
-métrique est gratuite — mesuré en tranche 0.
+Le filtre `status = "ok"` n'est pas un détail. Sans lui, un watchdog qui
+démarre et s'effondre à chaque passage continuerait d'incrémenter
+`execution_count` sans que l'alerte ne le voie jamais. Avec lui, l'alerte dit
+« le watchdog n'a terminé aucun passage avec succès en une heure » — douze
+exécutions attendues dans l'intervalle, donc une seule manquée ne réveille
+personne, ce qui était l'intention initiale et reste vrai.
+
+Les politiques d'alerte et les canaux e-mail ne sont pas facturés — mesuré en
+tranche 0 — et la gratuité vaut pour toute métrique Google Cloud de premier
+niveau, `execution_count` compris ; seul le nom de la métrique prescrite était
+faux, pas le postulat de gratuité.
 
 **Cette alerte est pour l'administrateur, jamais pour l'interface.** Un bandeau
 « le surveillant ne répond plus » sur l'écran des joueurs serait exactement la
@@ -4905,8 +5164,12 @@ Sur une seule ligne : la continuation par `\` est une forme POSIX, que
 PowerShell et `cmd.exe` coupent en deux commandes incomplètes.
 
 ```
-gcloud firestore fields ttls update expiresAt --collection-group=events --enable-ttl --project <projectId>
+mise exec python -- gcloud firestore fields ttls update expiresAt --collection-group=events --enable-ttl --project <projectId>
 ```
+
+Même défaut qu'à l'étape 9, même remède ; voir son paragraphe pour le
+mécanisme. L'alternative sans `gcloud` du tout est ici l'onglet *TTL* de la
+console Firestore, sur le groupe de collections `events`.
 
 Le §5 donne 400 jours à `events`, et c'est le champ `expiresAt` écrit par
 `session-record` qui les porte. La valeur n'est pas arbitraire : `events` est ce

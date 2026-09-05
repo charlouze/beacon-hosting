@@ -7,7 +7,7 @@
     {
       "source": "apps/functions/dist",
       "codebase": "default",
-      "predeploy": ["npx nx run @beacon/functions:prune-lockfile"]
+      "predeploy": ["npm run predeploy:functions"]
     }
   ],
   "emulators": {

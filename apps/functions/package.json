@@ -55,6 +55,12 @@
           "command": "firebase emulators:exec --project demo-beacon --only firestore \"npx vitest run --config apps/functions/vitest.config.mts\""
         }
       },
+      "seed": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx apps/functions/src/seed.ts"
+        }
+      },
       "prune-lockfile": {
         "dependsOn": [
           "build"

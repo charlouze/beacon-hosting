@@ -17,9 +17,20 @@
     "@scaleway/sdk": "^4.0.8",
     "@scaleway/sdk-client": "^2.7.0"
   },
+  "devDependencies": {
+    "dotenv": "^16.6.1"
+  },
   "nx": {
     "tags": [
       "scope:adapter"
-    ]
+    ],
+    "targets": {
+      "test-contract": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx vitest run --config libs/scaleway-compute/vitest.contract.config.mts"
+        }
+      }
+    }
   }
 }
