@@ -248,6 +248,13 @@ entre deux assertions, et l'échec se lirait « la tâche 6 dit faux » alors qu
 
 ---
 
+**Le spec a été corrigé après l'exécution de cette tranche** : `ResourceStranded`
+n'est plus écrit qu'à l'apparition d'un volume orphelin, et `health/watchdog`
+porte ce qui est orphelin maintenant. Le texte de spec cité dans les tâches
+ci-dessous et les blocs de code qu'elles montrent sont l'état d'avant cette
+correction — ils disent ce qui a été exécuté, pas ce qui fait autorité. Le spec
+fait autorité.
+
 ### Task 1: Les documents remis droits avant qu'on code contre eux
 
 > **Cette tâche modifie le spec. `CLAUDE.md` l'impose sans exception : invoquer
@@ -4872,12 +4879,16 @@ découvre en l'exécutant.
 - **L'ordre des lectures du watchdog devient une dépendance réelle.** Tant que
   rien ne crée, lire les intentions après l'inventaire ne protège de rien ; dès
   `open()`, c'est ce qui empêche de détruire une machine née entre deux
-  requêtes. Le test qui le fixe existe déjà (tâche 9) : ne pas le « simplifier »
-  en remettant les trois lectures dans un `Promise.all`.
-- **Le volume orphelin est signalé, jamais montré.** `ResourceStranded` part
-  dans `events` et personne ne le lit : il faudra décider s'il mérite une ligne
-  dans un écran d'administration, ou une alerte. Le §6 tranche le geste — ne pas
-  détruire — pas la façon de le porter à la connaissance de quelqu'un.
+  requêtes. Le test qui le fixe existe déjà (tâche 9) : l'invariant est que **les
+  intentions se lisent après l'inventaire, jamais à côté** — ne pas le
+  « simplifier » en versant cette lecture dans le `Promise.all` qui rassemble
+  les autres, quel que soit le nombre qu'elles seront devenues.
+- **Le volume orphelin est signalé une fois, jamais montré.**
+  `ResourceStranded` date son apparition dans `events` ; ce qui est orphelin
+  maintenant se lit dans `health/watchdog.stranded`, et c'est de là qu'un écran
+  d'administration devra le tirer — pas d'une requête sur le journal (§5, §6).
+  Reste à décider s'il mérite un écran, ou une alerte. Le §6 tranche le geste —
+  ne pas détruire — pas la façon de le porter à la connaissance de quelqu'un.
 - **Le chemin « volume orphelin » n'est pas éprouvé en vivo.** Le test de
   contrat de la tâche 11 couvre les deux façons de mourir, pas le signalement :
   il faudrait détacher un volume pour de bon, donc une heure facturée de plus.
