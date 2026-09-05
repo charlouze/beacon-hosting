@@ -41,6 +41,23 @@ propre, le DNS n'a pas bougé.
 
 L'arborescence du monorepo et le rôle de chaque `libs/*` sont au §4 du spec.
 
+## Outillage
+
+`mise.toml`, à la racine, pin Node, Java et Python — chacun pour une raison qui
+lui est propre, pas par principe. **Node 22** parce que c'est ce que la CI
+valide et ce que `apps/functions` déclare comme runtime (`package.json`,
+`engines`) : tester sur un autre majeur rend un vert local qui ne prouve ni ce
+que la CI validera, ni ce que la production exécute. **Temurin 21** parce que
+c'est ce que le workflow de CI pin, et que trois cibles `test` lancent
+`firebase emulators:exec` — l'émulateur Firestore tourne sur la JVM, et sans
+version fixée il prend celle que la machine a sous la main. **Python**, sans
+contrepartie côté CI ni production, pin à la version installée sur ce poste
+parce que `gcloud` résout son interprète depuis le `PATH` et que les gestes de
+lecture du plan de contrôle en dépendent.
+
+Le sens de l'alignement compte : c'est le poste qui se cale sur la CI et la
+prod, jamais l'inverse.
+
 ## Tests
 
 **Vitest** pour tout l'unitaire. Le gros de l'effort porte sur `libs/session`,
