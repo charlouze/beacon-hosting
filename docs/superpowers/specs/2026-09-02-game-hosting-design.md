@@ -49,11 +49,11 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Langue | Code et interface en anglais ; spec et documentation en français | L'expert du domaine lit lui-même le TypeScript, donc il n'y a pas de fossé de traduction à combler. Le glossaire de §4 fait le pont, et tout terme visible dans l'interface doit y figurer. |
 | Stockage des saves | Scaleway Object Storage, `fr-par` | Français, même région que l'instance, donc transferts internes. C'est cette justification qui l'a fait suivre l'instance : laissé chez OVH, il devenait un transfert entre fournisseurs. Du S3 dans les deux cas, l'adapter ne change que d'endpoint. |
 | Fichiers du serveur | **Selon le jeu.** Enshrouded : téléchargés par SteamCMD à chaque démarrage. Sunkenland : déposés une fois dans le stockage objet, restaurés comme une sauvegarde | Le téléchargement à chaud évite ~8 Go de stockage permanent, et reste le bon choix tant que SteamCMD se connecte anonymement. **Le serveur dédié de Sunkenland exige un compte qui possède le jeu** — mesuré, `Missing configuration` en anonyme, et le manuel de l'éditeur le disait avant nous. Le télécharger à chaud imposerait un secret Steam sur la VM, que le §7 tient pour l'élément le moins fiable du système. Ses 2,3 Go passent donc par le seau, même région, par le chemin que `SaveStore` construit déjà. Une image privée sur un registre a été écartée sur le coût : 0,50 $/Go de transfert sortant chez GitHub, soit ~10 $/mois pour huit soirées — davantage que le serveur dédié qu'on remplace. |
-| Amorçage d'un monde Sunkenland | Créé dans le client par un joueur, déposé une fois dans le seau par un administrateur, hors interface | Le serveur dédié **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à cet instant et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. C'est le même geste hors interface que la restauration d'une ancienne sauvegarde (§13). |
+| Amorçage d'un monde Sunkenland | Créé dans le client par un joueur, déposé une fois dans le seau par un administrateur, hors interface | Le serveur dédié **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à cet instant et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. C'est le même geste hors interface que la restauration d'une ancienne sauvegarde (§13). Le client écrit ses mondes dans `SteamCloudData/<steamID64>/Worlds` et le serveur les lit dans `Worlds` : `-steamID` réconcilierait les deux, **et n'est délibérément pas utilisé** — voir §12. Le dépôt est donc une copie vers `saves/<jeu>/`, jamais un dossier réarrangé. |
 | Dépôt des fichiers de jeu | Une commande d'administration, `tools/game-depot`, à trois gestes : `push`, `pull`, `purge` | Le dépôt, le rafraîchissement et la purge sont le même besoin vu à trois moments ; en faire trois scripts aurait multiplié les endroits où l'on peut se tromper de préfixe. **Elle ne connaît pas le préfixe des sauvegardes** — pas par prudence, par construction : la seule protection qui tienne contre l'effacement du seul actif irremplaçable du système est de ne pas lui donner l'adresse. La purge ne se justifie pas par l'économie, trois centimes par mois ; elle existe parce qu'un dépôt qu'on ne sait pas vider finit par être vidé à la main, dans une console, un soir. |
-| Mise à jour du jeu Sunkenland | `tools/game-depot push`, lancée à la main par un administrateur. **La dérive est acceptée en v1** | Rafraîchir le dépôt demande le compte Steam, qui ne réside que sur la machine de l'administrateur (§7) ; l'automatiser reviendrait à le confier à un runner ou à une VM. Les clients se mettent à jour seuls, le dépôt non, et le décalage se découvre en tentant de rejoindre — le coût direct est une heure facturée et un quart d'heure de rafraîchissement. Ce qu'on accepte réellement n'est pas là : c'est que la corvée ne peut être faite que par qui détient le compte, ce qui rouvre une dépendance à l'administrateur que le produit refuse partout ailleurs. Assumé pour une v1, à rouvrir si ça mord. |
-| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com`. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. |
-| Conteneur du jeu | Enshrouded : `mornedhels/enshrouded-server`, telle quelle. Sunkenland : `melle2/sunkenland-ds`, **mais son script de démarrage ne suffit pas** | La première gère déjà SteamCMD, Wine, supervisord, l'auto-update et des backups avec rotation ; la forker nous priverait des mises à jour amont pour un bénéfice nul. La seconde apporte Wine, Xvfb et SteamCMD, mais son script ignore les options dont Beacon a besoin — `-autoSaveIntervalInSeconds`, `-adminSteamIDs` — et son `+login anonymous` ne peut pas fonctionner pour cette app. **La forme reste à trancher** : contribution en amont, ou image mince à nous portant le seul script. Question ouverte du §12. |
+| Mise à jour du jeu Sunkenland | `tools/game-depot push`, lancée à la main par un administrateur. **La dérive est acceptée en v1** | Rafraîchir le dépôt demande le compte Steam, qui ne réside que sur la machine de l'administrateur (§7) ; l'automatiser reviendrait à le confier à un runner ou à une VM. Les clients se mettent à jour seuls, le dépôt non, et le décalage se découvre en tentant de rejoindre — le coût direct est une heure facturée et **une minute de rafraîchissement**, chronométré le 2026-09-05 : 2,3 Go déposés en 64 s depuis la machine de l'administrateur. Ce qu'on accepte réellement n'est pas là : c'est que la corvée ne peut être faite que par qui détient le compte, ce qui rouvre une dépendance à l'administrateur que le produit refuse partout ailleurs. Assumé pour une v1, à rouvrir si ça mord. |
+| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com`. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur ou la liste — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. **Mesuré le 2026-09-05 et non plus déduit** : derrière le NAT de Scaleway, sans `-publicip` ni `-publicport`, un joueur trouve le serveur dans la liste et y entre. La découverte passe par Photon, le transport par de l'UDP direct. Ce jeu a donc besoin d'une IP publique, **pas d'une IP stable**. |
+| Conteneur du jeu | Enshrouded : `mornedhels/enshrouded-server`, telle quelle. Sunkenland : `melle2/sunkenland-ds`, **mais son script de démarrage ne suffit pas** | La première gère déjà SteamCMD, Wine, supervisord, l'auto-update et des backups avec rotation ; la forker nous priverait des mises à jour amont pour un bénéfice nul. La seconde apporte Wine, Xvfb et SteamCMD, mais son script ignore les options dont Beacon a besoin — `-autoSaveIntervalInSeconds`, `-adminSteamIDs` — et son `+login anonymous` ne peut pas fonctionner pour cette app. **Notre script est monté dans l'image, pas construit dedans** — mesuré le 2026-09-05, en local puis sur une VM. Ni fork ni image maison n'ont donc à exister : l'image reste consommée à son digest et son point d'entrée est remplacé par un fichier. Deux contraintes qu'elle impose et qu'il faut respecter : le serveur tourne en **uid 7000**, donc le dossier des mondes restauré doit lui appartenir, faute de quoi l'autosave n'écrit rien sans rien dire ; et son `trap` doit être repris, un `exec` en PID 1 ne recevant jamais `SIGTERM`. |
 | Cadence de sauvegarde Sunkenland | `-autoSaveIntervalInSeconds 300` | **Rien ne permet à Beacon de provoquer une sauvegarde** : ni l'arrêt du conteneur, ni un `WM_CLOSE` poli, ni la déconnexion du dernier joueur. Mesuré six fois. Le seul levier est la cadence, et elle est réglable par une option que le manuel de l'éditeur ne mentionne pas. À 300 s, on perd au plus cinq minutes de jeu, ce que le §3 accepte déjà pour un crash. Le jeu ne garde que dix instantanés glissants, donc l'intervalle fixe aussi la profondeur d'historique sur la machine — 50 minutes ici ; la profondeur réelle vit dans le stockage objet. |
 | Rôle d'administrateur dans le jeu | **Tous les membres**, via `-adminSteamIDs` | Le SteamID est demandé au membre à son premier passage dans l'app et rangé dans son profil. « La ressource est commune » : donner le rôle à tous suit le même principe que « n'importe qui démarre, prolonge et arrête ». Un admin du jeu peut déclencher une sauvegarde depuis la console, ce qui rend le pire cas meilleur que les 300 s pour qui y pense. Contrepartie assumée : il peut aussi exclure un autre joueur, ce qui est la seule autorité d'un membre sur un autre dans tout le système. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
@@ -308,9 +308,10 @@ firestore.indexes.json
 ```
 
 Aucune image de serveur de jeu n'est construite : `mornedhels/enshrouded-server`
-et `melle2/sunkenland-ds` sont consommées telles quelles — sous réserve, pour la
-seconde, de la question ouverte du §12 sur son script de démarrage. La seule
-image maison est le compagnon, qui reste minimal.
+et `melle2/sunkenland-ds` sont consommées telles quelles, la seconde avec son
+point d'entrée remplacé par un script **monté** — mesuré le 2026-09-05, et c'est
+ce qui évite de lui devoir un fork ou une image de plus (§2). La seule image
+maison est le compagnon, qui reste minimal.
 
 **`libs/session` ne connaît des jeux que leur identifiant.** Le catalogue
 `deploy/cloud-init/games/` est le seul endroit du dépôt qui sait qu'un serveur
@@ -1578,6 +1579,29 @@ relevés sur un tarif publié. À reprendre sur la facture du mois, avec l'egres
 objet et le prix du stockage — et avec la ligne IPv4, dont le montant observé
 sur une soirée dépasse ce que 0,005 €/h expliquerait.
 
+**L'egress objet a désormais son expérience**, en attente de sa facture : le
+2026-09-05, une VM de `fr-par-1` a tiré 2,3 Go du seau `fr-par` en 16 s. C'est ce
+volume-là que la consommation du mois doit confirmer ou démentir (§12). À retenir
+d'ores et déjà pour le dimensionnement : **restaurer les fichiers de jeu ne pèse
+rien dans le démarrage** — 16 s sur les cinq minutes que met une session
+Sunkenland à devenir jouable, le jeu mettant dix fois plus à booter que son
+propre transfert.
+
+Le tarif public annonce l'intra-régional gratuit, **sans plafond**, et réserve
+les 75 Go mensuels offerts — puis 0,01 €/Go — au trafic *sortant de Scaleway*.
+Si la facture le confirme, deux conséquences pour ce tableau. La restauration
+d'une session ne coûte rien **quel que soit son volume**, ce qui retire tout
+enjeu de coût au choix « télécharger à chaud ou restaurer depuis le seau » et
+laisse ce choix se décider sur le seul argument du §2, le secret Steam. Et le
+quota de 75 Go ne protège que ce qu'un administrateur tire du seau vers sa propre
+machine — huit soirées de restauration valant ~18 Go s'il fallait les compter,
+elles ne s'en approcheraient de toute façon pas.
+
+**Sunkenland n'a pas besoin d'une IP flexible réservée**, mesuré le 2026-09-05 :
+il se rejoint derrière le NAT sans annoncer d'adresse. La ligne IPv4 du tableau
+reste due — la machine doit être joignable en UDP entrant — mais elle n'a pas à
+survivre entre deux sessions pour ce jeu, et aucun sous-domaine ne la suit.
+
 L'UI affiche le coût estimé de la session en cours et le cumul du mois, calculés
 à partir des heures écoulées et du `tariffPerHour` du gabarit lu dans
 `config/settings`. Le cumul se totalise par requête sur `events`, dont le TTL
@@ -1598,10 +1622,11 @@ d'événements pour n'en garder qu'une poignée.
 
 ## 12. Ce qui est vérifié, et ce qui reste ouvert
 
-La tranche 0 mesure les questions de la conception une par une. Le détail des
-commandes et des observations est dans
-[`probe/RESULTS.md`](../../../probe/RESULTS.md) ; ci-dessous les réponses et ce
-qu'elles ont changé.
+La tranche 0 mesure les questions de la conception une par une, et la tranche
+1 bis celles que l'arrivée du second jeu a ouvertes. Le détail des commandes et
+des observations est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md) —
+sections R à C pour la première, section V pour la seconde ; ci-dessous les
+réponses et ce qu'elles ont changé.
 
 ### Vérifié
 
@@ -1622,6 +1647,10 @@ qu'elles ont changé.
 | Deux vCPU auraient-ils suffi ? | **Non.** Le serveur brûle 2,6 cœurs sur 4 **sans personne connecté** : Enshrouded simule son monde en permanence et Wine s'ajoute. Le doute du §2 est tranché sans avoir eu besoin de quatre joueurs, et par la négative. |
 | Une sauvegarde se restaure-t-elle sur une machine neuve ? | **Oui**, vérifié de bout en bout : archive rapatriée, instance détruite, instance vierge, fichiers déposés — l'autel de flamme de la session précédente est là, et un monde généré à neuf ne contient aucune structure de joueur. Le gate de la tranche 3 ne repose plus sur un pari. |
 | Ports UDP du serveur Enshrouded | **Un seul, `15637`.** `15636` n'est jamais lié par l'image. Le spec en supposait deux. |
+| Qui porte le script de démarrage de Sunkenland ? | **Un fichier monté dans l'image amont suffit**, mesuré le 2026-09-05 en local puis sur une VM. L'image est consommée à son digest, notre script remplace son point d'entrée — ni fork chez `melle2`, ni image mince à nous, ni registre, ni artefact de plus à maintenir. Deux contraintes que l'image impose et qui ne se déduisaient pas : le serveur tourne en **uid 7000**, donc le dossier des mondes restauré doit lui appartenir, sans quoi l'autosave n'écrit rien et la panne est muette ; et l'arrêt propre passe par le `trap` amont, un `exec` en PID 1 ne recevant jamais `SIGTERM`. |
+| `-publicip`, `-publicport` et `-port` sont-ils nécessaires ? | **Non, aucun des trois.** Mesuré le 2026-09-05 sur une `DEV1-L` derrière le NAT de Scaleway : le serveur n'annonce aucune adresse — `CustomPublicAddress` vide —, le joueur le trouve par la liste et **entre**. Découverte par Photon, transport en UDP direct sur `27015`, que le groupe de sécurité par défaut laisse passer sans qu'on pose de règle. Ce jeu n'a donc besoin ni d'IP flottante ni de `DnsUpdater` : une IP publique, oui, **stable, non**. |
+| `-steamID` réconcilie-t-il la disposition de dossiers du client ? | **Oui**, et il est **écarté quand même**. Mesuré le 2026-09-05 : avec l'option, le serveur lit le monde dans `SteamCloudData/<steamID64>/Worlds` au lieu de `Worlds`. Décision du commanditaire le même jour : indexer le monde *du serveur* sous le compte d'un *joueur* accrocherait la disposition du seau à une personne qui peut quitter le groupe. Le serveur n'a pas de compte Steam — c'est ce que dit sa `NullReferenceException` sur `IsSteamCloudReady` — et lui en prêter un serait une fiction. Le refus ne coûte rien : l'amorçage reste une copie, vers `Worlds/` au lieu d'en place. |
+| La cadence de sauvegarde tient-elle à 300 s, la valeur retenue ? | **Oui, sur quatre intervalles pleins** — 20:00:23, 20:05:23, 20:10:23, 20:15:23 le 2026-09-05, à la seconde. Une cinquième sauvegarde à 20:18:08, déclenchée depuis la console du jeu, **prouve au passage que `-adminSteamIDs` donne réellement les droits d'admin** : preuve par l'effet, là où la ligne `FromBatScript` que la section J cherchait ne s'imprime pas dans cette version. |
 | Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
 
 ### Encore ouvert
@@ -1631,31 +1660,25 @@ d'équivalent dans la conception. Aucune ne se devine : la leçon de la question
 tag est qu'un fournisseur ne fait pas ce qu'on suppose.
 
 - **Le trafic Object Storage vers une instance de la même région est-il
-  facturé**, et à quel prix les 2-3 Go de saves — désormais 4 à 5 Go avec les
-  fichiers de Sunkenland ?
+  facturé** ? **La documentation dit non, la facture n'a pas encore confirmé.**
+  Le tarif public annonce l'intra-régional `PAR ↔ PAR` *free of charge*, sans
+  plafond, et réserve les 75 Go gratuits mensuels — puis 0,01 €/Go — au trafic
+  **sortant de Scaleway**. Notre restauration est intra-régionale : elle ne
+  toucherait donc pas ce quota. L'expérience est faite — le 2026-09-05 à
+  19:51 UTC une VM de `fr-par-1` a tiré 2,3 Go du seau `fr-par` en 16 s, et le
+  compteur `rx_bytes` de son interface rend 4 050 602 394 octets entrants sur
+  toute sa vie, paquets `apt` compris. **Reste à lire la consommation**, deux
+  jours plus tard : c'est précisément parce qu'un fournisseur ne fait pas
+  toujours ce que sa documentation annonce que cette ligne n'est pas encore dans
+  le tableau du dessus — la question du tag OVH est née de la même confiance.
 - **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
-  tout gabarit à 2 vCPU — mais elle affinera le dimensionnement.
+  tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,
+  Sunkenland tient sur un cœur des quatre et 5,3 Gio.
 
-Les suivantes viennent de l'arrivée du second jeu. La sonde qui les a produites
-est la section J de `probe/RESULTS.md` ; ce qui suit est ce qu'elle n'a **pas**
-tranché.
+Reste, de l'arrivée du second jeu, la seule question que la tranche 1 bis n'a
+pas mesurée — les quatre autres sont passées au tableau ci-dessus.
 
-- **Qui porte le script de démarrage de Sunkenland ?** L'image amont ignore
-  `-autoSaveIntervalInSeconds` et `-adminSteamIDs`, et son `+login anonymous` ne
-  peut pas fonctionner. Deux formes : une contribution chez `melle2`, ou une
-  image mince à nous ne portant que le script. La première ne coûte rien à
-  maintenir mais dépend d'une acceptation ; la seconde est immédiate mais nous
-  rend responsables d'un artefact de plus.
-- **`-publicip`, `-publicport` et `-port` n'ont pas été testés.** Ils décident si
-  l'IP flottante et le `DnsUpdater` servent à quelque chose pour ce jeu, donc une
-  ligne du §11 et une branche de l'adapter. À mesurer sur une VM, pas en local :
-  la question n'a de sens que derrière un vrai NAT.
-- **`-steamID` n'a pas été testé.** Il devrait permettre au serveur de lire la
-  disposition de dossiers du client, ce qui simplifierait l'amorçage d'un monde.
-- **La cadence de 300 s n'a été vérifiée qu'à 60 s.** L'option est acceptée et la
-  cadence tenue à cette valeur ; rien ne dit qu'il n'existe pas une borne plus
-  haut.
 - **Un décalage de version empêche-t-il réellement de rejoindre ?** C'est déduit
   de la sémantique de Photon, qui cloisonne le matchmaking par `AppVersion`, et
   non mesuré. Le §2 accepte la dérive en s'appuyant dessus ; si la déduction est
