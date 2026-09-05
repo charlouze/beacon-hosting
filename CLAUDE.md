@@ -1,10 +1,15 @@
 # Beacon
 
-Serveur Enshrouded à la demande, pour trois ou quatre amis. Le serveur n'existe
+Serveurs de jeu à la demande, pour trois ou quatre amis. Le serveur n'existe
 que pendant les sessions de jeu : il naît avec son heure de fin déjà fixée,
 prolongeable d'une heure autant de fois qu'on veut mais seulement dans les
 trente dernières minutes. Ce n'est pas une limite de durée, c'est l'obligation
 qu'un humain éveillé reclique — et c'est tout le produit.
+
+**Aucun jeu n'est nommé ici.** Lesquels sont hébergés est une décision
+d'implémentation, qui vit dans le spec et bouge avec lui — ce fichier a déjà été
+périmé une fois par un changement d'hébergeur et une seconde par l'arrivée d'un
+deuxième jeu. Il ne porte que ce qui reste vrai toute la vie du projet.
 
 App : `beacon.charlouze.com` · serveurs de jeu : `<jeu>.beacon.charlouze.com`
 

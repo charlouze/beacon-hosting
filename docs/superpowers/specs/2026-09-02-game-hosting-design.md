@@ -1,8 +1,11 @@
-# Beacon — serveur Enshrouded à la demande
+# Beacon — serveurs de jeu à la demande
 
 Date : 2026-09-02
 Statut : **validé par le commanditaire le 2026-09-03**, après quatre relectures
 d'architecture (DDD et Clean Architecture) dont les corrections sont intégrées.
+**Révisé le 2026-09-05** : Sunkenland rejoint le périmètre, ce que la première
+rédaction excluait. La révision suit la sonde et non l'inverse — les faits qui
+la fondent sont en section J de `probe/RESULTS.md`.
 
 Vérité produit : [`PRODUCT.md`](../../../PRODUCT.md). Ce document fait autorité
 sur l'architecture ; PRODUCT.md fait autorité sur les utilisateurs, le but et
@@ -13,6 +16,11 @@ les contraintes durables.
 Remplacer un serveur Enshrouded dédié facturé 7,90 €/mois en continu par une
 plateforme qui conserve les sauvegardes et crée un serveur dans le cloud
 uniquement pendant les sessions de jeu.
+
+C'est ce serveur-là qui a fait naître le projet, et la référence de 7,90 €/mois
+reste la sienne. La plateforme en héberge désormais deux — Sunkenland a rejoint
+le périmètre le 2026-09-05 — mais un seul à la fois, et l'objectif n'a pas
+changé de nature : c'est toujours le calendrier qu'on refuse de payer.
 
 Objectifs, par ordre de priorité :
 
@@ -28,7 +36,7 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 
 | Décision | Choix | Motif |
 |---|---|---|
-| Périmètre v1 | Enshrouded uniquement | Une frontière propre permettra d'extraire un adapter par jeu plus tard sans le payer aujourd'hui. |
+| Périmètre v1 | **Enshrouded et Sunkenland**, un seul serveur à la fois. Le jeu se choisit à l'ouverture de la session, par n'importe quel membre | **Décision révisée le 2026-09-05**, la première disait « Enshrouded uniquement ». Le commanditaire joue au second et le veut. La frontière que la première rédaction gardait ouverte est donc payée maintenant, et elle coûte moins cher que prévu : `libs/session` n'apprend qu'un identifiant de jeu, tout le technique reste dans l'adapter. Le choix à l'ouverture plutôt qu'en réglage d'admin suit le principe « personne n'est jamais bloqué » — celui qui lance la soirée décide à quoi on joue. |
 | Cycle de vie | Démarrage manuel, échéance explicite | Une échéance supprime le besoin de détecter la présence des joueurs, qui était le composant le plus risqué du système. |
 | Durée de session | 4 h par défaut | Choix du commanditaire. |
 | Prolongation | +1 h, illimitée, seulement dans les 30 dernières minutes | Le garde-fou n'est pas une durée maximale mais l'obligation qu'un humain éveillé reclique : une machine oubliée s'arrête toujours dans l'heure. |
@@ -40,9 +48,14 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Nom du produit | **Beacon** — app sur `beacon.charlouze.com`, serveurs de jeu sur `<jeu>.beacon.charlouze.com` | Un feu qu'on allume pour appeler les autres, éteint après : le nom raconte l'acte social plutôt que la machine. La forme du domaine accueille un deuxième jeu sans rien renommer. |
 | Langue | Code et interface en anglais ; spec et documentation en français | L'expert du domaine lit lui-même le TypeScript, donc il n'y a pas de fossé de traduction à combler. Le glossaire de §4 fait le pont, et tout terme visible dans l'interface doit y figurer. |
 | Stockage des saves | Scaleway Object Storage, `fr-par` | Français, même région que l'instance, donc transferts internes. C'est cette justification qui l'a fait suivre l'instance : laissé chez OVH, il devenait un transfert entre fournisseurs. Du S3 dans les deux cas, l'adapter ne change que d'endpoint. |
-| Fichiers du serveur | Téléchargés par SteamCMD à chaque démarrage | Évite ~8 Go de stockage permanent et tout un chemin de code de cache, pour une durée de démarrage équivalente. Aligné sur la pratique des images communautaires. |
-| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com` | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. |
-| Conteneur du jeu | `mornedhels/enshrouded-server`, utilisée telle quelle | Gère déjà SteamCMD, Wine, supervisord, l'auto-update du jeu et des backups périodiques avec rotation. La forker nous priverait des mises à jour amont pour un bénéfice nul. |
+| Fichiers du serveur | **Selon le jeu.** Enshrouded : téléchargés par SteamCMD à chaque démarrage. Sunkenland : déposés une fois dans le stockage objet, restaurés comme une sauvegarde | Le téléchargement à chaud évite ~8 Go de stockage permanent, et reste le bon choix tant que SteamCMD se connecte anonymement. **Le serveur dédié de Sunkenland exige un compte qui possède le jeu** — mesuré, `Missing configuration` en anonyme, et le manuel de l'éditeur le disait avant nous. Le télécharger à chaud imposerait un secret Steam sur la VM, que le §7 tient pour l'élément le moins fiable du système. Ses 2,3 Go passent donc par le seau, même région, par le chemin que `SaveStore` construit déjà. Une image privée sur un registre a été écartée sur le coût : 0,50 $/Go de transfert sortant chez GitHub, soit ~10 $/mois pour huit soirées — davantage que le serveur dédié qu'on remplace. |
+| Amorçage d'un monde Sunkenland | Créé dans le client par un joueur, déposé une fois dans le seau par un administrateur, hors interface | Le serveur dédié **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à cet instant et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. C'est le même geste hors interface que la restauration d'une ancienne sauvegarde (§13). |
+| Dépôt des fichiers de jeu | Une commande d'administration, `tools/game-depot`, à trois gestes : `push`, `pull`, `purge` | Le dépôt, le rafraîchissement et la purge sont le même besoin vu à trois moments ; en faire trois scripts aurait multiplié les endroits où l'on peut se tromper de préfixe. **Elle ne connaît pas le préfixe des sauvegardes** — pas par prudence, par construction : la seule protection qui tienne contre l'effacement du seul actif irremplaçable du système est de ne pas lui donner l'adresse. La purge ne se justifie pas par l'économie, trois centimes par mois ; elle existe parce qu'un dépôt qu'on ne sait pas vider finit par être vidé à la main, dans une console, un soir. |
+| Mise à jour du jeu Sunkenland | `tools/game-depot push`, lancée à la main par un administrateur. **La dérive est acceptée en v1** | Rafraîchir le dépôt demande le compte Steam, qui ne réside que sur la machine de l'administrateur (§7) ; l'automatiser reviendrait à le confier à un runner ou à une VM. Les clients se mettent à jour seuls, le dépôt non, et le décalage se découvre en tentant de rejoindre — le coût direct est une heure facturée et un quart d'heure de rafraîchissement. Ce qu'on accepte réellement n'est pas là : c'est que la corvée ne peut être faite que par qui détient le compte, ce qui rouvre une dépendance à l'administrateur que le produit refuse partout ailleurs. Assumé pour une v1, à rouvrir si ça mord. |
+| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com`. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. |
+| Conteneur du jeu | Enshrouded : `mornedhels/enshrouded-server`, telle quelle. Sunkenland : `melle2/sunkenland-ds`, **mais son script de démarrage ne suffit pas** | La première gère déjà SteamCMD, Wine, supervisord, l'auto-update et des backups avec rotation ; la forker nous priverait des mises à jour amont pour un bénéfice nul. La seconde apporte Wine, Xvfb et SteamCMD, mais son script ignore les options dont Beacon a besoin — `-autoSaveIntervalInSeconds`, `-adminSteamIDs` — et son `+login anonymous` ne peut pas fonctionner pour cette app. **La forme reste à trancher** : contribution en amont, ou image mince à nous portant le seul script. Question ouverte du §12. |
+| Cadence de sauvegarde Sunkenland | `-autoSaveIntervalInSeconds 300` | **Rien ne permet à Beacon de provoquer une sauvegarde** : ni l'arrêt du conteneur, ni un `WM_CLOSE` poli, ni la déconnexion du dernier joueur. Mesuré six fois. Le seul levier est la cadence, et elle est réglable par une option que le manuel de l'éditeur ne mentionne pas. À 300 s, on perd au plus cinq minutes de jeu, ce que le §3 accepte déjà pour un crash. Le jeu ne garde que dix instantanés glissants, donc l'intervalle fixe aussi la profondeur d'historique sur la machine — 50 minutes ici ; la profondeur réelle vit dans le stockage objet. |
+| Rôle d'administrateur dans le jeu | **Tous les membres**, via `-adminSteamIDs` | Le SteamID est demandé au membre à son premier passage dans l'app et rangé dans son profil. « La ressource est commune » : donner le rôle à tous suit le même principe que « n'importe qui démarre, prolonge et arrête ». Un admin du jeu peut déclencher une sauvegarde depuis la console, ce qui rend le pire cas meilleur que les 300 s pour qui y pense. Contrepartie assumée : il peut aussi exclure un autre joueur, ce qui est la seule autorité d'un membre sur un autre dans tout le système. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
 | Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter à la fois le gabarit retenu et son repli, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
 | Gabarit d'instance | **Libre**, sélecteur réservé à l'admin. `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux) en v1, **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. `DEV1-L` est aussi, au 2026-09-03, le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture réelle a montré et que le catalogue ne dit pas. |
@@ -108,7 +121,9 @@ informations ne se lisent pas au même endroit.
 Enfin, les gammes ARM — les moins chères chez tous les fournisseurs — sont
 **exclues par construction** : le serveur Enshrouded est un binaire Windows
 x86-64 exécuté sous Wine, et l'image amont est `x86_64`. Aucune comparaison
-future n'a besoin de les examiner.
+future n'a besoin de les examiner. Le second jeu n'a pas rouvert la question —
+le serveur dédié de Sunkenland est lui aussi un binaire Windows sous Wine, et
+son image amont force `sSteamCmdForcePlatformType windows`.
 
 L'explication tient au modèle : un tarif horaire élevé plafonné par un forfait
 mensuel avantage ce qui tourne en permanence. **C'est exactement le contraire de
@@ -281,14 +296,28 @@ libs/
   ovh-dns/             adapter DnsUpdater   -> DynHost
 deploy/
   cloud-init/          génère le docker-compose.yml de l'instance
+    games/             catalogue par jeu : image, ports, variables, options de
+                       ligne de commande, chemin des sauvegardes dans le conteneur
   companion/           image compagnon (rclone + curl) -> ghcr.io
+tools/
+  game-depot/          commande d'administration : push, pull, purge des
+                       fichiers de jeu dans le seau. NE CONNAÎT PAS le préfixe
+                       des sauvegardes, et c'est sa principale caractéristique
 firestore.rules        autorisations du front — sécurité seule, testée par ses refus
 firestore.indexes.json
 ```
 
 Aucune image de serveur de jeu n'est construite : `mornedhels/enshrouded-server`
-est consommée telle quelle. La seule image maison est le compagnon, qui reste
-minimal.
+et `melle2/sunkenland-ds` sont consommées telles quelles — sous réserve, pour la
+seconde, de la question ouverte du §12 sur son script de démarrage. La seule
+image maison est le compagnon, qui reste minimal.
+
+**`libs/session` ne connaît des jeux que leur identifiant.** Le catalogue
+`deploy/cloud-init/games/` est le seul endroit du dépôt qui sait qu'un serveur
+Sunkenland écoute en UDP ou que son monde vit dans un dossier `Worlds`. Un numéro
+de port n'a rien à faire dans un modèle qui parle de sessions et d'échéances,
+et c'est la même frontière que celle du gabarit d'instance : le mot du
+fournisseur s'arrête à l'adapter.
 
 ### Le modèle de domaine
 
@@ -304,12 +333,46 @@ générique et emprunté.
 | `Session` | racine | seule porte d'entrée ; expose `extend(clock)`, `requestStop()`, `displayedDeadline(clock)`, `estimatedCost(tariff)` |
 | `Deadline` | objet valeur | immuable ; sait dire `isWithinExtensionWindow(clock)` et produire la suivante |
 | `SessionState` | objet valeur | `Idle`, `Provisioning`, `Running`, `Stopping`, `Failed` et les transitions légales |
+| `Game` | objet valeur | quel jeu la session ouvre : `enshrouded` ou `sunkenland`. **Rien d'autre** — ni image, ni port, ni chemin de sauvegarde |
+| `JoinInfo` | objet valeur | ce que le joueur copie pour rejoindre. Le domaine ne l'interprète jamais ; il sait seulement s'il existe |
 
 `Session` ne voit jamais les champs réservés de `server/current`
 (`instanceId`, `ipId`, `ip`, `provisionClaimedAt`, `lastError`) : ce sont des
 faits d'infrastructure, que seul le watchdog confronte à ce que déclare
 `ServerHost`. La traduction du document vers le modèle est le travail de
 `libs/session-record`, décrit plus bas.
+
+**Le jeu se fige à l'ouverture.** `game` est écrit avec le passage à
+`PROVISIONING` et ne change plus jusqu'à la destruction. C'est un invariant et
+non une commodité : le monde restauré, le conteneur lancé et le point de
+jonction publié en dépendent tous, et il n'existe aucun geste qui puisse changer
+de jeu sans détruire la machine — ce qui est précisément une nouvelle session.
+
+**`JoinInfo` est du vocabulaire de domaine, pas un détail d'infrastructure**, et
+c'est le second jeu qui l'a révélé. Tant qu'il n'y en avait qu'un, « rejoindre »
+s'écrivait `ip` et personne ne voyait la confusion. Les deux jeux ne se
+rejoignent pas de la même façon : Enshrouded par un nom de domaine, une IP brute
+et un port ; Sunkenland par un identifiant de serveur, une région et le nom du
+monde dans la liste — **jamais par une adresse**. Ce qu'ils ont en commun n'est
+pas une adresse, c'est *ce que le joueur copie*, et c'est ce que le glossaire
+doit nommer.
+
+Le domaine n'interprète aucun de ces champs : il les transporte et l'interface
+les affiche. Chaque jeu apporte sa forme, et **ajouter un jeu ajoute une forme**
+— coût honnête, visible, préférable à une liste d'étiquettes et de valeurs qui
+n'aurait fait que déplacer le problème dans l'écran.
+
+Les deux formes partagent une propriété que `PRODUCT.md` exigeait déjà pour
+Enshrouded : **un moyen principal et un recours.** L'IP brute quand le DNS
+tombe ; le nom du monde dans la liste des serveurs quand l'identifiant se perd.
+Ce n'était pas une lubie du commanditaire, c'était la bonne intuition.
+
+**`RUNNING` veut dire « le point de jonction est publié ».** C'est la définition
+qui unifie les deux jeux au lieu de les séparer : pour Enshrouded la Function
+connaît le point de jonction dès que l'IP est réservée, pour Sunkenland l'agent
+seul le découvre et le rapporte. Même règle, deux sources. La définition
+concurrente — « la machine répond » — ferait afficher un serveur en service que
+personne ne peut rejoindre.
 
 **`saves` — module support, pas contexte.** Aucun terme n'y change de sens par
 rapport à `session`, son modèle tient en une ligne de métadonnées, et sa règle
@@ -357,6 +420,9 @@ glossaire est la langue omniprésente :
 | fenêtre de prolongation | `extensionWindow` | les 30 dernières minutes, seul moment où prolonger est possible |
 | gabarit | `InstanceSize` | le calibre de la machine, `DEV1-L` par défaut. Le mot du fournisseur — `flavor` chez OpenStack, *commercial type* chez Scaleway — s'arrête à l'adapter et n'entre pas dans `session` |
 | sauvegarde | `Save` | un état du monde de jeu déposé dans le stockage objet |
+| jeu | `Game` | le jeu qu'une session ouvre, `enshrouded` ou `sunkenland` ; figé à l'ouverture |
+| point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre. Nom de domaine, IP brute et port pour Enshrouded ; identifiant de serveur, région et nom du monde pour Sunkenland |
+| identifiant Steam | `steamId` | le compte Steam d'un membre, demandé à son premier passage dans l'app. Sert à lui donner le rôle d'administrateur **dans le jeu**, à ne pas confondre avec le rôle `admin` de Beacon |
 | membre | `Member` | une personne autorisée, `player` ou `admin` |
 | l'ouvrant | `startedBy` | le membre qui a lancé la session |
 | hors service | `Idle` | aucune machine ; on peut ouvrir une session |
@@ -403,6 +469,19 @@ laisse le gabarit libre. Selon le calibre choisi, ouvrir un serveur crée une
 instance et une IP, ou une instance, une IP **et un volume** ; `session` n'en
 sait rien et n'a pas à le savoir. Le port parle d'un serveur de jeu, l'adapter
 sait combien d'objets cela représente chez le fournisseur.
+
+**C'est aussi ce qui laisse le jeu libre.** `open()` reçoit le jeu et le
+gabarit ; l'adapter va chercher dans `deploy/cloud-init/games/` quelle image
+lancer, quels ports ouvrir et quelles options passer. Le second jeu n'a donc
+rien coûté au port : la frontière était déjà à la bonne place, et c'est le seul
+endroit de cette révision où le spec n'a pas eu à bouger.
+
+**`DnsUpdater` n'est pas appelé pour tous les jeux.** Il ne l'est que si le point
+de jonction porte une adresse — vrai pour Enshrouded, faux pour Sunkenland, où
+il n'y a rien à pointer. Ce n'est pas une branche dans le domaine : `session`
+demande la publication du point de jonction, et c'est l'adapter du jeu qui sait
+si cela passe par un enregistrement A. Un port qu'on n'appelle pas est moins
+coûteux qu'un port qu'on rend optionnel.
 
 **Fermer se dit par le tag, jamais par une liste.** `ServerHost` détruit tout ce
 qui porte `session:{sessionId}`, et c'est l'adapter qui sait descendre aux
@@ -607,16 +686,17 @@ tout le monde sans le savoir.
 
 | Document | Contenu | Écrivain |
 |---|---|---|
-| `server/current` | champs *demandés* : `state`, `sessionId`, `startedBy`, `startedAt`, `deadline` | navigateur (membre) |
+| `server/current` | champs *demandés* : `state`, `sessionId`, `startedBy`, `startedAt`, `deadline`, `game` | navigateur (membre) |
 | `server/current` | `instanceSize` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
-| `server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `provisionClaimedAt`, `lastError` | Functions |
+| `server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `joinInfo`, `provisionClaimedAt`, `lastError` | Functions |
 | `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, puis `instanceId`, `ipId`, `ip`, `closedAt` — l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
 | `config/settings` | champ *réservé* : `rulesVersion` | le déploiement, via l'Admin SDK (§10) |
 | `health/watchdog` | `lastRunAt` — battement de cœur du watchdog | Functions |
 | `members/{uid}` | `email`, `role` : `admin` \| `player` | navigateur (admin) ; jamais par le sujet lui-même |
-| `saves/{id}` | `createdAt`, `objectKey`, `sizeBytes`, `origin` : `auto` \| `manual` \| `pre-shutdown` | Functions |
+| `members/{uid}` | `steamId` | **le sujet lui-même**, et personne d'autre — seule écriture du système qu'un membre fait sur son propre document |
+| `saves/{id}` | `createdAt`, `game`, `objectKey`, `sizeBytes`, `origin` : `auto` \| `manual` \| `pre-shutdown` | Functions |
 | `events/{id}` | événement de domaine : type, `sessionId`, acteur — `uid` **et nom affiché** —, horodatage, et le coût estimé sur le seul `SessionStopped` (§11) | navigateur et Functions, en création seule |
 
 ### Qui a le droit de lire
@@ -639,6 +719,24 @@ n'importe quel compte Google lirait les adresses e-mail de `members`, l'IP d'une
 machine exposée sur Internet et les coûts — sur un produit dont la liste blanche
 est une contrainte produit. Le §9 la teste par ses refus, collection par
 collection.
+
+**Les sauvegardes sont cloisonnées par jeu dans le seau**, et ce n'est pas du
+rangement. Deux jeux qui partageraient un préfixe finiraient par se recouvrir,
+et le §3 fait de la perte d'une sauvegarde le seul échec grave du système. Le
+préfixe se dérive du `game` de la session, jamais d'un nom saisi.
+
+**`steamId` est la seule écriture d'un membre sur son propre document**, et elle
+force une règle que le reste du §5 n'avait pas besoin d'écrire : le sujet peut
+modifier ce champ-là et lui seul. La tentation serait d'ouvrir `members/{uid}`
+en écriture au sujet ; elle lui donnerait `role`, donc l'élévation de privilège
+que le §7 interdit nommément. La restriction champ par champ est mesurée
+(sonde, section R) : `hasOnly(['steamId'])` suffit, et un `{steamId, role}`
+coule l'écriture entière.
+
+Un `steamId` n'est ni secret ni vérifiable — c'est un entier public que
+n'importe qui peut lire sur un profil Steam. Le déclarer n'accorde donc rien :
+la seule conséquence d'un identifiant erroné est de ne pas recevoir le rôle
+d'administrateur dans le jeu. Il n'y a rien à usurper.
 
 `members` est le seul document dont la lecture est plus étroite que
 l'appartenance, et ce qu'on y protège est précis : **les adresses e-mail**. Les
@@ -854,17 +952,37 @@ jamais bloqué ».
    `provisioning/{sessionId}` dès que Scaleway les retourne. L'IP d'abord :
    c'est la Function qui connaît l'adresse, et elle la connaît avant que la
    machine existe.
-6. Au boot, `cloud-init` écrit un `docker-compose.yml` et lance deux conteneurs :
-   `mornedhels/enshrouded-server`, qui télécharge le jeu via SteamCMD et prend sa
-   configuration dans les variables d'environnement, et le compagnon, qui
-   restaure la save depuis Object Storage **avant** que le serveur démarre, puis
-   synchronise vers le bucket les backups produits par l'image amont.
-7. **L'agent sait que le serveur est prêt en l'interrogeant en A2S** sur le port
-   de requête, toutes les 30 s pendant le démarrage. C'est le protocole que le
-   client d'un joueur emploie : il teste ce qui compte — « quelqu'un peut-il se
-   connecter » — et non un intermédiaire comme la présence du processus ou
-   l'ouverture du port. La bibliothèque est déjà installée par le conteneur
-   amont, qui s'en sert pour compter les joueurs avant une mise à jour.
+6. Au boot, `cloud-init` écrit un `docker-compose.yml` **d'après le catalogue du
+   jeu** et lance deux conteneurs : celui du jeu, qui prend sa configuration dans
+   les variables d'environnement et les options de ligne de commande, et le
+   compagnon, qui restaure la save depuis Object Storage **avant** que le serveur
+   démarre, puis synchronise vers le bucket ce que le jeu écrit.
+
+   Ce que le compagnon restaure diffère selon le jeu. Pour Enshrouded, la
+   sauvegarde seule : le serveur télécharge ses 8,8 Go par SteamCMD. Pour
+   Sunkenland, **la sauvegarde et les 2,3 Go du jeu**, puisque son téléchargement
+   exigerait un compte Steam sur la machine (§2). Le second cas n'ajoute pas de
+   chemin de code — c'est le même transfert depuis le même seau, vers un autre
+   dossier.
+7. **L'agent sait que le serveur est prêt, et il l'apprend différemment selon le
+   jeu.** Pour Enshrouded, en l'interrogeant en A2S sur le port de requête toutes
+   les 30 s : c'est le protocole que le client d'un joueur emploie, il teste ce
+   qui compte — « quelqu'un peut-il se connecter » — et non un intermédiaire
+   comme la présence du processus ou l'ouverture du port. La bibliothèque est
+   déjà installée par le conteneur amont, qui s'en sert pour compter les joueurs
+   avant une mise à jour.
+
+   Pour Sunkenland, **en lisant la sortie standard du conteneur**, où le serveur
+   annonce `Server Start Complete, Ready for Clients to Join. ServerID is '…'`.
+   Ce n'est pas un pis-aller : l'identifiant de serveur n'existe nulle part
+   ailleurs, ni dans l'API du fournisseur ni sur un port qu'on pourrait
+   interroger. Il **change à chaque démarrage** — c'est le GUID du monde suivi de
+   l'instant de démarrage — donc il ne peut pas être connu d'avance.
+
+   Une mise en garde qui a coûté une mesure : **la ligne d'état périodique de ce
+   jeu ne s'imprime que lorsqu'un joueur est connecté.** Le silence du journal ne
+   dit pas que le serveur est mort. L'agent ne doit pas en faire un battement de
+   cœur.
 
    **Prêt veut dire « le serveur répond *et* c'est le bon monde ».** Le serveur
    de jeu ne démarre qu'une fois la sauvegarde restaurée (étape 6), et c'est une
@@ -892,7 +1010,25 @@ jamais bloqué ».
    passer l'état à `RUNNING`. Recopier le gabarit évite que l'estimation
    affichée dérive si un admin change le gabarit par défaut en cours de session. C'est ce recopiage qui donne au watchdog de quoi comparer l'état
    affiché à ce que Scaleway déclare, et à l'arrêt propre de quoi effacer.
-8. L'UI affiche le nom de domaine, l'IP brute et le compte à rebours.
+
+   **Pour Sunkenland, le rapport porte une valeur que la Function ne peut pas
+   recalculer.** L'identifiant de serveur ne vient que de la VM, et le §7 tient
+   la VM pour l'élément le moins fiable du système : le principe « ne jamais
+   suivre ce que l'agent déclare » ne peut donc pas s'appliquer tel quel. Il se
+   remplace par une vérification, et elle est gratuite. **L'identifiant vaut
+   `<GUID du monde>~<instant de démarrage>`**, et le plan de contrôle connaît le
+   GUID du monde — c'est lui qui l'a passé au conteneur. La Function rejette donc
+   tout identifiant dont le préfixe ne correspond pas.
+
+   Ce qu'une VM compromise peut encore faire, avec cette vérification en place,
+   est envoyer les joueurs vers un autre serveur **portant le même monde**. Ce
+   qu'elle ne peut plus faire est les envoyer n'importe où. C'est une réduction
+   du dommage, pas une preuve, et c'est le maximum atteignable pour une donnée
+   qui n'existe que sur la machine.
+8. L'UI affiche le point de jonction et le compte à rebours. Ce qu'il contient
+   dépend du jeu — nom de domaine, IP brute et port ici, identifiant de serveur,
+   région et nom du monde là — mais l'écran n'a qu'une chose à faire dans les
+   deux cas : le rendre lisible et copiable.
 
 Durée attendue du clic au serveur jouable : environ 4 minutes, dont 2 à 3 pour
 le téléchargement SteamCMD.
@@ -942,6 +1078,14 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
    le watchdog si l'échéance est atteinte.
 2. L'agent arrête le serveur de jeu **puis** pousse la save finale — dans cet
    ordre, pour que la sauvegarde soit cohérente — et rapporte `saved`.
+
+   **Pour Sunkenland, il n'existe pas de sauvegarde finale à provoquer.** Ni
+   l'arrêt du conteneur, ni une fermeture polie, ni le départ du dernier joueur
+   n'en déclenche une ; c'est mesuré six fois, section J. L'agent pousse donc le
+   dossier tel qu'il est, vieux d'au plus la cadence du §2. L'étape garde son
+   ordre — arrêter avant de pousser — mais elle ne promet rien de plus que ce
+   que le disque contient déjà. Le `pre-shutdown` du §5 n'a, pour ce jeu, pas
+   d'autre sens que « la dernière que le jeu a bien voulu écrire ».
 3. La Function détruit l'instance **et l'IP**.
 4. L'état repasse à `IDLE`, et les champs réservés de `server/current` sont
    remis à vide par la Function.
@@ -1082,8 +1226,26 @@ sur un préfixe de bucket. La conséquence assumée est que l'instance ne peut p
 s'auto-détruire : le watchdog est le seul réclamateur, complété par une alerte
 de budget Scaleway comme garde-fou humain.
 
+**Aucun identifiant Steam non plus.** C'est la raison profonde du choix du §2 de
+faire venir les 2,3 Go de Sunkenland par le stockage objet plutôt que par
+SteamCMD : télécharger à chaud imposerait de poser sur cette machine les
+identifiants d'un compte Steam qui possède le jeu, c'est-à-dire un compte
+personnel avec sa bibliothèque et ses moyens de paiement. Le gain de quelques
+Go de stockage ne vaut pas cet échange. Le compte ne sert que sur la machine de
+l'administrateur, au moment de déposer les fichiers dans le seau.
+
 L'agent s'authentifie auprès d'un unique endpoint avec un jeton propre à la
-session, qui meurt avec elle.
+session, qui meurt avec elle. **Ce jeton lui ouvre une écriture de plus depuis
+qu'il existe deux jeux** : le point de jonction, quand le jeu ne le rend pas
+déductible par la Function. C'est une extension réelle de la confiance accordée
+à la VM, bornée par la vérification de préfixe du §8 — et signalée ici plutôt
+que dissimulée dans une étape de séquence.
+
+Un dernier détail d'exploitation, mesuré : **le journal du conteneur Sunkenland
+contient le mot de passe de session en clair**, sur la ligne qui valide chaque
+joueur entrant. L'agent lit ce journal pour y trouver l'identifiant de serveur ;
+il n'en remonte rien d'autre, et aucun mécanisme de collecte de journaux ne doit
+faire sortir ces lignes de la machine.
 
 La clé secrète Scaleway, les identifiants S3 du bucket et ceux de DynHost sont
 stockés dans Secret Manager et lus par les Functions. Le calcul n'en demande
@@ -1110,7 +1272,7 @@ l'instance, et le watchdog balaie les IP non réclamées.
 | L'agent ne répond jamais | Timeout `PROVISIONING`, destruction |
 | DynHost échoue | La session **n'est pas** interrompue : l'UI affiche l'IP brute |
 | Restauration de save impossible | L'agent refuse de démarrer et remonte l'erreur. **Règle d'or : ne jamais écraser une save existante par une save vide** |
-| Crash de la machine | Au pire 10 minutes de jeu perdues, soit la fréquence de synchronisation |
+| Crash de la machine | Au pire la cadence de sauvegarde du jeu : 10 minutes pour Enshrouded, 5 pour Sunkenland (§2). **Pour Sunkenland, c'est aussi le pire cas d'une fin de session normale** — rien ne permet de provoquer une sauvegarde, donc l'arrêt propre ne fait pas mieux que le crash |
 
 ### Où la règle d'or s'applique vraiment
 
@@ -1292,12 +1454,12 @@ après fusion, ou à la demande.
 | Instance `DEV1-L` (0,04284 €/h) | 0 € | ~1,71 € |
 | Ses 80 Go de disque local (~0,0067 €/h) | 0 € | ~0,27 € |
 | IPv4 flexible (0,005 €/h, facturée même détachée) | 0 € | ~0,20 € |
-| Object Storage (saves, 2-3 Go) | ~0,03 € | ~0,03 € |
+| Object Storage (saves 2-3 Go, plus les 2,3 Go du jeu Sunkenland) | ~0,06 € | ~0,06 € |
 | Images Docker (amont + compagnon sur ghcr.io) | 0 € | 0 € |
 | DNS (DynHost) | 0 € | 0 € |
 | Firebase (Hosting, Auth, Firestore, Functions, Scheduler) | 0 € | 0 € |
 | Artifact Registry (images des Functions) | ~0,05 € | ~0,05 € |
-| **Total** | **~0,08 €** | **~2,26 €** |
+| **Total** | **~0,11 €** | **~2,29 €** |
 
 Référence à battre : 7,90 €/mois. Point d'équilibre : environ **143 h
 facturées** par mois.
@@ -1376,20 +1538,53 @@ qu'elles ont changé.
 
 ### Encore ouvert
 
-Toutes sont nées de la bascule vers Scaleway et n'ont pas d'équivalent dans la
-conception. Aucune ne se devine : la leçon de la question du tag est qu'un
-fournisseur ne fait pas ce qu'on suppose.
+Les deux premières sont nées de la bascule vers Scaleway et n'ont pas
+d'équivalent dans la conception. Aucune ne se devine : la leçon de la question du
+tag est qu'un fournisseur ne fait pas ce qu'on suppose.
 
 - **Le trafic Object Storage vers une instance de la même région est-il
-  facturé**, et à quel prix les 2-3 Go de saves ?
+  facturé**, et à quel prix les 2-3 Go de saves — désormais 4 à 5 Go avec les
+  fichiers de Sunkenland ?
 - **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement.
 
+Les suivantes viennent de l'arrivée du second jeu. La sonde qui les a produites
+est la section J de `probe/RESULTS.md` ; ce qui suit est ce qu'elle n'a **pas**
+tranché.
+
+- **Qui porte le script de démarrage de Sunkenland ?** L'image amont ignore
+  `-autoSaveIntervalInSeconds` et `-adminSteamIDs`, et son `+login anonymous` ne
+  peut pas fonctionner. Deux formes : une contribution chez `melle2`, ou une
+  image mince à nous ne portant que le script. La première ne coûte rien à
+  maintenir mais dépend d'une acceptation ; la seconde est immédiate mais nous
+  rend responsables d'un artefact de plus.
+- **`-publicip`, `-publicport` et `-port` n'ont pas été testés.** Ils décident si
+  l'IP flottante et le `DnsUpdater` servent à quelque chose pour ce jeu, donc une
+  ligne du §11 et une branche de l'adapter. À mesurer sur une VM, pas en local :
+  la question n'a de sens que derrière un vrai NAT.
+- **`-steamID` n'a pas été testé.** Il devrait permettre au serveur de lire la
+  disposition de dossiers du client, ce qui simplifierait l'amorçage d'un monde.
+- **La cadence de 300 s n'a été vérifiée qu'à 60 s.** L'option est acceptée et la
+  cadence tenue à cette valeur ; rien ne dit qu'il n'existe pas une borne plus
+  haut.
+- **Un décalage de version empêche-t-il réellement de rejoindre ?** C'est déduit
+  de la sémantique de Photon, qui cloisonne le matchmaking par `AppVersion`, et
+  non mesuré. Le §2 accepte la dérive en s'appuyant dessus ; si la déduction est
+  fausse, la décision est plus confortable qu'écrit, pas moins.
+
 ## 13. Hors périmètre v1
 
-- Tout jeu autre qu'Enshrouded.
+- Tout jeu autre qu'Enshrouded et Sunkenland.
 - Les notifications hors de l'interface web (Discord, e-mail).
 - La restauration d'une ancienne sauvegarde depuis l'UI — les saves sont
   historisées et récupérables manuellement, l'interface viendra plus tard.
-- Plusieurs serveurs simultanés : le modèle suppose une seule instance à la fois.
+- **L'amorçage d'un monde Sunkenland depuis l'UI.** Il se crée dans le client du
+  jeu et se dépose à la main dans le seau ; c'est un geste unique par monde.
+- **Le rafraîchissement automatique des fichiers de Sunkenland.** Il demande le
+  compte Steam, qui reste sur la machine de l'administrateur (§2, §7).
+- **La détection d'un décalage de version avant une session.** L'identifiant de
+  build de la branche publique est lisible sans compte, donc la comparaison est
+  possible ; elle n'est simplement pas faite en v1.
+- Plusieurs serveurs simultanés : le modèle suppose une seule instance à la fois,
+  quel que soit le nombre de jeux disponibles.
