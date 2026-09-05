@@ -1433,3 +1433,81 @@ vers `fr-par`. La phrase du spec est à corriger.
 > Le plan réserve cette tâche à un humain de bout en bout. Le dépôt a été lancé
 > par l'agent, sur demande explicite du commanditaire après rappel de la règle.
 > `rclone copy` seulement, aucune suppression, aucun `sync`.
+
+### Derrière un vrai NAT
+
+Machine `beacon-probe-sunkenland01`, `DEV1-L` en `fr-par-1`, allumée le
+2026-09-05 à 19:49 UTC, détruite à 20:25. Le second essai **n'a pas eu lieu** :
+il était conditionné à l'échec du premier.
+
+| Essai | Options annoncées | Rejoint par ServerID | Rejoint par la liste |
+|---|---|---|---|
+| 1 | aucune | non essayé, le second chemin a suffi | **oui** |
+| 2 | `-publicip`, `-publicport`, `-port` | sans objet | sans objet |
+
+- **Port UDP en écoute sur la VM** : `27015`, publié par `docker-proxy`, sans
+  qu'aucun `-port` ait été passé.
+- **ServerID observé** : `4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242347875710917`,
+  le GUID du monde en préfixe.
+- **Le groupe de sécurité par défaut laisse passer ce port** — rien n'a été
+  ouvert à la main, et le joueur est entré.
+- **`CustomPublicAddress=` est vide** dans les arguments que Fusion reçoit :
+  le serveur n'a annoncé aucune adresse, et la preuve de la jonction est dans son
+  journal — `RPC_ServerValidatePlayer: PlayerRef [Player:0] steamID …`.
+
+**Conséquence pour l'IP flottante et `DnsUpdater` : ce jeu n'en a besoin
+d'aucune des deux.** La découverte passe par Photon, le transport par de l'UDP
+direct que le NAT de Scaleway traverse sans rien annoncer. Le §2 le déduisait,
+la mesure le confirme : `DnsUpdater` n'est pas appelé pour ce jeu, il n'a pas de
+sous-domaine, et l'adapter n'a pas de branche à écrire. Une IP publique reste
+nécessaire — la machine doit être joignable en UDP entrant — mais **stable, non**.
+
+### Le transfert depuis le seau
+
+- **Volume restauré : 2,3 Go en 16 s** — `19:51:04` → `19:51:20` d'après le
+  journal de la sonde —, soit ~150 Mo/s, intra-région et depuis le seau.
+- Le compteur `rx_bytes` de l'interface rend **4 050 602 394 octets** entrants
+  sur toute la vie de la machine : les 2,4 Go du seau, plus les paquets `apt` de
+  `docker.io`, `docker-compose-v2` et `rclone`, plus le trafic de jeu. C'est ce
+  chiffre que la tâche 6 confronte à la facture.
+- **Démarrage complet, du `poweron` au `Server Start Complete`** : allumage à
+  19:49, `cloud-init` fini vers 19:51, conteneur lancé, jeu prêt à 19:54:15 —
+  **environ 5 minutes**, dont 16 s de restauration.
+
+Le §2 parle d'« un quart d'heure de rafraîchissement » pour ces 2,3 Go. Le dépôt
+depuis une machine de développement prend 64 s, la restauration intra-région 16 s.
+**Restaurer les fichiers de jeu n'est pas le coût du démarrage de ce jeu** — le
+jeu lui-même met dix fois plus à booter que son propre téléchargement.
+
+### La cadence à 300 s
+
+| Sauvegarde | Horodatage (UTC) | Écart |
+|---|---|---|
+| `World~1.json` | 20:00:23 | — |
+| `World~2.json` | 20:05:23 | **300 s** |
+| `World~3.json` | 20:10:23 | **300 s** |
+| `World~4.json` | 20:15:23 | **300 s** |
+| `World~5.json` | 20:18:08 | 165 s — déclenchée par l'admin |
+
+Quatre intervalles pleins à la valeur retenue, là où le plan n'en demandait deux
+et où la section J n'avait tenu que 60 s.
+
+- **Charge à un joueur** : CPU **100 %** d'un cœur — la `DEV1-L` en a quatre —,
+  mémoire **5,27 Gio sur 7,75**. Conforme à la section J.
+- **`-adminSteamIDs` donne réellement les droits d'admin**, prouvé par l'effet :
+  la sauvegarde manuelle de 20:18:08 a été déclenchée depuis la console du jeu
+  par le compte passé en argument. C'est plus solide que la ligne `FromBatScript`
+  que la section J cherchait et que cette version n'imprime pas.
+- **Le `chown 7000:7000` du `cloud-init` est ce qui rend ces écritures
+  possibles.** `rclone` remplit le dossier en root, le serveur y écrit en 7000 :
+  sans cette ligne, aucune de ces cinq sauvegardes n'existerait, et la panne
+  serait muette.
+
+### Un piège pour le compagnon de la tranche 3
+
+Le monde a été rapatrié de la VM avant destruction, pour garder la partie jouée
+ce soir-là. **`scp` sans `-p` horodate tous les fichiers à l'instant de la
+copie** — et la section J a établi que le numéro le plus élevé n'est pas le plus
+récent, que seuls `Cache.json` et les `.meta` font foi. Un compagnon qui
+remonterait les sauvegardes en écrasant les dates rendrait le dossier illisible
+pour l'humain qui doit choisir laquelle restaurer.
