@@ -1,6 +1,20 @@
 export const PROBE_PREFIX = 'beacon-probe-'
 export const PROBE_TAG = 'beacon-probe'
 
+/**
+ * What production wears. Nothing in this probe may destroy a resource carrying
+ * it: since tranche 1 a real watchdog creates them, and an ip that is tagged
+ * but not yet attached is indistinguishable from an orphan by shape alone.
+ * The tag is the only thing that tells them apart, so it is what we read.
+ *
+ * It deliberately restates `OWNERSHIP_TAG` of `libs/scaleway-compute` rather
+ * than importing it: `probe/` is a standalone npm project, kept out of the Nx
+ * workspace on purpose, and coupling a throwaway to production code would be
+ * the worse trade. **If that constant ever changes, this one changes with it**
+ * — out of step, this probe stops recognising production and starts reaping it.
+ */
+export const PRODUCTION_TAG = 'beacon'
+
 // Shaped after the SDK's own types, which say `server?: ServerSummary` and not
 // `server: T | null`. An unattached ip therefore arrives as `undefined`, and a
 // strict `=== null` would have reported no orphan ever.
@@ -36,8 +50,16 @@ export function selectDoomed(
   inventory: ProbeInventory,
   options: { includeOrphanIps: boolean },
 ): Doomed {
-  const doomedServers = inventory.servers.filter((server) => server.name.startsWith(PROBE_PREFIX))
+  // Before anything else, and on every list: production is not ours to reap,
+  // whatever its name looks like.
+  const excludingProduction = <T extends { tags?: string[] }>(resources: T[]) =>
+    resources.filter((resource) => !(resource.tags ?? []).includes(PRODUCTION_TAG))
+
+  const doomedServers = excludingProduction(inventory.servers).filter((server) =>
+    server.name.startsWith(PROBE_PREFIX),
+  )
   const doomedServerIds = new Set(doomedServers.map((server) => server.id))
+  const candidateIps = excludingProduction(inventory.ips)
 
   const servers: DoomedServer[] = doomedServers.map((server) => {
     const terminable = server.state === 'running'
@@ -57,8 +79,8 @@ export function selectDoomed(
     ip.tags.includes(PROBE_TAG) || (isAttached(ip) && doomedServerIds.has(ip.server!.id!))
   const isOrphan = (ip: ProbeIp) => !isOurs(ip) && !isAttached(ip)
 
-  const orphanIps = inventory.ips.filter(isOrphan)
-  const ips = inventory.ips.filter(
+  const orphanIps = candidateIps.filter(isOrphan)
+  const ips = candidateIps.filter(
     (ip) => isOurs(ip) || (options.includeOrphanIps && isOrphan(ip)),
   )
 

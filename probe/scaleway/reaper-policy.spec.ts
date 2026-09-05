@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROBE_PREFIX, PROBE_TAG, selectDoomed } from './reaper-policy'
+import { PRODUCTION_TAG, PROBE_PREFIX, PROBE_TAG, selectDoomed } from './reaper-policy'
 
 const server = (id: string, name: string, tags: string[] = []) => ({ id, name, tags, state: 'running' })
 // The SDK leaves `server` absent rather than null when nothing is attached.
@@ -129,5 +129,36 @@ describe('selectDoomed', () => {
       withOrphans,
     )
     expect(doomed.ips).toHaveLength(1)
+  })
+
+  // Since tranche 1 a watchdog runs in production and creates ips tagged
+  // `beacon`. Between createIp and createServer one of them is attached to
+  // nothing — which is exactly what isOrphan() describes. Reaping it cuts a
+  // session that is being provisioned right now.
+  it('never claims an unattached ip carrying the production ownership tag', () => {
+    const doomed = selectDoomed(
+      inventory({ ips: [ip('i1', '1.2.3.4', [PRODUCTION_TAG])] }),
+      withOrphans,
+    )
+    expect(doomed.ips).toEqual([])
+    expect(doomed.orphanIps).toEqual([])
+  })
+
+  it('never claims a server carrying the production ownership tag', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`, [PRODUCTION_TAG])] }),
+      withOrphans,
+    )
+    expect(doomed.servers).toEqual([])
+  })
+
+  // The probe tag and the production tag are two different strings, and the
+  // filter that reads them is exact. A probe resource stays reapable.
+  it('still claims a probe resource that carries no production tag', () => {
+    const doomed = selectDoomed(
+      inventory({ servers: [server('s1', `${PROBE_PREFIX}0001`, [PROBE_TAG])] }),
+      withoutOrphans,
+    )
+    expect(doomed.servers.map((s) => s.id)).toEqual(['s1'])
   })
 })
