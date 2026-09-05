@@ -48,19 +48,20 @@ dépendance externe, elles s'ouvrent dans un navigateur telles quelles.
 
 ## Où en est le projet
 
-**La tranche 0 est en cours** : c'est une sonde, elle répond aux questions
-ouvertes du §12 du spec par la mesure. Son plan et son état sont dans
-`docs/superpowers/plans/2026-09-03-tranche-0-sonder.md`, ses mesures dans
-`probe/RESULTS.md`. Le lotissement reste marqué *proposé* : il n'a pas été
-validé explicitement.
+Le dépôt avance par tranches, chacune avec son plan sous
+`docs/superpowers/plans/`. Le plan de la tranche en cours, ou la dernière
+livrée, dit où en est le projet mieux que ce fichier ne pourrait le suivre —
+c'est là qu'il faut regarder pour le détail.
 
-**Un spec validé n'est pas un spec vérifié.** Le spec l'a été le 2026-09-03, et
-la sonde a fait tomber une hypothèse le jour même : l'API OVH ne portait de tag
-ni sur l'instance ni sur l'IP flottante, ce dont dépendait toute la
-réconciliation. Le projet a changé d'hébergeur avant d'écrire une ligne
-d'adapter. C'est la règle à retenir plus que l'anecdote — si la sonde invalide
-une hypothèse, le spec se corrige **avant** que le plan de la tranche suivante
-s'écrive.
+**Un spec validé n'est pas un spec vérifié.** La tranche 0 — une sonde, sans
+code de production — a répondu par la mesure aux questions ouvertes du §12 du
+spec, dans `probe/RESULTS.md`, et a fait tomber une hypothèse le jour même de
+la validation du spec : l'API OVH ne portait de tag ni sur l'instance ni sur
+l'IP flottante, ce dont dépendait toute la réconciliation. Le projet a changé
+d'hébergeur avant d'écrire une ligne d'adapter. C'est la règle à retenir plus
+que l'anecdote, et elle survit à toute tranche : si une sonde ou une mise en
+production invalide une hypothèse, le spec se corrige **avant** que le plan de
+la tranche suivante s'écrive.
 
 ## Les skills ne sont pas optionnelles
 

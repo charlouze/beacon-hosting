@@ -13,7 +13,9 @@ Scaleway.
 
 Le spec est validé, et révisé le 2026-09-05 pour faire entrer un second jeu. La
 tranche 0 — une sonde, sans code de production — a répondu à ses questions
-ouvertes ; la tranche 1 pose le premier code qui reste.
+ouvertes ; la tranche 1 est déployée, et son watchdog tourne toutes les cinq
+minutes en production : il interroge Scaleway par le tag d'appartenance et
+détruit ce qu'aucune intention de création ouverte n'explique.
 
 ## Le dépôt
 
