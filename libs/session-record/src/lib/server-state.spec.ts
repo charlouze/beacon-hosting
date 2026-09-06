@@ -273,6 +273,26 @@ describe('claiming the provisioning', () => {
     await seedServer({ state: 'IDLE', sessionId: 's1' });
     expect(await serverStateStore(db).claimProvisioning('s1', AT)).toBe(false);
   });
+
+  // Nothing else ever puts it back to null. Without this, a
+  // ProvisioningFailed from three evenings ago rides along on every healthy
+  // session that follows, and the interface keeps saying the last attempt
+  // failed about an attempt that succeeded.
+  it('drops the error of the attempt before, since this one answers for itself', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's1', lastError: 'scaleway refused' });
+
+    expect(await serverStateStore(db).claimProvisioning('s1', AT)).toBe(true);
+
+    expect((await db.doc(SERVER_DOC).get()).data()?.['lastError']).toBeNull();
+  });
+
+  it('leaves the recorded error alone when it refuses the claim', async () => {
+    await seedServer({ state: 'IDLE', sessionId: 's1', lastError: 'scaleway refused' });
+
+    expect(await serverStateStore(db).claimProvisioning('s1', AT)).toBe(false);
+
+    expect((await db.doc(SERVER_DOC).get()).data()?.['lastError']).toBe('scaleway refused');
+  });
 });
 
 describe('publishing the facts', () => {

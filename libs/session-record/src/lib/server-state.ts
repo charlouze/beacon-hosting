@@ -77,6 +77,12 @@ export function serverStateStore(db: Firestore): ServerStateStore {
         if (data['state'] !== 'PROVISIONING') return false;
         transaction.update(db.doc(SERVER_DOC), {
           provisionClaimedAt: Timestamp.fromDate(at),
+          // The one instant where the recorded failure stops being true. Every
+          // other write leaves it, deliberately — "the last attempt failed" has
+          // to stay readable until a next attempt answers for itself, and this
+          // call *is* that next attempt. Not at publish: `announce()` may have
+          // just filed a dns incident on this very session.
+          lastError: null,
         });
         return true;
       });
