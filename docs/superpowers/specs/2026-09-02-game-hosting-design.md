@@ -898,7 +898,7 @@ champ réservé est refusée en bloc, même si le reste de l'écriture est légi
 
 **`stateSince` dit quand l'état courant a commencé**, et il est réécrit à chaque
 changement d'état, quel qu'en soit l'auteur. C'est ce qui rend mesurables les
-délais du §6 — « `PROVISIONING` depuis plus de 15 min », « `STOPPING` depuis
+délais du §6 — « `PROVISIONING` depuis plus de 25 min », « `STOPPING` depuis
 plus de 10 min ». `startedAt` date la session entière et ne répond pas à cette
 question ; `provisionClaimedAt` est un verrou, dont la présence est le mécanisme
 et non une durée.
@@ -1222,7 +1222,7 @@ système pour le budget.
 | Échéance dépassée de plus de 2 min, état encore `RUNNING` | Arrêt forcé |
 | `deadline - maintenant` supérieur à la durée de session | Échéance ramenée à la borne, écart journalisé |
 | État incohérent avec les champs réservés — `RUNNING` sans `instanceId`, `IDLE` avec une instance vivante | `server/current` remis d'équerre à partir de ce que Scaleway déclare réellement |
-| `PROVISIONING` depuis plus de 15 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
+| `PROVISIONING` depuis plus de 25 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
 | `STOPPING` depuis plus de 10 min | Destruction sans attendre l'agent — la save de moins de 10 min est déjà en Object Storage |
 | État `FAILED` | Nouvelle tentative de destruction ; retour à `IDLE` dès qu'aucune ressource taguée ne survit |
 | Ressource taguée `beacon` sans `provisioning/{sessionId}` ouvert | Destruction |
@@ -1233,6 +1233,21 @@ l'âge de la session. Un `stateSince` absent — un document semé avant que le
 champ existe — ne déclenche aucun délai : le watchdog ne devine pas une durée
 qu'on ne lui a pas donnée, et la ligne de réconciliation par tag rattrape de
 toute façon toute ressource qu'aucune intention ouverte n'explique.
+
+**Le délai de `PROVISIONING` est de 25 minutes et non de 15**, et c'est une
+correction que la définition de `RUNNING` a rendue nécessaire. Tant que la
+Function concluait dès l'IP réservée, cet état durait une demi-minute et le délai
+ne pouvait rien déclencher. Du jour où l'agent conclut, il couvre le boot, la
+restauration et le téléchargement du jeu : la sonde a mesuré 4 min 49 et 7 min 58
+sur deux sessions identiques, la première vraie session au plus 11 min 48. Une
+soirée lente aurait mangé les trois quarts de la marge, et le watchdog aurait
+détruit une machine en train de télécharger.
+
+Allonger ne coûte rien, et c'est le §12 qui le dit : la facturation est à l'heure
+entamée. Quinze minutes et vingt-cinq minutes tombent dans la même heure due, sur
+chacune des trois ressources. Le délai ne borne donc pas une dépense — il borne
+une attente, et sa seule valeur juste est celle qui ne coupe pas une machine
+saine.
 
 `FAILED` n'a pas de délai : il se retente à chaque passage.
 
@@ -1251,7 +1266,7 @@ watchdog doit connaître les deux.** Mesuré en tranche 0 :
 | arrêtée, jamais démarrée | `terminate` **est refusé** ; suppression simple | **le volume survit**, détaché et facturé |
 
 C'est le cas dangereux, parce qu'il croise la ligne « `PROVISIONING` depuis plus
-de 15 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
+de 25 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
 watchdog la supprime — et abandonne son disque. Le volume ne porte **aucun tag**,
 les étiquettes posées sur l'instance ne descendant pas dessus ; il n'apparaît
 donc ni dans la liste des instances, ni dans celle des IP, et rien ne le
