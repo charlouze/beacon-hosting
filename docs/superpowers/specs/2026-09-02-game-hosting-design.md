@@ -290,7 +290,8 @@ libs/
   membership-record/   ACL Firestore de members/. Ni libs/session ni apps/web
                        ne voient Firestore : tout passe par un module *-record
   agent-protocol/      format de fil entre la VM et le plan de contrôle —
-                       une ACL, pas du métier
+                       une ACL, pas du métier. Importée aux deux bouts, par
+                       agentReport et par le compagnon
   scaleway-compute/    adapter ServerHost   -> API Instance Scaleway
   scaleway-storage/    adapter SaveStore    -> Object Storage (S3)
   ovh-dns/             adapter DnsUpdater   -> DynHost
@@ -298,7 +299,8 @@ deploy/
   cloud-init/          génère le docker-compose.yml de l'instance
     games/             catalogue par jeu : image, ports, variables, options de
                        ligne de commande, chemin des sauvegardes dans le conteneur
-  companion/           image compagnon (rclone + curl) -> ghcr.io
+  companion/           projet Node, image sur ghcr.io. Restaure avant que le
+                       jeu démarre, synchronise, sonde le serveur et rapporte
 tools/
   game-depot/          commande d'administration : push, pull, purge des
                        fichiers de jeu dans le seau. NE CONNAÎT PAS le préfixe
@@ -311,7 +313,22 @@ Aucune image de serveur de jeu n'est construite : `mornedhels/enshrouded-server`
 et `melle2/sunkenland-ds` sont consommées telles quelles, la seconde avec son
 point d'entrée remplacé par un script **monté** — mesuré le 2026-09-05, et c'est
 ce qui évite de lui devoir un fork ou une image de plus (§2). La seule image
-maison est le compagnon, qui reste minimal.
+maison est le compagnon.
+
+**Le compagnon est un projet du monorepo, pas deux binaires appelés par un
+script.** Ce qu'il porte a débordé de ce que `rclone` et `curl` savent faire :
+il interroge le serveur en A2S pour savoir s'il répond, tient une boucle de
+rapport et en relit l'échéance, refuse de pousser une archive sous le plancher
+de `Save`, et vérifie qu'un fichier est apparu là où le script amont sort en
+`0` sans rien écrire (§12). Le défi/réponse A2S en shell serait la pièce la plus
+fragile du système à l'endroit où il compte le plus, et le format de fil serait
+réécrit à la main d'un côté de la ligne.
+
+Le prix est une image de quelques dizaines de mégaoctets au lieu de quelques-uns
+— sur une machine qui télécharge 8,8 Go, ça ne se mesure pas. Le gain est que le
+plancher de taille est **le même code** dans le compagnon et dans `agentReport`,
+appelé sur `Save` : la règle d'or du §8 n'existe qu'une fois dans le dépôt, et
+c'est exactement ce que le §4 exige de tout calcul.
 
 **`libs/session` ne connaît des jeux que leur identifiant.** Le catalogue
 `deploy/cloud-init/games/` est le seul endroit du dépôt qui sait qu'un serveur
@@ -1369,14 +1386,18 @@ C'est le seul invariant du système dont la violation détruit une donnée
 irremplaçable, et il ne s'applique pas là où on serait tenté de le ranger. Les
 sauvegardes ne s'écrivent physiquement que dans le compagnon, sur la VM :
 `libs/session/saves` ne voit que des métadonnées, et toujours après coup. Une
-règle revendiquée par une bibliothèque TypeScript mais exécutée par un script
-`rclone` n'est protégée que par la rigueur du script.
+règle revendiquée par le plan de contrôle mais appliquée sur la VM n'est
+protégée que par la rigueur de ce qui tourne là-bas — d'où le compagnon en
+TypeScript (§4), qui appelle exactement le même plancher que `agentReport` au
+lieu de le réécrire dans une autre langue.
 
 Trois lignes de défense, de la plus proche du disque à la plus lointaine :
 
-1. **Le compagnon refuse de synchroniser une archive vide ou anormalement
-   petite**, et n'emploie que des options `rclone` non destructives — jamais de
-   miroir qui propage une suppression locale vers le bucket.
+1. **Le compagnon refuse de pousser une archive vide ou anormalement petite**,
+   et il le demande **avant** d'agir : une archive refusée plus loin a déjà
+   quitté la machine. Il n'a aucune option destructrice à éviter — une
+   sauvegarde est un objet, déposé sous une clé neuve (§5), et il n'existe ni
+   miroir ni suppression dont il faudrait se retenir.
 2. **Le stockage objet conserve un historique**, et l'élagage est une règle de
    cycle de vie du bucket, côté fournisseur. **Aucun code du projet ne supprime
    une sauvegarde** : le port `SaveStore` n'expose ni suppression ni élagage, et
