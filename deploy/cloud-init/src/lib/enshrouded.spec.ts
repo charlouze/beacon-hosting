@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
 
-const REQUEST = { serverName: 'Beacon', serverPassword: 'hunter2', slotCount: 4 };
+const REQUEST = {
+  serverName: 'Beacon',
+  serverPassword: 'hunter2',
+  slotCount: 4,
+  sessionId: 's1',
+  agentToken: 'a'.repeat(64),
+  endpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
+  saves: {
+    endpoint: 'https://s3.fr-par.scw.cloud',
+    region: 'fr-par',
+    savesBucket: 'beacon-saves',
+    gamesBucket: 'beacon-games',
+    accessKey: 'SCWXXXXXXXXXXXXXXXXX',
+    secretKey: 'a-secret-with-a$&-in-it',
+  },
+};
 
 describe('the enshrouded catalogue entry', () => {
   // §10: an immutable digest, never a moving tag. With a moving one, tonight's
@@ -97,5 +112,49 @@ describe('the enshrouded catalogue entry', () => {
   // before its 2.3 GB are restored, which is the companion, which is tranche 3.
   it('refuses the game whose files nothing restores yet', () => {
     expect(() => catalogFor('sunkenland')).toThrow(/tranche 3/);
+  });
+
+  it('hands the machine its session, its token and where to report', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('BEACON_SESSION_ID=s1');
+    expect(rendered).toContain(`BEACON_TOKEN=${'a'.repeat(64)}`);
+    expect(rendered).toContain(
+      'BEACON_ENDPOINT=https://europe-west1-beacon.cloudfunctions.net/agentReport',
+    );
+  });
+
+  // Every value that reaches the machine goes through the same replacement, and
+  // a `$&` in an s3 secret is capture-group syntax to String.replace exactly as
+  // it is in a password. A silently corrupted key restores nothing, on a
+  // machine that looks healthy.
+  it('carries an s3 secret full of replacement syntax through untouched', () => {
+    expect(renderCloudInit('enshrouded', REQUEST)).toContain(
+      'BEACON_S3_SECRET_KEY=a-secret-with-a$&-in-it',
+    );
+  });
+
+  // §7: the two buckets, and only these two. A machine that could write the
+  // game files would be a machine that can destroy licensed data it did not
+  // deposit.
+  it('names the bucket it writes and the bucket it reads', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('BEACON_SAVES_BUCKET=beacon-saves');
+    expect(rendered).toContain('BEACON_GAMES_BUCKET=beacon-games');
+  });
+
+  // §7: the credentials the machine holds are the s3 pair and the token. A
+  // Scaleway Instance key here would let a compromised vm create machines.
+  it('carries no provider api credential at all', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).not.toContain('SCW_SECRET_KEY');
+    expect(rendered).not.toContain('X-Auth-Token');
+  });
+
+  // The companion's env file holds a token and an s3 pair; the game's holds a
+  // server password. Neither is readable by anything but root.
+  it('writes both credential files where only root can read them', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toMatch(/path: \/opt\/beacon\/\.env\n {4}permissions: "0600"/);
+    expect(rendered).toMatch(/path: \/opt\/beacon\/companion\.env\n {4}permissions: "0600"/);
   });
 });

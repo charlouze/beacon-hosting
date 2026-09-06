@@ -28,6 +28,12 @@ export const SERVER_PASSWORD: ReturnType<typeof defineSecret> = defineSecret('SE
 export const DYNHOST_USER: ReturnType<typeof defineSecret> = defineSecret('DYNHOST_USER');
 export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
   defineSecret('DYNHOST_PASSWORD');
+export const AGENT_ENDPOINT: ReturnType<typeof defineString> = defineString('AGENT_ENDPOINT');
+export const S3_ENDPOINT: ReturnType<typeof defineString> = defineString('S3_ENDPOINT');
+export const S3_ACCESS_KEY: ReturnType<typeof defineString> = defineString('S3_ACCESS_KEY');
+export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_SECRET_KEY');
+export const SAVES_BUCKET: ReturnType<typeof defineString> = defineString('SAVES_BUCKET');
+export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES_BUCKET');
 
 /**
  * The Firestore half of `buildShared` — no Scaleway client, no zone to
@@ -64,16 +70,21 @@ function buildShared() {
     throw new Error(`SCW_ZONE must be a Scaleway zone such as fr-par-1, got "${zone}"`);
   }
 
+  const region = zone.slice(0, zone.lastIndexOf('-'));
   const client = createClient({
     accessKey: SCW_ACCESS_KEY.value(),
     secretKey: SCW_SECRET_KEY.value(),
     defaultProjectId: SCW_PROJECT_ID.value(),
     defaultZone: zone,
-    defaultRegion: zone.slice(0, zone.lastIndexOf('-')),
+    defaultRegion: region,
   });
 
   return {
     ...buildFirestoreDeps(),
+    // The zone's region, already validated above — the bucket's saveKeys reuse
+    // it below rather than re-deriving it, so a malformed zone fails loudly
+    // right here instead of handing the restore a region sliced from nothing.
+    region,
     host: new ScalewayServerHost(
       fromSdk(new Instancev1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
@@ -90,14 +101,23 @@ export function buildProvisionDeps(): ProvisionDeps {
   return {
     clock: shared.clock,
     host: shared.host,
-    dns: dynHostUpdater({
-      user: DYNHOST_USER.value(),
-      password: DYNHOST_PASSWORD.value(),
-    }),
     state: shared.state,
     settings: shared.settings,
     ledger: shared.ledger,
     serverPassword: () => SERVER_PASSWORD.value(),
+    tokens: agentTokens(getFirestore(defaultApp())),
+    agentEndpoint: AGENT_ENDPOINT.value(),
+    saveKeys: () => ({
+      endpoint: S3_ENDPOINT.value(),
+      // The bucket's region, the same one `shared.host` was built against —
+      // §2 makes them the same region on purpose, and an intra-region
+      // transfer is what the restore depends on.
+      region: shared.region,
+      savesBucket: SAVES_BUCKET.value(),
+      gamesBucket: GAMES_BUCKET.value(),
+      accessKey: S3_ACCESS_KEY.value(),
+      secretKey: S3_SECRET_KEY.value(),
+    }),
   };
 }
 

@@ -68,7 +68,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(16)),
+      server: record('PROVISIONING', 's1', minutesAgo(26)),
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });
@@ -77,7 +77,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(14)),
+      server: record('PROVISIONING', 's1', minutesAgo(24)),
     });
     expect(reasons(v)).toEqual([]);
   });
@@ -112,7 +112,7 @@ describe('reclamations', () => {
   });
 
   it('says as much in the detail, rather than inventing provider wording', () => {
-    const v = view({ openSessions: ['s1'], server: record('PROVISIONING', 's1', minutesAgo(16)) });
+    const v = view({ openSessions: ['s1'], server: record('PROVISIONING', 's1', minutesAgo(26)) });
     const [first] = reclamations(v, DEFAULT_LIMITS);
     expect(first.detail).toBe('the provider holds nothing for this session');
   });
@@ -132,7 +132,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: [],
-      server: record('PROVISIONING', 's1', minutesAgo(20)),
+      server: record('PROVISIONING', 's1', minutesAgo(26)),
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });

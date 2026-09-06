@@ -1,10 +1,32 @@
 import type { Game, JoinInfo } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 
+/** The s3 side of what a machine is told, and the only credential it holds. */
+export interface SaveAccess {
+  readonly endpoint: string;
+  readonly region: string;
+  /** Written by the machine. */
+  readonly savesBucket: string;
+  /** Read by the machine, never written — §5 keeps them in a bucket of their own. */
+  readonly gamesBucket: string;
+  readonly accessKey: string;
+  readonly secretKey: string;
+}
+
 export interface BootRequest {
   readonly serverName: string;
   readonly serverPassword: string;
   readonly slotCount: number;
+  readonly sessionId: string;
+  /**
+   * Thirty-two bytes that die with the session (§7). It rides here because
+   * first-boot data is the only channel to a machine that holds nothing yet,
+   * and it is the reason this whole payload is treated as a secret.
+   */
+  readonly agentToken: string;
+  /** Where the companion reports. Deployed value, never compiled in. */
+  readonly endpoint: string;
+  readonly saves: SaveAccess;
 }
 
 /**

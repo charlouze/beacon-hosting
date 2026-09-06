@@ -1,32 +1,35 @@
-import { catalogFor, renderCloudInit } from '@beacon/cloud-init';
-import {
-  publishedAddressOf,
-  type Clock,
-  type DnsUpdater,
-  type DomainEvent,
-  type JoinInfo,
-  type ServerHost,
-  type Session,
+import { renderCloudInit, type SaveAccess } from '@beacon/cloud-init';
+import { newAgentToken } from '@beacon/agent-protocol';
+import type {
+  Clock,
+  DomainEvent,
+  ServerHost,
+  Session,
 } from '@beacon/session';
 import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
 import { sessionTag } from '@beacon/scaleway-compute';
+import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 
 export interface ProvisionDeps {
   readonly clock: Clock;
   readonly host: ServerHost;
-  readonly dns: DnsUpdater;
   readonly state: ServerStateStore;
   readonly settings: SettingsStore;
   readonly ledger: ProvisioningLedger;
   /** From Secret Manager. It never leaves this process except in a cloud-init. */
   readonly serverPassword: () => string;
+  readonly tokens: AgentTokens;
+  /** Where the machine reports. A deployed value, never compiled in. */
+  readonly agentEndpoint: string;
+  /** From Secret Manager. It never leaves this process except in a cloud-init. */
+  readonly saveKeys: () => SaveAccess;
 }
 
 /**
  * The only frontier to the secrets (§6). Two states do something; every other
  * one is a write this function has no business reacting to — including the
- * RUNNING it writes itself, which would otherwise re-enter here.
+ * RUNNING that `agentReport` writes, which would otherwise re-enter here.
  *
  * It answers whether a pass has something to do right away, not whether this
  * function acted: a successful teardown already destroyed everything it could
@@ -53,6 +56,12 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<boolean
 
   const size = session.instanceSize ?? (await deps.settings.read()).defaultInstanceSize;
 
+  // §6 étape 4: both documents in strict create, before the provider. A
+  // sessionId already seen fails here, which is what closes the reuse of an id
+  // a browser drew (§5).
+  const agentToken = newAgentToken();
+  await deps.tokens.issue(sessionId, agentToken, now);
+
   // Before the provider, always (§6 étape 4).
   await deps.ledger.open(sessionId, { tag: sessionTag(sessionId), instanceSize: size }, now);
 
@@ -66,6 +75,10 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<boolean
         serverName: 'Beacon',
         serverPassword: deps.serverPassword(),
         slotCount: 4,
+        sessionId,
+        agentToken,
+        endpoint: deps.agentEndpoint,
+        saves: deps.saveKeys(),
       }),
     });
   } catch (error) {
@@ -75,57 +88,7 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<boolean
 
   // §5: the intent carries the two ids **and** the address.
   await deps.ledger.record(sessionId, { ...opened.references, ip: opened.address });
-
-  const entry = catalogFor(game);
-  const joinInfo = entry.joinInfo(opened.address);
-  await announce(deps, sessionId, entry.hostname, joinInfo, now);
-
-  // RUNNING means the join point is published (§4). For this game the function
-  // knows it the moment the ip is reserved — the agent that watches the server
-  // actually answer arrives with the companion, in tranche 3.
-  await deps.state.publish(
-    {
-      ip: opened.address,
-      joinInfo,
-      instanceSize: opened.size,
-      references: opened.references,
-    },
-    now,
-  );
   return true;
-}
-
-/**
- * Point the dns record, when this game has one to point. §8: a failure here
- * does **not** interrupt the session — the interface shows the raw ip, which is
- * precisely the fallback the join point already carries. So it is a fact to
- * file, not a reason to destroy a working machine.
- */
-async function announce(
-  deps: ProvisionDeps,
-  sessionId: string,
-  hostname: string | null,
-  joinInfo: JoinInfo,
-  now: Date,
-): Promise<void> {
-  const address = publishedAddressOf(joinInfo);
-  if (address === null || hostname === null) return;
-
-  try {
-    await deps.dns.point(hostname, address);
-  } catch (error) {
-    await deps.state.apply(
-      {
-        state: null,
-        lastError: `dns update failed: ${String(error)}`,
-        clearFacts: false,
-        deadline: null,
-        closeIntents: [],
-        events: [{ type: 'ProvisioningFailed', sessionId, detail: `dns: ${String(error)}` }],
-      },
-      now,
-    );
-  }
 }
 
 /**
@@ -146,7 +109,7 @@ async function failed(
     await deps.state.apply(
       {
         state: 'FAILED',
-        lastError: detail,
+        lastError: sanitizeLastError(detail),
         clearFacts: false,
         deadline: null,
         closeIntents: [],
@@ -165,7 +128,7 @@ async function failed(
   await deps.state.apply(
     {
       state: 'IDLE',
-      lastError: detail,
+      lastError: sanitizeLastError(detail),
       clearFacts: true,
       deadline: null,
       closeIntents: [],
@@ -174,6 +137,23 @@ async function failed(
     now,
   );
   await deps.ledger.close(sessionId, now);
+}
+
+const MAX_LAST_ERROR_LENGTH = 500;
+
+/**
+ * `server/current.lastError` is read by every member's browser, live. The
+ * failure it summarises can carry the cloud-init in its text — nothing
+ * proves the provider's SDK keeps the agent token or the S3 secret key out of
+ * an error message — so this is the one gate between an internal failure and
+ * a client-readable field. `events` above keeps the full, un-sanitised
+ * `detail`: only this field is bounded and scrubbed.
+ */
+function sanitizeLastError(detail: string): string {
+  const scrubbed = detail.replace(/[A-Za-z0-9+/_=-]{20,}/g, '[redacted]');
+  return scrubbed.length > MAX_LAST_ERROR_LENGTH
+    ? `${scrubbed.slice(0, MAX_LAST_ERROR_LENGTH)}…`
+    : scrubbed;
 }
 
 async function tearDown(deps: ProvisionDeps, session: Session): Promise<boolean> {
@@ -188,7 +168,7 @@ async function tearDown(deps: ProvisionDeps, session: Session): Promise<boolean>
     await deps.state.apply(
       {
         state: 'FAILED',
-        lastError: String(error),
+        lastError: sanitizeLastError(String(error)),
         clearFacts: false,
         deadline: null,
         closeIntents: [],

@@ -9,6 +9,7 @@ import {
   buildProvisionDeps,
   DYNHOST_PASSWORD,
   DYNHOST_USER,
+  S3_SECRET_KEY,
   SCW_SECRET_KEY,
   SERVER_PASSWORD,
 } from './container.js';
@@ -46,7 +47,7 @@ export const onServerStateChange = onDocumentWritten(
   {
     document: 'server/current',
     region: 'europe-west1',
-    secrets: [SCW_SECRET_KEY, SERVER_PASSWORD, DYNHOST_USER, DYNHOST_PASSWORD],
+    secrets: [SCW_SECRET_KEY, SERVER_PASSWORD, S3_SECRET_KEY],
     timeoutSeconds: 540,
     // One at a time. Two deliveries racing is what the transactional claim
     // answers; two *sessions* provisioning at once is not a case this system

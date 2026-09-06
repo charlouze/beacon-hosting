@@ -33,7 +33,6 @@ beforeEach(() => {
       list: vi.fn(async () => []),
       sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
     },
-    dns: { point: vi.fn(async () => undefined) },
     state: {
       claimProvisioning: vi.fn(async () => true),
       publish: vi.fn(async () => undefined),
@@ -50,6 +49,16 @@ beforeEach(() => {
       openSessions: vi.fn(async () => []),
     },
     serverPassword: () => 'hunter2',
+    tokens: { issue: vi.fn(async () => undefined), verify: vi.fn(async () => false) },
+    agentEndpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
+    saveKeys: () => ({
+      endpoint: 'https://s3.fr-par.scw.cloud',
+      region: 'fr-par',
+      savesBucket: 'beacon-saves',
+      gamesBucket: 'beacon-games',
+      accessKey: 'SCWXXXXXXXXXXXXXXXXX',
+      secretKey: 's3cr3t',
+    }),
   };
 });
 
@@ -85,36 +94,63 @@ describe('provisioning', () => {
     expect(request.size).toBe('DEV1-L');
   });
 
-  it('points the record at the address, then publishes the join point', async () => {
+  // The heart of this tranche. RUNNING means the join point is published, and
+  // §6 makes the agent the one who knows it — the function knew only that an ip
+  // had been reserved, which is why RUNNING lied for five to eight minutes.
+  it('leaves the state in PROVISIONING, and publishes nothing', async () => {
     await runStateChange(deps, provisioning());
-    expect(deps.dns.point).toHaveBeenCalledWith(
-      'enshrouded.beacon.charlouze.com',
-      '51.15.42.7',
-    );
-    expect(deps.state.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ip: '51.15.42.7',
-        instanceSize: 'DEV1-L',
-        references: { instanceId: 'srv-1', ipId: 'ip-1' },
-      }),
-      NOW,
-    );
+    expect(deps.state.publish).not.toHaveBeenCalled();
   });
 
-  // §8: dns failing does not interrupt the session — the interface shows the
-  // raw ip, which is exactly the fallback the join point already carries.
-  it('publishes anyway when dns refuses, and files the incident', async () => {
-    deps.dns.point = vi.fn(async () => {
-      throw new Error('badauth');
+  // §6 étape 4: the token is issued in the same breath as the intent, before
+  // anything is created. A machine that booted before its token existed would
+  // report into a 401 and never be able to say it is ready.
+  it('issues the session token before it calls the provider', async () => {
+    const order: string[] = [];
+    deps.tokens.issue = vi.fn(async () => void order.push('token'));
+    deps.ledger.open = vi.fn(async () => void order.push('intent'));
+    deps.host.open = vi.fn(async () => {
+      order.push('provider');
+      return {
+        address: '51.15.42.7',
+        size: 'DEV1-L',
+        references: { instanceId: 'srv-1', ipId: 'ip-1' },
+      };
     });
     await runStateChange(deps, provisioning());
-    expect(deps.state.publish).toHaveBeenCalled();
-    expect(deps.state.apply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        events: [expect.objectContaining({ type: 'ProvisioningFailed' })],
-      }),
-      NOW,
-    );
+    expect(order).toEqual(['token', 'intent', 'provider']);
+  });
+
+  it('hands the machine a token, and never the same one twice', async () => {
+    await runStateChange(deps, provisioning());
+    const first = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0].bootstrap;
+    expect(first).toMatch(/BEACON_TOKEN=[0-9a-f]{64}/);
+
+    await runStateChange(deps, provisioning());
+    const second = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[1][0].bootstrap;
+    expect(tokenIn(second)).not.toBe(tokenIn(first));
+  });
+
+  // The crux of this tranche: the token the control plane holds and the token
+  // the machine boots with must be the same value. An implementation that
+  // issued one token and sowed another would leave every other test here
+  // green, and the machine's first report would meet a 401 it can never
+  // recover from — twenty-five minutes in PROVISIONING for nothing.
+  it('issues the very token it sows, not merely a token', async () => {
+    await runStateChange(deps, provisioning());
+    const bootstrap = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0].bootstrap;
+    expect(deps.tokens.issue).toHaveBeenCalledWith('s1', tokenIn(bootstrap), NOW);
+  });
+
+  // The intent still carries what the provider answered — the watchdog compares
+  // against it, and agentReport publishes from it.
+  it('records what the provider answered, address included', async () => {
+    await runStateChange(deps, provisioning());
+    expect(deps.ledger.record).toHaveBeenCalledWith('s1', {
+      instanceId: 'srv-1',
+      ipId: 'ip-1',
+      ip: '51.15.42.7',
+    });
   });
 
   // §5, §8: an ordinary refusal is not FAILED. Clean up, say why, and the
@@ -152,6 +188,50 @@ describe('provisioning', () => {
     // The intent stays open: something is still billed, and closing it would
     // hide the resources from the reconciliation that has to find them.
     expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+
+  // `server/current.lastError` is read by every member's browser, live —
+  // nothing proves the provider's SDK keeps a cloud-init's secret out of an
+  // error's text.
+  describe('what reaches the client-readable field', () => {
+    const secret = 'a'.repeat(64);
+
+    it('redacts anything long enough to be a credential out of lastError', async () => {
+      deps.host.open = vi.fn(async () => {
+        throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
+      });
+      await runStateChange(deps, provisioning());
+      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(applied.lastError).not.toContain(secret);
+      expect(applied.lastError).toContain('[redacted]');
+    });
+
+    it('keeps the full detail in the journalled event', async () => {
+      deps.host.open = vi.fn(async () => {
+        throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
+      });
+      await runStateChange(deps, provisioning());
+      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(applied.events[0].detail).toContain(secret);
+    });
+
+    it('truncates a very long lastError', async () => {
+      deps.host.open = vi.fn(async () => {
+        throw new Error('refused '.repeat(200));
+      });
+      await runStateChange(deps, provisioning());
+      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(applied.lastError.length).toBeLessThan(600);
+    });
+
+    it('sanitises lastError on a failed teardown too', async () => {
+      deps.host.close = vi.fn(async () => {
+        throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
+      });
+      await runStateChange(deps, stopping());
+      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(applied.lastError).not.toContain(secret);
+    });
   });
 });
 
@@ -239,3 +319,6 @@ const fieldsOf = (session: Session) => ({
   instanceSize: session.instanceSize,
   hasJoinInfo: false,
 });
+
+const tokenIn = (bootstrap: string): string =>
+  /BEACON_TOKEN=([0-9a-f]{64})/.exec(bootstrap)?.[1] ?? '';
