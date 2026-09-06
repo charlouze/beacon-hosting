@@ -1,8 +1,8 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
 import { serverStateStore } from '@beacon/session-record';
-import { fromSdk, ScalewayServerHost } from '@beacon/scaleway-compute';
+import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { createClient, type Zone } from '@scaleway/sdk-client';
-import { Instancev1 } from '@scaleway/sdk';
+import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
@@ -43,7 +43,10 @@ export function buildDeps(): WatchdogDeps {
 
   return {
     clock: { now: () => new Date() },
-    host: new ScalewayServerHost(fromSdk(new Instancev1.API(client), zone as Zone)),
+    host: new ScalewayServerHost(
+      fromSdk(new Instancev1.API(client), zone as Zone),
+      marketplaceImages(new Marketplacev2.API(client), zone),
+    ),
     state: serverStateStore(db),
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),

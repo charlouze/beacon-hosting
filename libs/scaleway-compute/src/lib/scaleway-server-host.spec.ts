@@ -6,12 +6,14 @@ import { OWNERSHIP_TAG, sessionTag } from './tags.js';
 const owned = (sessionId?: string) =>
   sessionId === undefined ? [OWNERSHIP_TAG] : [OWNERSHIP_TAG, sessionTag(sessionId)];
 
+const images = { resolve: async () => 'img-1' };
+
 let api: FakeInstanceApi;
 let host: ScalewayServerHost;
 
 beforeEach(() => {
   api = new FakeInstanceApi();
-  host = new ScalewayServerHost(api);
+  host = new ScalewayServerHost(api, images);
 });
 
 describe('list', () => {
@@ -250,5 +252,78 @@ describe('sweepUnclaimed', () => {
     await host.sweepUnclaimed();
 
     expect(api.calls.indexOf('listVolumes')).toBeLessThan(api.calls.indexOf('terminate s-1'));
+  });
+});
+
+describe('open', () => {
+  const REQUEST = {
+    sessionId: 's1',
+    game: 'enshrouded' as const,
+    size: 'DEV1-L',
+    bootstrap: '#cloud-config\n',
+  };
+
+  it('carries both tags on the ip and on the server, from creation', async () => {
+    const api = new FakeInstanceApi();
+    await new ScalewayServerHost(api, images).open(REQUEST);
+    expect(api.ips[0].tags).toEqual(owned('s1'));
+    expect(api.servers[0].tags).toEqual(owned('s1'));
+  });
+
+  // The ip first, and this is the order the sequence exists for: the address
+  // is known before the machine is, which is what lets a join point be
+  // announced. It is also what makes the resource reapable if the next call
+  // fails — an untagged ip created after a tagged server would be invisible.
+  it('reserves the ip before it creates the server', async () => {
+    const api = new FakeInstanceApi();
+    await new ScalewayServerHost(api, images).open(REQUEST);
+    expect(api.calls.filter((c) => c.startsWith('create'))).toEqual([
+      'createIp beacon+session:s1',
+      'createServer beacon+session:s1',
+    ]);
+  });
+
+  // There is no second chance at first boot: user data posted after poweron
+  // is read by nothing, and the machine sits there billed and empty.
+  it('posts the cloud-init before it powers the machine on', async () => {
+    const api = new FakeInstanceApi();
+    await new ScalewayServerHost(api, images).open(REQUEST);
+    expect(api.userData.get('srv-1')).toBe(REQUEST.bootstrap);
+    // `indexOf` answers -1 for an absent call, and -1 is less than any real
+    // index — a bare `toBeLessThan` would pass if `setServerUserData` were
+    // never called at all, which is the exact failure this test is named for.
+    const setIndex = api.calls.indexOf('setServerUserData srv-1');
+    const powerOnIndex = api.calls.indexOf('powerOn srv-1');
+    expect(setIndex).toBeGreaterThanOrEqual(0);
+    expect(powerOnIndex).toBeGreaterThanOrEqual(0);
+    expect(setIndex).toBeLessThan(powerOnIndex);
+  });
+
+  it('answers with the address and the provider references', async () => {
+    const api = new FakeInstanceApi();
+    const opened = await new ScalewayServerHost(api, images).open(REQUEST);
+    expect(opened.address).toBe('51.15.0.1');
+    expect(opened.size).toBe('DEV1-L');
+    expect(opened.references).toEqual({ instanceId: 'srv-1', ipId: 'ip-1' });
+  });
+
+  // The failure that costs money. An ip created and then abandoned keeps
+  // billing, and carries the tags that would let the watchdog find it — so the
+  // honest thing is to say what exists, not to hide it behind a bare throw.
+  it('names the ip it already created when the server refuses', async () => {
+    const api = new FakeInstanceApi();
+    api.failOn = 'createServer';
+    await expect(new ScalewayServerHost(api, images).open(REQUEST)).rejects.toThrow(
+      /ip ip-1 is tagged session:s1/,
+    );
+  });
+
+  it('refuses to open when no image matches the size', async () => {
+    const api = new FakeInstanceApi();
+    const none = { resolve: async () => null };
+    await expect(new ScalewayServerHost(api, none).open(REQUEST)).rejects.toThrow(
+      /no ubuntu image/,
+    );
+    expect(api.calls).toEqual([]);
   });
 });

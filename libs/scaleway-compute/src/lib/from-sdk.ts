@@ -36,5 +36,24 @@ export function fromSdk(api: Instancev1.API, zone: Zone): InstanceApi {
     deleteServer: (request) => api.deleteServer({ ...request, zone }),
     deleteVolume: (request) => api.deleteVolume({ ...request, zone }),
     deleteIp: (request) => api.deleteIp({ ...request, zone }),
+    createIp: (request) => api.createIp({ ...request, zone }),
+    createServer: (request) => api.createServer({ ...request, zone }),
+    setServerUserData: (request) =>
+      api.setServerUserData({ ...request, zone, key: 'cloud-init' }),
+    // Waits for `running`, unlike every destruction path here: a machine that
+    // never reached it is a provisioning failure, and the caller has to learn
+    // it while it can still tear the resources down.
+    //
+    // Which is what fixes the eight minutes. The provisioning Function is
+    // killed at 540 s, so any wait at or above that expires never — the
+    // caller would be dead before it heard, and the resources would live on.
+    // 480 s leaves the destruction its minute, and is still thirty times the
+    // 15 s the probe measured from `poweron` to `running`.
+    powerOn: async (request) => {
+      await api.serverActionAndWait(
+        { ...request, zone, action: 'poweron' },
+        { timeout: 8 * 60_000 },
+      );
+    },
   };
 }

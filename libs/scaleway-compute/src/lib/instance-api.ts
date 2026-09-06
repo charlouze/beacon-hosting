@@ -50,4 +50,15 @@ export interface InstanceApi {
   deleteServer(request: { serverId: string }): Promise<void>;
   deleteVolume(request: { volumeId: string }): Promise<void>;
   deleteIp(request: { ip: string }): Promise<void>;
+  createIp(request: { tags: string[] }): Promise<{ ip?: ScwIp }>;
+  createServer(request: {
+    name: string;
+    commercialType: string;
+    image: string;
+    publicIps: string[];
+    tags: string[];
+  }): Promise<{ server?: ScwServer }>;
+  /** cloud-init travels as user data, in a call of its own. */
+  setServerUserData(request: { serverId: string; content: string }): Promise<void>;
+  powerOn(request: { serverId: string }): Promise<void>;
 }

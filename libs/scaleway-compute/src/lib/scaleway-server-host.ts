@@ -1,5 +1,13 @@
-import type { HostedServer, ServerHost, SessionId, UnclaimedSweep } from '@beacon/session';
-import type { InstanceApi, ScwServer } from './instance-api.js';
+import type {
+  HostedServer,
+  OpenedServer,
+  OpenServerRequest,
+  ServerHost,
+  SessionId,
+  UnclaimedSweep,
+} from '@beacon/session';
+import type { ImageResolver } from './images.js';
+import type { InstanceApi, ScwIp, ScwServer } from './instance-api.js';
 import { OWNERSHIP_TAG, readSessionTag, sessionTag } from './tags.js';
 
 interface OwnedResource {
@@ -20,7 +28,69 @@ const carrying =
     resource.tags.includes(tag);
 
 export class ScalewayServerHost implements ServerHost {
-  constructor(private readonly api: InstanceApi) {}
+  constructor(
+    private readonly api: InstanceApi,
+    private readonly images: ImageResolver,
+  ) {}
+
+  async open(request: OpenServerRequest): Promise<OpenedServer> {
+    // Both tags, from creation (§5). The constant one is what makes "every
+    // resource of this system whose session is unknown" a query the api can
+    // answer; the session one is what pairs a resource with its intent.
+    const tags = [OWNERSHIP_TAG, sessionTag(request.sessionId)];
+
+    // Before anything is created: an unmatched size must cost nothing, and
+    // `DEV1-L` has no fallback — it is the only 8 GiB type of the zone both
+    // available and shipped with its disk (§2).
+    const image = await this.images.resolve(request.size);
+    if (image === null) {
+      throw new Error(`no ubuntu image for ${request.size}`);
+    }
+
+    const { ip } = await this.api.createIp({ tags });
+    if (ip?.address === undefined) {
+      throw new Error('createIp returned no address — nothing to announce, nothing to attach');
+    }
+
+    // From here on, a failure has already spent money. Every throw names the
+    // ip and how it is tagged — the earliest resource created, and enough to
+    // find the whole attempt by tag, whatever else did or didn't get created
+    // after it. The watchdog reaps all of it within five minutes regardless,
+    // which the message does not have to enumerate.
+    const created = await this.failing(
+      () =>
+        this.api.createServer({
+          name: `beacon-${request.sessionId}`,
+          commercialType: request.size,
+          image,
+          publicIps: [ip.id],
+          tags,
+        }),
+      ip,
+      request,
+    );
+    const server = created.server;
+    if (server === undefined) {
+      throw new Error(
+        `createServer returned no server, and ip ${ip.id} is tagged ${sessionTag(request.sessionId)}`,
+      );
+    }
+
+    // The cloud-init lands before the boot: there is no second chance at
+    // first boot, and user data posted after poweron is read by nothing.
+    await this.failing(
+      () => this.api.setServerUserData({ serverId: server.id, content: request.bootstrap }),
+      ip,
+      request,
+    );
+    await this.failing(() => this.api.powerOn({ serverId: server.id }), ip, request);
+
+    return {
+      address: ip.address,
+      size: request.size,
+      references: { instanceId: server.id, ipId: ip.id },
+    };
+  }
 
   async list(): Promise<HostedServer[]> {
     const bySession = new Map<SessionId, string[]>();
@@ -130,6 +200,28 @@ export class ScalewayServerHost implements ServerHost {
         summary: `ip ${ip.address}`,
       })),
     ];
+  }
+
+  /**
+   * Re-throws naming the ip, not necessarily everything that exists by the
+   * time the call failed — the ip is created first and carries both tags, so
+   * it alone is enough to find the attempt. Nothing is destroyed here: the
+   * resources carry both tags, and destroying is the watchdog's single
+   * responsibility — a second component that reaps is a second component that
+   * can reap the wrong thing.
+   */
+  private async failing<T>(
+    call: () => Promise<T>,
+    ip: ScwIp,
+    request: OpenServerRequest,
+  ): Promise<T> {
+    try {
+      return await call();
+    } catch (error) {
+      throw new Error(
+        `failed to open ${request.sessionId}: ip ${ip.id} is tagged ${sessionTag(request.sessionId)} — ${String(error)}`,
+      );
+    }
   }
 
   private async destroyServer(server: ScwServer): Promise<void> {

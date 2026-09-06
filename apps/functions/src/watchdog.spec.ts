@@ -1,6 +1,8 @@
 import {
   DEFAULT_LIMITS,
   type HostedServer,
+  type OpenedServer,
+  type OpenServerRequest,
   type ServerHost,
   type UnclaimedSweep,
 } from '@beacon/session';
@@ -38,6 +40,12 @@ class FakeServerHost implements ServerHost {
   listed = false;
 
   constructor(public hosted: HostedServer[] = []) {}
+
+  // Never exercised: this fake drives the watchdog, which only closes and
+  // sweeps. A body is required to satisfy `ServerHost`, not to be called.
+  async open(_request: OpenServerRequest): Promise<OpenedServer> {
+    throw new Error('FakeServerHost.open is not exercised by the watchdog');
+  }
 
   async list(): Promise<HostedServer[]> {
     if (this.onList !== null) await this.onList();
@@ -314,7 +322,7 @@ describe('runWatchdog', () => {
 
     await runWatchdog({
       ...deps(),
-      host: new ScalewayServerHost(api),
+      host: new ScalewayServerHost(api, { resolve: async () => null }),
       ledger: provisioningLedger(db),
     });
 

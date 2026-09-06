@@ -3,6 +3,7 @@ import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { afterAll, describe, expect, it } from 'vitest';
 import { fromSdk } from './from-sdk.js';
+import { marketplaceImages } from './images.js';
 import { ScalewayServerHost } from './scaleway-server-host.js';
 import { OWNERSHIP_TAG, sessionTag } from './tags.js';
 
@@ -20,6 +21,10 @@ loadEnv({ path: new URL('../../.env', import.meta.url) });
  * each resource counted separately — and the server here never boots, so the
  * disk and the ip are what actually cost. The hour is due whatever the test's
  * real duration.
+ *
+ * `open()` is deliberately absent from this suite: it boots a billed machine,
+ * and a contract test that costs a euro per run is a contract test nobody
+ * runs. It is exercised once, by hand, at the end of tranche 2.
  */
 
 const SESSION = `contract-${process.env['SCW_CONTRACT_RUN'] ?? 'manual'}`;
@@ -42,7 +47,7 @@ const marketplace = new Marketplacev2.API(client);
 // point: this test answers "does InstanceApi describe the sdk", and it could
 // not answer it about a second translation nobody deploys.
 const api = fromSdk(sdk, zone);
-const host = new ScalewayServerHost(api);
+const host = new ScalewayServerHost(api, marketplaceImages(marketplace, zone));
 const tags = [OWNERSHIP_TAG, sessionTag(SESSION)];
 
 afterAll(async () => {
@@ -90,13 +95,14 @@ describe('ScalewayServerHost against the real account', () => {
     // failure three lines down.
     if (created.server === undefined) throw new Error('createServer returned no server');
     // `created.server` is `any` here (see the comment on `api.listServers`
-    // below): `open()` — the only place `InstanceApi` would grow a creation
-    // method — is tranche 2, so this setup has no checked boundary to route
-    // through, unlike everything else in this file. `CreatedServerShape`
-    // names the shape the vendor's docs promise, the same way
-    // `instance-api.ts` narrows the vendor's surface to what this library
-    // trusts — but a declaration proves nothing the compiler can't check.
-    // The assertions right after are the actual oracle.
+    // below): this setup creates through `sdk.createServer` directly rather
+    // than through `InstanceApi.createServer`, on purpose — it is checking the
+    // raw sdk response shape that `open()` is built on, not the adapter's own
+    // translation of it, so routing through the adapter here would beg the
+    // question. `CreatedServerShape` names the shape the vendor's docs
+    // promise, the same way `instance-api.ts` narrows the vendor's surface to
+    // what this library trusts — but a declaration proves nothing the
+    // compiler can't check. The assertions right after are the actual oracle.
     const server = created.server as CreatedServerShape;
     expect(typeof server.id).toBe('string');
     expect(server.id.length).toBeGreaterThan(0);
@@ -156,12 +162,13 @@ describe('ScalewayServerHost against the real account', () => {
 });
 
 /**
- * `Instancev1.API`'s `createServer` isn't behind `InstanceApi` — `open()` is
- * tranche 2 — so this test's setup has no checked boundary to trust instead.
- * Declared narrowly, next to its only use, for the reason `instance-api.ts`
- * gives for existing at all: the vendor's surface isn't trusted directly. See
- * the comment above `api.listServers` for why the compiler can't check this
- * one either way — the assertions after the cast are what actually do.
+ * This test's setup creates through `sdk.createServer` directly, bypassing
+ * `InstanceApi.createServer`, on purpose: it is checking the raw shape
+ * `open()` is built on, not the adapter's translation of it. Declared
+ * narrowly, next to its only use, for the reason `instance-api.ts` gives for
+ * existing at all: the vendor's surface isn't trusted directly. See the
+ * comment above `api.listServers` for why the compiler can't check this one
+ * either way — the assertions after the cast are what actually do.
  */
 interface CreatedServerShape {
   readonly id: string;
