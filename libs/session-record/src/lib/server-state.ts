@@ -1,32 +1,42 @@
 import {
-  SESSION_STATES,
   type DomainEvent,
+  type InstanceSize,
   type ServerRecord,
-  type SessionState,
+  type Session,
+  type SessionId,
   type StateCorrection,
 } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
+import {
+  EVENTS,
+  RESERVED_FACTS,
+  SERVER_DOC,
+  sessionFrom,
+  toDate,
+  toState,
+  TTL_DAYS,
+  type JoinInfo,
+} from './fields.js';
 
-export const SERVER_DOC = 'server/current';
-export const EVENTS = 'events';
-
-const TTL_DAYS = 400;
-
-/**
- * The reserved fields of §5, minus `lastError`. This list is the one place in
- * the repository that knows them, and it is why `ServerRecord` carries a
- * boolean rather than the fields themselves: the day the spec adds a reserved
- * field — as it just did with `joinInfo` — only this line changes.
- *
- * `provisionClaimedAt` belongs here and its absence would be the worst bug of
- * the tranche: it is the provisioning claim lock (§6, étape 3), and one that
- * survived a return to IDLE would make the Function abandon every session
- * that follows, forever.
- */
-const RESERVED_FACTS = ['instanceId', 'ipId', 'ip', 'joinInfo', 'provisionClaimedAt'] as const;
+export interface ServerFacts {
+  readonly ip: string;
+  readonly joinInfo: JoinInfo;
+  readonly instanceSize: InstanceSize;
+  /** Provider references, as `open()` handed them back. */
+  readonly references: { readonly instanceId: string; readonly ipId: string };
+}
 
 export interface ServerStateStore {
   read(): Promise<ServerRecord | null>;
+  /** The same document, as the domain reads it. Null when it is unreadable. */
+  readSession(): Promise<Session | null>;
+  /**
+   * §6 étape 3. True when this call is the one that claimed it — and only the
+   * caller that gets true may spend money.
+   */
+  claimProvisioning(sessionId: SessionId, at: Date): Promise<boolean>;
+  /** The machine exists and its join point is published: this is RUNNING (§4). */
+  publish(facts: ServerFacts, at: Date): Promise<void>;
   /** `at` comes from the pass, so one pass stamps everything with one instant. */
   apply(correction: StateCorrection, at: Date): Promise<void>;
 }
@@ -50,6 +60,43 @@ export function serverStateStore(db: Firestore): ServerStateStore {
       };
     },
 
+    async readSession(): Promise<Session | null> {
+      const snapshot = await db.doc(SERVER_DOC).get();
+      return snapshot.exists ? sessionFrom(snapshot.data() ?? {}) : null;
+    },
+
+    async claimProvisioning(sessionId: SessionId, at: Date): Promise<boolean> {
+      return db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(db.doc(SERVER_DOC));
+        const data = snapshot.data() ?? {};
+        // Three refusals and not one. Already claimed is the double delivery;
+        // another session is a trigger that arrived after the world moved on;
+        // another state is the same thing, seen from the other side.
+        if ((data['provisionClaimedAt'] ?? null) !== null) return false;
+        if (data['sessionId'] !== sessionId) return false;
+        if (data['state'] !== 'PROVISIONING') return false;
+        transaction.update(db.doc(SERVER_DOC), {
+          provisionClaimedAt: Timestamp.fromDate(at),
+        });
+        return true;
+      });
+    },
+
+    async publish(facts: ServerFacts, at: Date): Promise<void> {
+      await db.doc(SERVER_DOC).set(
+        {
+          state: 'RUNNING',
+          stateSince: Timestamp.fromDate(at),
+          ip: facts.ip,
+          joinInfo: facts.joinInfo,
+          instanceSize: facts.instanceSize,
+          instanceId: facts.references.instanceId,
+          ipId: facts.references.ipId,
+        },
+        { merge: true },
+      );
+    },
+
     async apply(correction: StateCorrection, at: Date): Promise<void> {
       const batch = db.batch();
       const patch: Record<string, unknown> = {};
@@ -71,6 +118,11 @@ export function serverStateStore(db: Firestore): ServerStateStore {
         for (const field of RESERVED_FACTS) {
           patch[field] = null;
         }
+      }
+      if (correction.deadline !== null) {
+        // The deadline alone. `stateSince` stays where it is: the state did
+        // not change, and the delays of §6 are measured on it.
+        patch['deadline'] = Timestamp.fromDate(correction.deadline.at);
       }
       if (Object.keys(patch).length > 0) {
         batch.set(db.doc(SERVER_DOC), patch, { merge: true });
@@ -96,19 +148,4 @@ function eventDocument(event: DomainEvent, at: Date) {
     at: Timestamp.fromDate(at),
     expiresAt: Timestamp.fromDate(new Date(at.getTime() + TTL_DAYS * 86_400_000)),
   };
-}
-
-/**
- * Null rather than a guess. This is the frontier: what crosses it must be a
- * state the domain named, or nothing at all. Defaulting to IDLE would hand the
- * component that destroys a fact nobody wrote.
- */
-function toState(value: unknown): SessionState | null {
-  return SESSION_STATES.includes(value as SessionState) ? (value as SessionState) : null;
-}
-
-function toDate(value: unknown): Date | null {
-  if (value instanceof Timestamp) return value.toDate();
-  if (value instanceof Date) return value;
-  return null;
 }

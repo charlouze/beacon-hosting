@@ -1,16 +1,23 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { StateCorrection } from '@beacon/session';
+import { Deadline, type StateCorrection } from '@beacon/session';
+import { EVENTS, SERVER_DOC, toDate } from './fields.js';
 import { serverStateStore, type ServerStateStore } from './server-state.js';
 
 process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
 
 const NOW = new Date('2026-09-04T21:00:00Z');
+// A second instant, distinct from NOW, for the tests that write with their
+// own `at` instead of relying on the module-level clock.
+const AT = new Date('2026-09-04T21:05:00Z');
 
 let app: ReturnType<typeof initializeApp>;
 let db: Firestore;
 let store: ServerStateStore;
+
+/** Minimal `server/current`, filled in by the parts a test cares about. */
+const seedServer = (parts: Record<string, unknown>) => db.doc(SERVER_DOC).set(parts);
 
 beforeAll(() => {
   app = initializeApp({ projectId: 'demo-beacon' }, 'server-state-spec');
@@ -31,6 +38,7 @@ const correction = (parts: Partial<StateCorrection> = {}): StateCorrection => ({
   state: null,
   lastError: null,
   clearFacts: false,
+  deadline: null,
   closeIntents: [],
   events: [],
   ...parts,
@@ -225,5 +233,77 @@ describe('serverStateStore', () => {
     await apply({ events: [{ type: 'ResourceStranded', sessionId: null, detail: 'volume v-1' }] });
     const [event] = (await db.collection('events').get()).docs;
     expect(event.data()['sessionId']).toBeNull();
+  });
+});
+
+describe('claiming the provisioning', () => {
+  // §6 étape 3, §8: Firestore triggers are delivered at least once. Without
+  // this claim a double delivery creates two billed machines, and the second
+  // is invisible to everything but the invoice.
+  it('claims once and refuses every claim after it', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's1' });
+    const store = serverStateStore(db);
+    expect(await store.claimProvisioning('s1', AT)).toBe(true);
+    expect(await store.claimProvisioning('s1', AT)).toBe(false);
+  });
+
+  it('refuses a claim for a session the document does not name', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's1' });
+    expect(await serverStateStore(db).claimProvisioning('s2', AT)).toBe(false);
+  });
+
+  it('refuses a claim on a state that is no longer provisioning', async () => {
+    await seedServer({ state: 'IDLE', sessionId: 's1' });
+    expect(await serverStateStore(db).claimProvisioning('s1', AT)).toBe(false);
+  });
+});
+
+describe('publishing the facts', () => {
+  it('writes the reserved fields and turns the state to RUNNING', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's1' });
+    await serverStateStore(db).publish(
+      {
+        ip: '51.15.42.7',
+        joinInfo: { game: 'enshrouded', hostname: 'h', address: '51.15.42.7', port: 15637 },
+        instanceSize: 'DEV1-L',
+        references: { instanceId: 'srv-1', ipId: 'ip-1' },
+      },
+      AT,
+    );
+    const data = (await db.doc(SERVER_DOC).get()).data() ?? {};
+    expect(data['state']).toBe('RUNNING');
+    expect(data['instanceId']).toBe('srv-1');
+    expect(data['ipId']).toBe('ip-1');
+    expect(data['ip']).toBe('51.15.42.7');
+    expect(data['joinInfo']).toMatchObject({ port: 15637 });
+    // Recopied so that a default size changed mid-session cannot make the
+    // shown estimate drift (§6 étape 7).
+    expect(data['instanceSize']).toBe('DEV1-L');
+    expect(toDate(data['stateSince'])).toEqual(AT);
+  });
+});
+
+describe('applying a deadline', () => {
+  it('writes a clamped deadline and its audit line in one commit', async () => {
+    await seedServer({ state: 'RUNNING', sessionId: 's1' });
+    await serverStateStore(db).apply(
+      {
+        state: null,
+        lastError: null,
+        clearFacts: false,
+        deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
+        closeIntents: [],
+        events: [{ type: 'DeadlineClamped', sessionId: 's1', detail: 'brought back to 4 h' }],
+      },
+      AT,
+    );
+    const data = (await db.doc(SERVER_DOC).get()).data() ?? {};
+    expect(toDate(data['deadline'])).toEqual(new Date('2026-09-07T00:00:00Z'));
+    // The state did not move, so `stateSince` must not either: the delays of
+    // §6 are measured on it, and touching it would restart the clock on a
+    // STOPPING that has been stuck for nine minutes.
+    expect(data['stateSince']).toBeUndefined();
+    const events = await db.collection(EVENTS).get();
+    expect(events.docs.map((d) => d.get('type'))).toEqual(['DeadlineClamped']);
   });
 });

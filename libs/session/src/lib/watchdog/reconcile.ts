@@ -1,3 +1,4 @@
+import type { Deadline } from '../deadline.js';
 import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
@@ -26,6 +27,12 @@ export interface StateCorrection {
   /** Sessions whose provisioning intent must be closed. */
   readonly closeIntents: readonly SessionId[];
   readonly events: readonly DomainEvent[];
+  /**
+   * Null leaves the recorded one. Set only when the watchdog brings a forged
+   * deadline back to the bound (§6) — and it never moves `stateSince`, which
+   * is what the stuck-state delays are measured on.
+   */
+  readonly deadline: Deadline | null;
 }
 
 const NOTHING: StateCorrection = {
@@ -34,6 +41,7 @@ const NOTHING: StateCorrection = {
   clearFacts: false,
   closeIntents: [],
   events: [],
+  deadline: null,
 };
 
 interface ClosedMeaning {
@@ -128,7 +136,14 @@ export function reconcile(
     // Never from IDLE, though: §5 draws no arrow there, and a record that
     // already holds nothing has nothing to add to the event above.
     if (record.state === 'IDLE') return { ...NOTHING, closeIntents, events };
-    return { state: 'FAILED', lastError: own.error, clearFacts: false, closeIntents, events };
+    return {
+      state: 'FAILED',
+      lastError: own.error,
+      clearFacts: false,
+      closeIntents,
+      events,
+      deadline: null,
+    };
   }
 
   if (own !== undefined) {
@@ -138,6 +153,7 @@ export function reconcile(
       clearFacts: true,
       closeIntents,
       events,
+      deadline: null,
     };
   }
 
@@ -149,7 +165,14 @@ export function reconcile(
     // failed-retry reclamation has already produced an outcome above.
     // lastError is left null, which keeps the recorded one — the interface
     // still has to say the previous attempt failed.
-    return { state: 'IDLE', lastError: null, clearFacts: true, closeIntents, events };
+    return {
+      state: 'IDLE',
+      lastError: null,
+      clearFacts: true,
+      closeIntents,
+      events,
+      deadline: null,
+    };
   }
 
   if (record.state === 'RUNNING' && !stillHeld && record.sessionId !== null) {
@@ -164,6 +187,7 @@ export function reconcile(
       clearFacts: true,
       closeIntents,
       events,
+      deadline: null,
     };
   }
 
