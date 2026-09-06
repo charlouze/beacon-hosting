@@ -3,6 +3,7 @@ export * from './lib/events.js';
 export * from './lib/game.js';
 export * from './lib/join-info.js';
 export * from './lib/ports.js';
+export * from './lib/session-aggregate.js';
 export * from './lib/session.js';
 export * from './lib/settings.js';
 export * from './lib/watchdog/reclamations.js';
