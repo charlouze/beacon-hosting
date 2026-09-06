@@ -1070,8 +1070,13 @@ jamais bloqué ».
 5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
    avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, une clé S3
    qui écrit dans `beacon-saves` et lit `beacon-games` — deux seaux, et le §5
-   dit pourquoi ce n'est pas un préfixe —, la configuration serveur et
-   l'échéance. `ipId`, `ip` et `instanceId` sont inscrits dans
+   dit pourquoi ce n'est pas un préfixe — et la configuration serveur.
+
+   **L'échéance n'y est pas**, et son absence est ce qui la garde vraie :
+   l'agent la relit dans la réponse à chacun de ses rapports, donc une valeur
+   figée au démarrage serait périmée dès la première prolongation. Une donnée
+   qui a deux sources dont l'une ne se met jamais à jour n'a pas deux sources,
+   elle en a une fausse. `ipId`, `ip` et `instanceId` sont inscrits dans
    `provisioning/{sessionId}` dès que Scaleway les retourne. L'IP d'abord :
    c'est la Function qui connaît l'adresse, et elle la connaît avant que la
    machine existe.
