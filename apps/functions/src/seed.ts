@@ -1,5 +1,5 @@
-import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { defaultApp } from './firebase-app.js';
 
 /**
  * What §5 means by "seeded at deployment". Never touches an existing document:
@@ -9,8 +9,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
  * that give it a reader.
  */
 async function seed(): Promise<void> {
-  if (getApps().length === 0) initializeApp();
-  const db = getFirestore();
+  const db = getFirestore(defaultApp());
   const doc = db.doc('server/current');
 
   // Each document is checked on its own: a crash between the two creates must

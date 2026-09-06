@@ -4,8 +4,8 @@ import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway
 import { dynHostUpdater } from '@beacon/ovh-dns';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
-import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { provisioningLedger } from './provisioning-ledger.js';
 import type { ProvisionDeps } from './provisioning.js';
@@ -32,8 +32,7 @@ export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
  * other's wiring.
  */
 function buildShared() {
-  if (getApps().length === 0) initializeApp();
-  const db = getFirestore();
+  const db = getFirestore(defaultApp());
   const zone = SCW_ZONE.value();
 
   // The region is derived from the zone, and an empty or malformed one derives
