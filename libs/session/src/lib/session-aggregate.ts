@@ -126,6 +126,11 @@ export class Session {
     return this.required().deadline;
   }
 
+  /** §4: the domain knows whether the join point exists — that is what `RUNNING` means — and never what it contains. */
+  get hasJoinInfo(): boolean {
+    return this.fields?.hasJoinInfo ?? false;
+  }
+
   canExtend(clock: Clock, settings: SessionSettings): boolean {
     return (
       this.fields !== null &&
