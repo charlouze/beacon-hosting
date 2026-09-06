@@ -30,6 +30,13 @@
             }
           }
         }
+      },
+      "smoke": {
+        "dependsOn": ["build"],
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bash deploy/companion/smoke/run.sh"
+        }
       }
     }
   },

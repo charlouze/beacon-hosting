@@ -1,0 +1,73 @@
+# The companion's own compose, not the one the catalogue renders. It exercises
+# the two services against a bucket and a stub — what the real one adds is a
+# game that takes five to eight minutes to boot, which task 13 covers.
+services:
+  bucket:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: smoke
+      MINIO_ROOT_PASSWORD: smokesmoke
+      # Without this, MinIO has no way to know that a `Host: beacon-saves.bucket`
+      # header names the `beacon-saves` bucket rather than an opaque hostname —
+      # every virtual-hosted-style request the companion sends would 404 as
+      # NoSuchBucket, restore's empty-bucket read included.
+      MINIO_DOMAIN: bucket
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      retries: 30
+    # Scaleway is addressed virtual-hosted style (`forcePathStyle: false`,
+    # hardcoded in container.ts because that is what production talks to), so
+    # the sdk builds `beacon-saves.bucket` from the bucket name and the
+    # endpoint's host. Nothing resolves that name on its own; this alias makes
+    # it the same address as `bucket` on this network, and only on this one.
+    networks:
+      default:
+        aliases:
+          - beacon-saves.bucket
+
+  restore:
+    image: beacon-companion:smoke
+    command: ["/app/restore.mjs"]
+    restart: "no"
+    depends_on:
+      bucket: { condition: service_healthy }
+    env_file: [./smoke.env]
+    # The fake endpoint runs on the host, and a Linux runner does not resolve
+    # this name on its own — unlike Docker Desktop, which is what makes it work
+    # on the machine of whoever wrote the test and not in CI.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - world:/opt/enshrouded/savegame
+
+  game:
+    # Same digest as `../Dockerfile`: §10 pins every image this stack names,
+    # not only the companion's own, and this is the container the gate's
+    # assertions all depend on answering the same way twice.
+    image: node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+    command: ["node", "/opt/stub-game.mjs"]
+    depends_on:
+      restore: { condition: service_completed_successfully }
+    environment:
+      SAVE_DIR: /opt/enshrouded/savegame
+    volumes:
+      - ./stub-game.mjs:/opt/stub-game.mjs:ro
+      - world:/opt/enshrouded/savegame
+
+  agent:
+    image: beacon-companion:smoke
+    command: ["/app/agent.mjs"]
+    depends_on:
+      game: { condition: service_started }
+    env_file: [./smoke.env]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - world:/opt/enshrouded/savegame
+      - control:/opt/beacon/control
+
+volumes:
+  world:
+  control:
