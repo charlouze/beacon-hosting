@@ -408,9 +408,23 @@ vie du bucket, jamais du code.
 
 **Les événements sont des faits au passé** — `SessionStarted`,
 `SessionExtended`, `SessionStopRequested`, `SessionStopped`, `DeadlineClamped`,
-`ProvisioningFailed`, `CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
+`ProvisioningFailed`, `DnsUpdateFailed`, `AgentContradicted`, `SaveRefused`,
+`CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
 
-Deux d'entre eux se ressemblent et ne disent pas la même chose.
+**Trois d'entre eux disent qu'un pas a raté sans que la soirée soit perdue**, et
+c'est la distinction qui leur vaut d'exister séparément. `DnsUpdateFailed` :
+l'enregistrement n'a pas pu être pointé, le §8 ne coupe rien et le point de
+jonction porte déjà l'IP brute en recours. `AgentContradicted` : la machine a
+déclaré une adresse qui n'est pas celle que le plan de contrôle a réservée — on
+ne la suit pas (§6), et le désaccord vaut une ligne. `SaveRefused` : une
+sauvegarde sous le plancher n'a pas été enregistrée (§8).
+
+Les deux premiers ont été écrits parce que `ProvisioningFailed` faisait leur
+travail et mentait en le faisant : une session qui devient `RUNNING` la seconde
+d'après n'a pas échoué à se provisionner, et un journal qui l'affirme est lu par
+un humain au moment précis où il a besoin qu'il soit vrai.
+
+Deux autres se ressemblent et ne disent pas la même chose.
 `SessionStopRequested` est écrit par le navigateur, dans la même écriture que le
 passage à `STOPPING` : c'est le seul endroit qui garde **qui** a demandé
 l'arrêt, sans quoi couper la soirée d'un autre serait le seul geste anonyme du
