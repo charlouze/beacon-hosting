@@ -1,6 +1,7 @@
 import type { Game } from './game.js';
 import type { SessionId } from './session.js';
 import type { InstanceSize } from './settings.js';
+import type { Save, SaveOrigin } from './saves/save.js';
 
 export interface Clock {
   now(): Date;
@@ -121,4 +122,43 @@ export interface ServerHost {
    * volumes nothing can be proven about, and survive a refusal on any of them.
    */
   sweepUnclaimed(): Promise<UnclaimedSweep>;
+}
+
+/**
+ * A path on the machine that runs the game. The domain carries the location and
+ * never reads it, exactly as it carries a cloud-init: naming a filesystem here
+ * would put an operating system's word inside a model that talks about sessions.
+ */
+export type LocalPath = string;
+
+/** What a deposit asks for. The key is the adapter's to build, never the caller's. */
+export interface SaveDraft {
+  readonly game: Game;
+  readonly sessionId: SessionId;
+  readonly origin: SaveOrigin;
+  readonly createdAt: Date;
+}
+
+/**
+ * List, read and write the saves (§4). Declared here and consumed on the game
+ * machine — the functions never touch object storage, which is what keeps the
+ * s3 credentials out of their bundle (§7).
+ *
+ * **It has no delete and no prune, and that is the design.** On the only
+ * irreplaceable data of the system, the best line of code is the one that does
+ * not exist: every deposit writes a key nothing else will ever carry (§5), so
+ * there is no overwrite to guard against, and pruning is a lifecycle rule of the
+ * bucket (§8).
+ */
+export interface SaveStore {
+  /** Every save deposited for this game, newest first. */
+  list(game: Game): Promise<Save[]>;
+  /**
+   * Bring one down to a local file. Throws rather than half-writing: a caller
+   * that cannot tell a partial restore from a whole one would start a game
+   * server on a broken world.
+   */
+  fetch(save: Save, toFile: LocalPath): Promise<void>;
+  /** Deposit a local archive under a new key, and answer what was written. */
+  deposit(fromFile: LocalPath, draft: SaveDraft): Promise<Save>;
 }
