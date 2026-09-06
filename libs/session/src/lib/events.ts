@@ -46,6 +46,40 @@ export type DomainEvent =
   | { type: 'ResourceStranded'; sessionId: null; detail: string }
   | { type: 'CleanupFailed'; sessionId: SessionId | null; detail: string }
   | { type: 'ProvisioningFailed'; sessionId: SessionId; detail: string }
+  /**
+   * The dns record could not be pointed. §8: the session is **not**
+   * interrupted — the join point already carries the raw address as its
+   * fallback, and the first real session proved the fallback works. It is a
+   * fact to file, not a reason to destroy a working machine.
+   *
+   * It exists because `ProvisioningFailed` was doing this job and lying about
+   * it: a session that becomes RUNNING one second later did not fail to
+   * provision, and a journal that says otherwise is read by a human at the one
+   * moment they need it to be true.
+   */
+  | { type: 'DnsUpdateFailed'; sessionId: SessionId; detail: string }
+  /**
+   * The machine declared something the control plane can contradict. §6: the
+   * address it reports is corroboration and is never followed — the function
+   * points dns at the address it reserved itself, or a compromised vm would
+   * aim the record wherever it liked. The disagreement is worth a line.
+   */
+  | { type: 'AgentContradicted'; sessionId: SessionId; detail: string }
+  /**
+   * §8, third defense: a save whose size falls under the floor is not
+   * recorded, and the refusal is journalled. It is the last of the three lines
+   * and the only one written in TypeScript — the real protection is on the
+   * machine, in the companion that refuses to push it at all.
+   */
+  | { type: 'SaveRefused'; sessionId: SessionId; detail: string }
+  /**
+   * The machine reported `failed` outside PROVISIONING — a crashed game
+   * process, a failed push, whatever it could not recover from on its own.
+   * `ProvisioningFailed` is reserved for a provisioning that never became
+   * RUNNING; a session already running did not fail to provision, and filing
+   * it as one is the exact dishonesty `DnsUpdateFailed` exists to repair.
+   */
+  | { type: 'AgentReportedFailure'; sessionId: SessionId; detail: string }
   | {
       type: 'SessionStopped';
       sessionId: SessionId;

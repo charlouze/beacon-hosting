@@ -7,6 +7,9 @@ import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
+import { agentTokens } from './agent-tokens.js';
+import { saveRecords } from './save-records.js';
+import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import type { ProvisionDeps } from './provisioning.js';
 import type { WatchdogDeps } from './watchdog.js';
@@ -27,12 +30,30 @@ export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
   defineSecret('DYNHOST_PASSWORD');
 
 /**
- * What `onServerStateChange` and the watchdog both need: one Scaleway client,
- * one Firestore handle. Built once here so neither Function recopies the
- * other's wiring.
+ * The Firestore half of `buildShared` — no Scaleway client, no zone to
+ * validate. `buildAgentReportDeps` needs exactly this and nothing more: the
+ * endpoint it wires touches no Scaleway config, and building the provider
+ * client for it read `SCW_SECRET_KEY` on every report of every session
+ * forever (a secret `main.ts` deliberately does not declare for that
+ * function), and threw on a malformed zone this endpoint never uses.
+ */
+function buildFirestoreDeps() {
+  const db = getFirestore(defaultApp());
+  return {
+    clock: { now: () => new Date() },
+    state: serverStateStore(db),
+    ledger: provisioningLedger(db),
+    health: watchdogHealth(db),
+    settings: settingsStore(db),
+  };
+}
+
+/**
+ * What `onServerStateChange` and the watchdog both need on top of the
+ * Firestore half: one Scaleway client. Built once here so neither Function
+ * recopies the other's wiring.
  */
 function buildShared() {
-  const db = getFirestore(defaultApp());
   const zone = SCW_ZONE.value();
 
   // The region is derived from the zone, and an empty or malformed one derives
@@ -52,15 +73,11 @@ function buildShared() {
   });
 
   return {
-    clock: { now: () => new Date() },
+    ...buildFirestoreDeps(),
     host: new ScalewayServerHost(
       fromSdk(new Instancev1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
     ),
-    state: serverStateStore(db),
-    ledger: provisioningLedger(db),
-    health: watchdogHealth(db),
-    settings: settingsStore(db),
   };
 }
 
@@ -81,5 +98,22 @@ export function buildProvisionDeps(): ProvisionDeps {
     settings: shared.settings,
     ledger: shared.ledger,
     serverPassword: () => SERVER_PASSWORD.value(),
+  };
+}
+
+export function buildAgentReportDeps(): AgentReportDeps {
+  const shared = buildFirestoreDeps();
+  const db = getFirestore(defaultApp());
+  return {
+    clock: shared.clock,
+    tokens: agentTokens(db),
+    state: shared.state,
+    settings: shared.settings,
+    ledger: shared.ledger,
+    saves: saveRecords(db),
+    dns: dynHostUpdater({
+      user: DYNHOST_USER.value(),
+      password: DYNHOST_PASSWORD.value(),
+    }),
   };
 }

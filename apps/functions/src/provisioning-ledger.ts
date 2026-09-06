@@ -15,6 +15,11 @@ export interface ProvisionedFacts {
   readonly ip: string;
 }
 
+/** What a pass can read back: the facts, plus the size actually provisioned. */
+export interface RecordedProvisioning extends ProvisionedFacts {
+  readonly instanceSize: string;
+}
+
 export interface ProvisioningLedger {
   /** Sessions whose intent to create was written and never closed. */
   openSessions(): Promise<SessionId[]>;
@@ -29,6 +34,12 @@ export interface ProvisioningLedger {
   open(sessionId: SessionId, intent: ProvisioningIntent, at: Date): Promise<void>;
   /** What the provider answered, once it has (§5): the two ids and the address. */
   record(sessionId: SessionId, facts: ProvisionedFacts): Promise<void>;
+  /**
+   * What was actually created for this session. §6 étape 7: the function
+   * publishes the address **it** reserved, read from here — never the one the
+   * machine declares.
+   */
+  read(sessionId: SessionId): Promise<RecordedProvisioning | null>;
   close(sessionId: SessionId, at: Date): Promise<void>;
 }
 
@@ -58,6 +69,25 @@ export function provisioningLedger(db: Firestore): ProvisioningLedger {
 
     async record(sessionId: SessionId, facts: ProvisionedFacts): Promise<void> {
       await db.doc(`${PROVISIONING}/${sessionId}`).set({ ...facts }, { merge: true });
+    },
+
+    async read(sessionId: SessionId): Promise<RecordedProvisioning | null> {
+      const snapshot = await db.doc(`${PROVISIONING}/${sessionId}`).get();
+      if (!snapshot.exists) return null;
+      const data = snapshot.data() ?? {};
+      const { instanceId, ipId, ip, instanceSize } = data;
+      // All four or nothing. A partial intent means the provider answered and
+      // the crash came in between; publishing RUNNING from half of it would put
+      // a join point on screen that points at nothing.
+      if (
+        typeof instanceId !== 'string' ||
+        typeof ipId !== 'string' ||
+        typeof ip !== 'string' ||
+        typeof instanceSize !== 'string'
+      ) {
+        return null;
+      }
+      return { instanceId, ipId, ip, instanceSize };
     },
 
     async close(sessionId: SessionId, at: Date): Promise<void> {

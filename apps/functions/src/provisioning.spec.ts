@@ -45,6 +45,7 @@ beforeEach(() => {
     ledger: {
       open: vi.fn(async () => undefined),
       record: vi.fn(async () => undefined),
+      read: vi.fn(async () => null),
       close: vi.fn(async () => undefined),
       openSessions: vi.fn(async () => []),
     },

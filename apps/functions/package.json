@@ -81,6 +81,7 @@
     ]
   },
   "dependencies": {
+    "@beacon/agent-protocol": "*",
     "@beacon/cloud-init": "*",
     "@beacon/ovh-dns": "*",
     "@scaleway/sdk": "^4.0.8",

@@ -84,4 +84,26 @@ describe('provisioningLedger', () => {
     await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
     expect(await ledger.openSessions()).toEqual(['s1']);
   });
+
+  it('reads nothing for a session it never opened', async () => {
+    expect(await ledger.read('never-seen')).toBeNull();
+  });
+
+  // §6 étape 7: a crash between the call and recording the instance id must
+  // not read back as a machine that exists.
+  it('reads nothing for an intent opened but not yet recorded', async () => {
+    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    expect(await ledger.read('s1')).toBeNull();
+  });
+
+  it('reads the four facts once the provider answered', async () => {
+    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await ledger.record('s1', { instanceId: 'srv-1', ipId: 'ip-1', ip: '51.15.42.7' });
+    expect(await ledger.read('s1')).toEqual({
+      instanceId: 'srv-1',
+      ipId: 'ip-1',
+      ip: '51.15.42.7',
+      instanceSize: 'DEV1-L',
+    });
+  });
 });

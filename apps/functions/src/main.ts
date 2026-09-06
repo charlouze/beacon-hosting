@@ -1,7 +1,10 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { parseReport } from '@beacon/agent-protocol';
 import { sessionFrom } from '@beacon/session-record';
 import {
+  buildAgentReportDeps,
   buildDeps,
   buildProvisionDeps,
   DYNHOST_PASSWORD,
@@ -9,6 +12,7 @@ import {
   SCW_SECRET_KEY,
   SERVER_PASSWORD,
 } from './container.js';
+import { runAgentReport } from './agent-report.js';
 import { runStateChange } from './provisioning.js';
 import { runWatchdog } from './watchdog.js';
 
@@ -62,5 +66,51 @@ export const onServerStateChange = onDocumentWritten(
     // This one only shortens the wait for what we just did: a failed boot gets
     // reclaimed now instead of in five minutes, and a FAILED is retried at once.
     if (acted) await runWatchdog(buildDeps());
+  },
+);
+
+/**
+ * The one endpoint a game machine talks to (§7). It is public because the
+ * caller has no Google identity and never will — what authorises it is the
+ * session token, and nothing else. This wrapper holds no decision: everything
+ * it does is tested next door, without a network.
+ */
+export const agentReport = onRequest(
+  {
+    region: 'europe-west1',
+    secrets: [DYNHOST_USER, DYNHOST_PASSWORD],
+    // Without this, gen2 requires a Google identity on every call and the
+    // machine — which holds none, by §7 — would get 403 forever.
+    invoker: 'public',
+    timeoutSeconds: 60,
+    // Bounds concurrent instances, not the request rate a flood can still
+    // send — each one answers in milliseconds and costs nothing near what a
+    // stuck instance would. The cap is what stops a runaway from scaling
+    // Functions themselves into a bill; it is not a rate limit.
+    maxInstances: 4,
+    cors: false,
+  },
+  async (request, response) => {
+    if (request.method !== 'POST') {
+      response.status(405).send();
+      return;
+    }
+
+    const header = request.get('authorization') ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
+    const report = parseReport(request.body);
+    if (token === null || report === null) {
+      response.status(400).send();
+      return;
+    }
+
+    const instructions = await runAgentReport(buildAgentReportDeps(), token, report);
+    if (instructions === null) {
+      // No body, and no reason. A 401 that explained itself would tell whoever
+      // is probing which half of the credential they got right.
+      response.status(401).send();
+      return;
+    }
+    response.json(instructions);
   },
 );

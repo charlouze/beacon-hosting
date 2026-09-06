@@ -103,6 +103,7 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
   },
   open: (sessionId, intent, at) => inner.open(sessionId, intent, at),
   record: (sessionId, facts) => inner.record(sessionId, facts),
+  read: (sessionId) => inner.read(sessionId),
   close: (sessionId, at) => inner.close(sessionId, at),
 });
 
@@ -150,6 +151,7 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
     openSessions: vi.fn(async () => []),
     open: vi.fn(),
     record: vi.fn(),
+    read: vi.fn(async () => null),
     close: vi.fn(),
   },
   health: {
