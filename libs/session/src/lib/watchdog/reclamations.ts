@@ -55,6 +55,17 @@ function stuckReason(view: WatchdogView, limits: WatchdogLimits): ReclaimReason 
   const record = view.server;
   if (record === null) return null;
   if (record.state === 'FAILED') return 'failed-retry';
+
+  // Before the state delays, because a RUNNING session past its deadline is
+  // not stuck — it is finished, and the audit must say so with the right word.
+  if (
+    record.state === 'RUNNING' &&
+    view.session?.state === 'RUNNING' &&
+    view.session.deadline.isPastBy({ now: () => view.now }, limits.deadlineGraceMs)
+  ) {
+    return 'deadline-exceeded';
+  }
+
   if (record.stateSince === null) return null;
 
   const elapsed = view.now.getTime() - record.stateSince.getTime();

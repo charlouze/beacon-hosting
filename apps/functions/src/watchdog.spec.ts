@@ -1,6 +1,9 @@
 import {
   DEFAULT_LIMITS,
+  DEFAULT_SETTINGS,
   type HostedServer,
+  type OpenedServer,
+  type OpenServerRequest,
   type ServerHost,
   type UnclaimedSweep,
 } from '@beacon/session';
@@ -11,10 +14,10 @@ import {
   scwServer,
   sessionTag,
 } from '@beacon/scaleway-compute';
-import { serverStateStore } from '@beacon/session-record';
+import { serverStateStore, settingsStore } from '@beacon/session-record';
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { provisioningLedger, type ProvisioningLedger } from './provisioning-ledger.js';
 import { runWatchdog, type WatchdogDeps } from './watchdog.js';
 import { watchdogHealth } from './watchdog-health.js';
@@ -38,6 +41,12 @@ class FakeServerHost implements ServerHost {
   listed = false;
 
   constructor(public hosted: HostedServer[] = []) {}
+
+  // Never exercised: this fake drives the watchdog, which only closes and
+  // sweeps. A body is required to satisfy `ServerHost`, not to be called.
+  async open(_request: OpenServerRequest): Promise<OpenedServer> {
+    throw new Error('FakeServerHost.open is not exercised by the watchdog');
+  }
 
   async list(): Promise<HostedServer[]> {
     if (this.onList !== null) await this.onList();
@@ -92,6 +101,8 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
     expect(host.listed).toBe(true);
     return inner.openSessions();
   },
+  open: (sessionId, intent, at) => inner.open(sessionId, intent, at),
+  record: (sessionId, facts) => inner.record(sessionId, facts),
   close: (sessionId, at) => inner.close(sessionId, at),
 });
 
@@ -101,11 +112,53 @@ const deps = (): WatchdogDeps => ({
   state: serverStateStore(db),
   ledger: afterTheInventory(provisioningLedger(db)),
   health: watchdogHealth(db),
+  settings: settingsStore(db),
   limits: DEFAULT_LIMITS,
 });
 
 const eventTypes = async () =>
   (await db.collection('events').get()).docs.map((d) => d.data()['type']).sort();
+
+/**
+ * A world where the record is idle, clean, and a previous pass saw a volume.
+ * Spy-based and its own thing: `deps()` above drives real Firestore and a
+ * fake `ServerHost` instance, which the quiet-sweep assertions — "the
+ * provider was never asked" — cannot see through. Rebuilding `deps()` to be
+ * spy-based would break the eighteen tranche-1 tests it already serves.
+ */
+const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
+  clock: { now: () => NOW },
+  host: {
+    open: vi.fn(),
+    list: vi.fn(async () => []),
+    close: vi.fn(),
+    sweepUnclaimed: vi.fn(async () => QUIET),
+  },
+  state: {
+    read: vi.fn(async () => ({
+      state: 'IDLE' as const,
+      sessionId: null,
+      stateSince: null,
+      hasReservedFacts: false,
+    })),
+    readSession: vi.fn(async () => null),
+    claimProvisioning: vi.fn(),
+    publish: vi.fn(),
+    apply: vi.fn(),
+  },
+  ledger: {
+    openSessions: vi.fn(async () => []),
+    open: vi.fn(),
+    record: vi.fn(),
+    close: vi.fn(),
+  },
+  health: {
+    previousPass: vi.fn(async () => ({ stranded: ['volume v1'], sweptAt: previous.sweptAt })),
+    beat: vi.fn(async () => undefined),
+  },
+  settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
+  limits: DEFAULT_LIMITS,
+});
 
 describe('runWatchdog', () => {
   it('beats and does nothing else on an empty project', async () => {
@@ -314,7 +367,7 @@ describe('runWatchdog', () => {
 
     await runWatchdog({
       ...deps(),
-      host: new ScalewayServerHost(api),
+      host: new ScalewayServerHost(api, { resolve: async () => null }),
       ledger: provisioningLedger(db),
     });
 
@@ -340,5 +393,35 @@ describe('runWatchdog', () => {
     await runWatchdog(deps());
 
     expect((await db.doc('server/current').get()).data()?.['state']).toBe('FAILED');
+  });
+});
+
+describe('a pass with nothing open', () => {
+  // The whole point: five api calls per pass, 8 640 times a month, to find
+  // nothing. Skipping them is safe because §11 makes the started hour due on
+  // each resource — a stray reclaimed at thirty minutes costs what it would
+  // at five.
+  it('asks the provider nothing when the last sweep is recent', async () => {
+    const deps = quietDeps({ sweptAt: new Date(NOW.getTime() - 5 * 60_000) });
+    await runWatchdog(deps);
+    expect(deps.host.list).not.toHaveBeenCalled();
+    expect(deps.host.sweepUnclaimed).not.toHaveBeenCalled();
+    expect(deps.ledger.openSessions).not.toHaveBeenCalled();
+  });
+
+  // It still beats. The alert of §6 watches the job, not the document, but a
+  // pass that wrote nothing would leave "since when?" unanswerable — and a
+  // `lastSweptAt` left untouched is what makes the next sweep come due.
+  it('still beats, and does not pretend it looked', async () => {
+    const deps = quietDeps({ sweptAt: new Date(NOW.getTime() - 5 * 60_000) });
+    await runWatchdog(deps);
+    expect(deps.health.beat).toHaveBeenCalledWith(NOW, ['volume v1'], null);
+  });
+
+  it('sweeps again once the quiet interval has passed', async () => {
+    const deps = quietDeps({ sweptAt: new Date(NOW.getTime() - 31 * 60_000) });
+    await runWatchdog(deps);
+    expect(deps.host.sweepUnclaimed).toHaveBeenCalled();
+    expect(deps.health.beat).toHaveBeenCalledWith(NOW, [], NOW);
   });
 });

@@ -6,9 +6,31 @@ export type ReclaimReason =
   | 'provisioning-timeout'
   | 'stopping-timeout'
   /** The record already says FAILED: try the destruction again. */
-  | 'failed-retry';
+  | 'failed-retry'
+  /** The closing time passed and nobody extended (§6). */
+  | 'deadline-exceeded';
 
 export type DomainEvent =
+  /**
+   * Written by the browser, in the same write as the passage to PROVISIONING.
+   * It is the only place that keeps the display name of whoever opened the
+   * evening: `members` is read by admins only (§5), so the audit trail is
+   * where a name may travel.
+   */
+  | { type: 'SessionStarted'; sessionId: SessionId; detail: string }
+  | { type: 'SessionExtended'; sessionId: SessionId; detail: string }
+  /**
+   * Written by the browser in the same write as STOPPING. It is the only
+   * record of *who* cut the evening — without it, ending someone else's
+   * session would be the one anonymous gesture of the system (§4).
+   */
+  | { type: 'SessionStopRequested'; sessionId: SessionId; detail: string }
+  /**
+   * A deadline was forged past the bound and brought back (§6). It is audited
+   * and never shown: the interface already clamps on read, so the countdown
+   * does not walk backwards under the players' eyes (§4).
+   */
+  | { type: 'DeadlineClamped'; sessionId: SessionId; detail: string }
   /**
    * The system took resources back. A null sessionId means no session claimed
    * them — destroying them still spends money, so it is still audited.
@@ -24,4 +46,15 @@ export type DomainEvent =
   | { type: 'ResourceStranded'; sessionId: null; detail: string }
   | { type: 'CleanupFailed'; sessionId: SessionId | null; detail: string }
   | { type: 'ProvisioningFailed'; sessionId: SessionId; detail: string }
-  | { type: 'SessionStopped'; sessionId: SessionId; detail: string };
+  | {
+      type: 'SessionStopped';
+      sessionId: SessionId;
+      detail: string;
+      /**
+       * §11: the one event that carries a figure, and what the month is
+       * summed from. Zero when no readable session explains the stop — an
+       * honest hole beats an invented number on the only thing this product
+       * says about money.
+       */
+      costEuros: number;
+    };

@@ -72,4 +72,16 @@ describe('provisioningLedger', () => {
     await ledger.close('never-seen', NOW);
     expect((await db.doc('provisioning/never-seen').get()).exists).toBe(false);
   });
+
+  it('refuses to open an intent for a session id already seen', async () => {
+    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await expect(
+      ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW),
+    ).rejects.toThrow();
+  });
+
+  it('opens an intent the watchdog reads as open', async () => {
+    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    expect(await ledger.openSessions()).toEqual(['s1']);
+  });
 });

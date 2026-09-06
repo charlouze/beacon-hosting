@@ -128,18 +128,41 @@ la tranche 0, et son plan est
 
 ### 2 · Le cycle
 
-`libs/session`, `libs/session-record`, `onServerStateChange`, `agentReport`,
-`ovh-dns`. Une session naît, tourne, se prolonge, meurt à son échéance.
-Toujours sans interface ni authentification, sur un monde jetable.
+`libs/session` — `Session`, `Deadline`, `Game`, `JoinInfo` —,
+`libs/session-record` et ses deux faces, `libs/ovh-dns`, le catalogue
+`deploy/cloud-init/`, `ServerHost.open()`, `onServerStateChange`, et les deux
+lignes d'échéance du watchdog. Un pilote Angular nu exerce la face client ; le
+monde jetable est celui d'Enshrouded.
 
-**Sortie** : le cycle complet tourne de bout en bout, piloté par script ou
-émulateur.
+**Sans agent, et c'est une décision du 2026-09-06.** Le §6 fait constater par
+l'agent que le serveur est prêt ; ici la Function conclut, comme le §4 le
+permet pour ce jeu — elle connaît le point de jonction dès que l'IP est
+réservée. `RUNNING` annonce donc un serveur encore en train de télécharger,
+pendant cinq à huit minutes. Aucun joueur ne le voit : la règle 2 ci-dessus
+interdit toute exposition avant la tranche 4, et la tranche 3 pose l'agent
+avant. **`agentReport`, le jeton de session et la cadence d'une minute sont
+donc en tranche 3.**
+
+`config/settings` est semé ici et non en tranche 4 : le cycle ne tourne pas
+sans durée de session ni tarif. Seul le premier `members/{uid}` reste là-bas.
+
+**Sortie** : le cycle complet tourne de bout en bout, éprouvé une fois sur une
+vraie machine.
 
 ### 3 · Les saves
 
 `scaleway-storage`, l'image compagnon, la restauration au démarrage, la
 synchronisation, les trois défenses de la règle d'or (§8 du spec) et leurs
 tests dédiés.
+
+**Et l'agent, descendu de la tranche 2** : `agentReport`, le jeton de session
+haché dans `agentTokens/{sessionId}`, la cadence d'une minute, et la définition
+de `RUNNING` rendue à ce que le §6 en dit — le serveur répond, et c'est le bon
+monde. Le compagnon est l'endroit naturel : il est déjà sur la machine et il
+sait quand la restauration est finie, ce dont la définition dépend.
+
+L'entrée Sunkenland du catalogue arrive ici pour la même raison : ce jeu ne peut
+pas démarrer avant que ses 2,3 Go soient restaurés.
 
 **Gate ferme : aucun monde auquel on tient ne migre avant que cette tranche
 soit finie et ses tests verts.**
@@ -171,7 +194,8 @@ celle qui en a besoin.
 | CI de pull request — lint, tests unitaires, build | 1 |
 | Tests de règles dans la CI | 1 |
 | Semis de `server/current` | 1 |
-| Workflow de déploiement, et semis du reste | 4 |
+| Semis de `config/settings` | 2 |
+| Workflow de déploiement, et semis du premier membre | 4 |
 | Workflow de construction du compagnon vers ghcr.io, tag immuable, test de fumée | 3 |
 | Tag immuable sur l'image amont dans le `cloud-init` | 0 |
 

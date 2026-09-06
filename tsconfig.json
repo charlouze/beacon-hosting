@@ -17,6 +17,15 @@
     },
     {
       "path": "./libs/rules"
+    },
+    {
+      "path": "./deploy/cloud-init"
+    },
+    {
+      "path": "./libs/ovh-dns"
+    },
+    {
+      "path": "./apps/web"
     }
   ],
   "compilerOptions": {}

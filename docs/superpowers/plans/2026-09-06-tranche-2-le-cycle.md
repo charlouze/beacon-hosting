@@ -5790,3 +5790,54 @@ git commit -m "docs(plan): descend l'agent en tranche 3 et remonte le semis des 
 ```
 
 ---
+
+## Ce que la tranche 2 laisse à la tranche 3
+
+- **`RUNNING` ment pendant le démarrage.** La Function le publie dès que l'IP
+  est réservée ; le serveur répond cinq à huit minutes plus tard. L'écart est
+  chiffré dans le relevé de la tâche 13. L'agent le supprime, et c'est la
+  première chose que la tranche 3 doit rendre vraie **avant** que la tranche 4
+  expose quoi que ce soit.
+- **La clôture du §4 tient projet par projet, jamais depuis la racine.**
+  `libs/session/eslint.config.mjs` et `apps/web/eslint.config.mjs` portent
+  chacun leur propre règle `no-restricted-imports` : un bloc écrit une fois à
+  la racine avec un motif préfixé par le projet ne mord sur rien, parce
+  qu'ESLint fixe son `basePath` sur le fichier de configuration qu'il
+  découvre lui-même, et que les deux intégrations de lint de `nx` — le plugin
+  inféré `@nx/eslint/plugin` et l'exécuteur hérité `@nx/eslint:lint` — ne
+  placent pas ce répertoire de travail au même endroit. Toute nouvelle
+  frontière de `libs/*` ou d'`apps/*` s'écrit dans le fichier ESLint du
+  projet qu'elle garde, jamais dans celui de la racine. La règle d'`apps/web`
+  bloque `firebase/firestore`, `firebase-admin` et `@firebase/*`, mais
+  autorise délibérément `firebase/app` — le pilote en a besoin pour
+  `initializeApp` — et devra continuer d'autoriser `firebase/auth` en
+  tranche 4.
+- **`apps/web` tourne sans zone**, par défaut du générateur Angular, sur des
+  signaux et `ChangeDetectionStrategy.OnPush` : ni `zone.js` en dépendance, ni
+  `provideZoneChangeDetection` dans `app.config.ts`. Tout composant que la
+  tranche 3 ajoute à ce pilote doit tenir sans détection de changement
+  implicite.
+- **`agentReport` n'existe pas**, ni le jeton, ni `agentTokens/{sessionId}`. Le
+  `cloud-init` ne porte aucun identifiant, ce qui est le seul état où le §7 est
+  respecté sans effort.
+- **`firestore.dev.rules` laisse tout passer.** C'est du développement, gardé
+  par deux tests, et la tranche 4 écrit les vraies. Le jour où elles existent,
+  ce fichier et `firebase.dev.json` doivent disparaître ou se justifier à
+  nouveau.
+- **Le pilote `apps/web` n'est pas l'écran.** La tranche 5 le remplace ; ce
+  qu'il prouve, c'est que la face client tient.
+- **Le composant d'affichage du point de jonction n'existe que pour une
+  forme.** L'autre vient avec l'entrée de catalogue de son jeu.
+- **La soirée de la tâche 13 a demandé de mettre le watchdog en pause.** Tant
+  que le plan de contrôle est l'émulateur et les ressources réelles, les deux
+  ne peuvent pas tourner ensemble. La tranche 4, qui déploie, fait disparaître
+  le problème — et il faut s'en souvenir si une tranche 3 refait une soirée.
+  La pause reste nécessaire, et pour la même raison qu'avant la tâche 12 : le
+  watchdog de **production** lit le Firestore de **production**, qui ignore
+  tout d'une soirée dont l'intention vit dans l'**émulateur**, et détruirait
+  donc une machine qu'aucune intention ouverte n'explique. Depuis la tâche 12,
+  la pause laisse simplement moins de trou : la Function locale, elle, lit
+  l'émulateur — où l'intention existe — et déclenche un passage du watchdog
+  contre le vrai compte Scaleway dès qu'une session change d'état, épargnant
+  la machine tout en fauchant les vraies dérives. Ce que le job périodique
+  rattrape encore, c'est ce qu'aucun changement d'état n'annonce.

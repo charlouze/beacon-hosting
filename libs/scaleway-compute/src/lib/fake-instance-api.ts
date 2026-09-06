@@ -7,7 +7,12 @@ import type { InstanceApi, ScwIp, ScwServer, ScwVolume } from './instance-api.js
  */
 export class FakeInstanceApi implements InstanceApi {
   readonly calls: string[] = [];
+  /** What was posted per server, so a test can assert what will boot. */
+  readonly userData = new Map<string, string>();
   failOn: string | null = null;
+  /** A specific error on a specific call, where `failOn` only throws a string. */
+  failWith: { call: string; error: unknown } | null = null;
+  private nextId = 1;
   /**
    * Answers every listing with the whole array, tag filter ignored. Scaleway's
    * `tags=` was measured exact on the flexible ip and on nothing else: a fake
@@ -26,6 +31,9 @@ export class FakeInstanceApi implements InstanceApi {
     this.calls.push(call);
     if (this.failOn !== null && call.startsWith(this.failOn)) {
       throw new Error(`scaleway refused ${call}`);
+    }
+    if (this.failWith !== null && call.startsWith(this.failWith.call)) {
+      throw this.failWith.error;
     }
   }
 
@@ -65,6 +73,41 @@ export class FakeInstanceApi implements InstanceApi {
   async deleteIp(request: { ip: string }) {
     this.record(`deleteIp ${request.ip}`);
     this.ips = this.ips.filter((i) => i.id !== request.ip);
+  }
+
+  async createIp(request: { tags: string[] }) {
+    this.record(`createIp ${request.tags.join('+')}`);
+    const ip = scwIp(`ip-${this.nextId}`, `51.15.0.${this.nextId}`, request.tags);
+    this.ips.push(ip);
+    return { ip };
+  }
+
+  async createServer(request: {
+    name: string;
+    commercialType: string;
+    image: string;
+    publicIps: string[];
+    tags: string[];
+  }) {
+    this.record(`createServer ${request.tags.join('+')}`);
+    // `stopped`, like the real one: a server is created before it is powered
+    // on, and the two death paths of §6 turn on exactly this field.
+    const server = scwServer(`srv-${this.nextId}`, request.tags, 'stopped');
+    this.servers.push(server);
+    this.nextId += 1;
+    return { server };
+  }
+
+  async setServerUserData(request: { serverId: string; content: string }) {
+    this.record(`setServerUserData ${request.serverId}`);
+    this.userData.set(request.serverId, request.content);
+  }
+
+  async powerOn(request: { serverId: string }) {
+    this.record(`powerOn ${request.serverId}`);
+    this.servers = this.servers.map((s) =>
+      s.id === request.serverId ? { ...s, state: 'running' } : s,
+    );
   }
 }
 

@@ -1,4 +1,6 @@
+import type { Game } from './game.js';
 import type { SessionId } from './session.js';
+import type { InstanceSize } from './settings.js';
 
 export interface Clock {
   now(): Date;
@@ -33,7 +35,69 @@ export interface UnclaimedSweep {
   readonly errors: readonly string[];
 }
 
+export interface OpenServerRequest {
+  readonly sessionId: SessionId;
+  readonly game: Game;
+  readonly size: InstanceSize;
+  /**
+   * What the machine runs at first boot, rendered by the game catalogue. An
+   * opaque payload: the domain carries it and never reads it, exactly as it
+   * carries a join point. Naming its format here would put cloud-init — a
+   * provider's word — inside a model that talks about sessions.
+   */
+  readonly bootstrap: string;
+}
+
+export interface OpenedServer {
+  /** The machine's public address. What a dns record points at, when one does. */
+  readonly address: string;
+  /** The size actually provisioned, which the default may have decided. */
+  readonly size: InstanceSize;
+  /**
+   * Provider references, written down for the audit and **never read to
+   * decide** (§4). Destruction asks the provider by tag, so it depends on no
+   * record of ours: a crash between creating a resource and recording its id
+   * must not make that resource unfindable and billed.
+   *
+   * Tranche 1 left this as a decision to take deliberately — "making the port
+   * yield provider identifiers must be argued against §4, not adopted out of
+   * convenience". It is taken here, and named rather than opaque. A
+   * `Record<string, string>` would keep the two words out of this file at the
+   * price of an invariant nothing checks: the adapter and the record would
+   * agree on two strings through a runtime whitelist, and a typo would be
+   * caught, at best, by a test written for the occasion. Two named fields cost
+   * two provider words in a type the aggregate never sees, and the compiler
+   * keeps both ends honest.
+   */
+  readonly references: {
+    readonly instanceId: string;
+    readonly ipId: string;
+  };
+}
+
+/**
+ * Point an A record at an address. It is not called for every game: only when
+ * the join point carries an address — true for one, false for the other, where
+ * there is nothing to point at. That is not a branch in the domain; the game's
+ * catalogue entry knows, and a port one does not call is cheaper than a port
+ * made optional (§4).
+ */
+export interface DnsUpdater {
+  point(hostname: string, address: string): Promise<void>;
+}
+
 export interface ServerHost {
+  /**
+   * Open one game server for this session, and answer where it is. Whatever
+   * that costs at the provider — an instance and an ip, or an instance, an ip
+   * and a volume — is the adapter's business (§4).
+   *
+   * Not idempotent, and it must not pretend to be: a second call would create
+   * a second billed machine. What guards against a double call is the
+   * transactional claim of §6, one layer up.
+   */
+  open(request: OpenServerRequest): Promise<OpenedServer>;
+
   /** Every game server this system owns, one entry per session tag found. */
   list(): Promise<HostedServer[]>;
 

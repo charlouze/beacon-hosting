@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { runScript } from './client'
 import { bootProbeServer, since } from './boot-server'
 
-const RENDERER = fileURLToPath(new URL('../../deploy/render-cloud-init.mjs', import.meta.url))
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url))
 
 runScript(async () => {
   const sessionId = process.argv[2]
@@ -12,7 +12,11 @@ runScript(async () => {
 
   // The very same renderer the deploy README documents: what boots is what was
   // tested locally.
-  const userData = execFileSync('node', [RENDERER], { encoding: 'utf8' })
+  const userData = execFileSync('npx', ['tsx', 'deploy/cloud-init/src/render.ts'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    shell: true,
+  })
   const { address, startedAt } = await bootProbeServer(sessionId, userData)
 
   console.log(`

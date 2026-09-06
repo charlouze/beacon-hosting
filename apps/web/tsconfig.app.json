@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist/out-tsc",
+    "types": [],
+    // `nx typecheck` forces `--emitDeclarationOnly` on the `tsc --build`
+    // graph the other projects share; Angular's own compiler refuses to run
+    // at all with it on (NG4006). Overridden off here, where
+    // `@angular/build:application` reads it directly and the CLI flag can't
+    // reach — `composite` stays inherited so `tsc --build`'s forced
+    // `--emitDeclarationOnly` still satisfies TS5069.
+    "emitDeclarationOnly": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../../libs/session/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/session-record/tsconfig.lib.json"
+    }
+  ]
+}
