@@ -224,6 +224,20 @@ celle qui en a besoin.
 | Workflow de construction du compagnon vers ghcr.io, tag immuable, test de fumée | 3 |
 | Tag immuable sur l'image amont dans le `cloud-init` | 0 |
 
+**Et il faut dire ce que cette ligne-là coûte, parce qu'elle ne se voit pas.**
+Le §10 pose que « le déploiement se fait à la fusion dans `main` » et que
+« `main` est donc toujours égal à ce qui tourne ». **Ce n'est pas vrai
+aujourd'hui, et ça ne le sera pas avant la tranche 4.** Le seul workflow du
+dépôt est celui des pull requests ; ce qui tourne en production y a été mis par
+un humain lançant `firebase deploy` depuis son poste — la tranche 1 le fait
+faire explicitement, pour les règles et les index.
+
+C'est une conséquence assumée du découpage, pas un oubli : les règles n'ont
+personne à filtrer avant la tranche 4, et un workflow qui déploierait des règles
+fermées ne prouverait rien. Mais **jusque-là, `main` peut différer de la
+production sans que rien ne le signale**, et une session qui lirait le §10 sans
+ce paragraphe croirait le contraire.
+
 ## Ce qui reste ouvert
 
 - La typographie définitive, le rouge de signalisation, et la ligne « prêt vers
