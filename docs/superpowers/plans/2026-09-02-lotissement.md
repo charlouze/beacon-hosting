@@ -58,7 +58,11 @@ règles, et c'est par elles qu'il faut le relire s'il est un jour contesté.
 3. **Le chemin des saves avant tout monde auquel on tient.** C'est le seul
    endroit du système où un bug détruit quelque chose d'irrécupérable.
 
-## Les six tranches
+## Les tranches
+
+La sonde du second jeu n'y figure pas : elle est intercalée entre la 1 et la 2 et
+n'ajoute pas de tranche, comme sa section le dit plus bas. La 3 bis, elle, en est
+une — c'est la 3 coupée en deux, un jeu par tranche.
 
 | # | Tranche | Ce qu'elle livre |
 |---|---|---|
@@ -66,6 +70,7 @@ règles, et c'est par elles qu'il faut le relire s'il est un jour contesté.
 | 1 | Le faucheur | Rien ne reste allumé, quoi qu'il arrive |
 | 2 | Le cycle | Une session naît, se prolonge et meurt — sans interface |
 | 3 | Les saves | Le monde survit aux sessions |
+| 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID |
 | 4 | La sécurité | Le système peut être exposé |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` |
 
@@ -161,11 +166,31 @@ de `RUNNING` rendue à ce que le §6 en dit — le serveur répond, et c'est le 
 monde. Le compagnon est l'endroit naturel : il est déjà sur la machine et il
 sait quand la restauration est finie, ce dont la définition dépend.
 
-L'entrée Sunkenland du catalogue arrive ici pour la même raison : ce jeu ne peut
-pas démarrer avant que ses 2,3 Go soient restaurés.
+**Sur un seul jeu, et c'est une décision du 2026-09-06.** Tout ce qui précède
+s'éprouve sur Enshrouded, de bout en bout, jusqu'à une vraie session ; le second
+jeu part en tranche 3 bis. Ce que le découpage d'origine mettait ici — l'entrée
+Sunkenland du catalogue — ne partage avec le reste que le mot « restaurer » :
+c'est un autre conteneur, un autre point d'entrée, une autre façon d'apprendre
+que le serveur est prêt, et une autre forme de point de jonction. Les garder
+ensemble aurait fait une tranche deux fois plus grosse que la 2 sans qu'aucune
+de ses pièces ne serve deux fois.
 
 **Gate ferme : aucun monde auquel on tient ne migre avant que cette tranche
-soit finie et ses tests verts.**
+soit finie et ses tests verts.** Il se lève jeu par jeu — à la fin de celle-ci
+pour Enshrouded, à la fin de la 3 bis pour Sunkenland, dont le monde reste dans
+le seau jusque-là.
+
+### 3 bis · Le second jeu
+
+L'entrée Sunkenland du catalogue, l'adoption du script de démarrage que la
+sonde du 2026-09-05 a écrit — avec l'`uid 7000` et le `trap` que l'image impose
+—, la restauration des 2,3 Go de fichiers de jeu depuis leur seau, le ServerID
+lu dans la sortie du conteneur et vérifié par son préfixe de GUID,
+`SunkenlandJoinInfo` et son affichage, et `tools/game-depot`.
+
+Elle n'ajoute rien au modèle : le §4 a écrit `JoinInfo` à deux formes et le port
+`ServerHost` à un jeu libre précisément pour que ce jeu-ci ne coûte qu'une
+entrée de catalogue. C'est ce que cette tranche vérifie.
 
 ### 4 · La sécurité
 
