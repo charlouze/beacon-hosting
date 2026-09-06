@@ -101,6 +101,8 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
     expect(host.listed).toBe(true);
     return inner.openSessions();
   },
+  open: (sessionId, intent, at) => inner.open(sessionId, intent, at),
+  record: (sessionId, facts) => inner.record(sessionId, facts),
   close: (sessionId, at) => inner.close(sessionId, at),
 });
 
@@ -146,6 +148,8 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
   },
   ledger: {
     openSessions: vi.fn(async () => []),
+    open: vi.fn(),
+    record: vi.fn(),
     close: vi.fn(),
   },
   health: {

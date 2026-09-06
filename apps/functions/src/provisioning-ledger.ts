@@ -3,9 +3,32 @@ import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 
 export const PROVISIONING = 'provisioning';
 
+export interface ProvisioningIntent {
+  readonly tag: string;
+  readonly instanceSize: string;
+}
+
+export interface ProvisionedFacts {
+  readonly instanceId: string;
+  readonly ipId: string;
+  /** Not a reference — what a human reads first when something must be found. */
+  readonly ip: string;
+}
+
 export interface ProvisioningLedger {
   /** Sessions whose intent to create was written and never closed. */
   openSessions(): Promise<SessionId[]>;
+  /**
+   * §6 étape 4: written **before** any call to the provider. Without it, a
+   * crash between the call and recording the instance id leaves a billed
+   * machine nobody knows exists.
+   *
+   * A strict create: a sessionId already seen fails the transaction, which is
+   * what closes the reuse of an id drawn by a browser (§5).
+   */
+  open(sessionId: SessionId, intent: ProvisioningIntent, at: Date): Promise<void>;
+  /** What the provider answered, once it has (§5): the two ids and the address. */
+  record(sessionId: SessionId, facts: ProvisionedFacts): Promise<void>;
   close(sessionId: SessionId, at: Date): Promise<void>;
 }
 
@@ -18,6 +41,23 @@ export function provisioningLedger(db: Firestore): ProvisioningLedger {
       // without bound.
       const snapshot = await db.collection(PROVISIONING).where('closedAt', '==', null).get();
       return snapshot.docs.map((doc) => doc.id);
+    },
+
+    async open(sessionId: SessionId, intent: ProvisioningIntent, at: Date): Promise<void> {
+      await db.doc(`${PROVISIONING}/${sessionId}`).create({
+        tag: intent.tag,
+        intendedAt: Timestamp.fromDate(at),
+        instanceSize: intent.instanceSize,
+        // Null from creation, never absent: "the open intents" is an equality
+        // query, and Firestore does not query the absence of a field. An
+        // intent created without it is invisible to the watchdog, which then
+        // destroys the machine mid-provisioning.
+        closedAt: null,
+      });
+    },
+
+    async record(sessionId: SessionId, facts: ProvisionedFacts): Promise<void> {
+      await db.doc(`${PROVISIONING}/${sessionId}`).set({ ...facts }, { merge: true });
     },
 
     async close(sessionId: SessionId, at: Date): Promise<void> {

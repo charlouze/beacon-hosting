@@ -35,6 +35,12 @@
     },
     {
       "path": "../../libs/session/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/ovh-dns/tsconfig.lib.json"
+    },
+    {
+      "path": "../../deploy/cloud-init/tsconfig.lib.json"
     }
   ]
 }
