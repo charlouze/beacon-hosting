@@ -778,6 +778,24 @@ et c'est exactement la supposition qui a coûté un hébergeur (§2). Deux seaux
 tiennent la frontière sans rien à vérifier : la clé qui monte sur la machine
 écrit dans l'un et lit l'autre, et sa portée se lit dans son nom.
 
+**Chaque sauvegarde est une clé neuve, jamais une clé réécrite.** L'`objectKey`
+s'écrit `saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`, et un document
+`saves/{id}` existe par objet déposé. C'est ce qui fait de la règle d'or une
+propriété et non une politique : le compagnon n'a pas à *éviter* d'écraser une
+sauvegarde, il n'en a jamais l'occasion. Une poussée fautive ajoute un objet
+suspect à côté des bons, là où une clé stable l'aurait mis à leur place.
+
+**L'origine est dans le chemin, et haut**, avant tout ce qui varie d'une session
+à l'autre. Ce n'est pas du rangement : les règles de cycle de vie d'un seau
+filtrent par préfixe littéral, et c'est ce qui permet à une poussée régulière de
+ne pas vivre aussi longtemps que la dernière d'une soirée. Une origine placée
+plus bas rendrait ces deux durées indistinguables.
+
+L'élagage est alors la seule chose qui supprime, et il vit **dans la règle de
+cycle de vie du seau**, jamais dans le dépôt. `saves/{id}` n'a pas de politique
+de rétention à tenir de son côté : ses documents survivent aux objets, et un
+document qui pointe une clé expirée dit une vérité — cette sauvegarde a existé.
+
 **`steamId` est la seule écriture d'un membre sur son propre document**, et elle
 force une règle que le reste du §5 n'avait pas besoin d'écrire : le sujet peut
 modifier ce champ-là et lui seul. La tentation serait d'ouvrir `members/{uid}`
@@ -1418,12 +1436,13 @@ Trois lignes de défense, de la plus proche du disque à la plus lointaine :
    ligne de code n'aurait écrasé quoi que ce soit ; le monde serait perdu quand
    même. C'est la seule façon dont la règle d'or se viole sans qu'aucune
    écriture ne la viole.
-2. **Le stockage objet conserve un historique**, et l'élagage est une règle de
-   cycle de vie du bucket, côté fournisseur. **Aucun code du projet ne supprime
-   une sauvegarde** : le port `SaveStore` n'expose ni suppression ni élagage, et
-   c'est délibéré — sur la seule donnée irremplaçable du système, la meilleure
-   ligne de code est celle qui n'existe pas. Écraser reste réversible tant que la
-   version précédente est dans la fenêtre de rétention.
+2. **Le stockage objet conserve un historique**, et il le conserve par
+   construction : chaque poussée écrit une clé neuve (§5), donc écraser n'est pas
+   une chose qui peut arriver. L'élagage est une règle de cycle de vie du seau,
+   côté fournisseur. **Aucun code du projet ne supprime une sauvegarde** : le
+   port `SaveStore` n'expose ni suppression ni élagage, et c'est délibéré — sur
+   la seule donnée irremplaçable du système, la meilleure ligne de code est celle
+   qui n'existe pas.
 3. **`agentReport` refuse d'enregistrer une `Save`** dont la taille passe sous
    un plancher, et journalise le refus. C'est le seul des trois qui vit dans du
    code TypeScript testable, et il arrive en dernier.
