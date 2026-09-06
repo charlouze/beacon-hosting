@@ -49,4 +49,13 @@ export class Deadline {
   equals(other: Deadline): boolean {
     return this.instant.getTime() === other.instant.getTime();
   }
+
+  /**
+   * `HH:MM UTC`, for an audit line a human reads. `toISOString` and not a
+   * locale formatter: the label names the zone, and a local-time formatter
+   * printed under it would lie about which one it is.
+   */
+  auditHour(): string {
+    return `${this.instant.toISOString().slice(11, 16)} UTC`;
+  }
 }

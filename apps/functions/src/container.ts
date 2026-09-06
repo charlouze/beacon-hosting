@@ -1,5 +1,5 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
-import { serverStateStore } from '@beacon/session-record';
+import { serverStateStore, settingsStore } from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
@@ -50,6 +50,7 @@ export function buildDeps(): WatchdogDeps {
     state: serverStateStore(db),
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),
+    settings: settingsStore(db),
     limits: DEFAULT_LIMITS,
   };
 }

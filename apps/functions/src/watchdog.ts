@@ -8,7 +8,7 @@ import {
   type WatchdogLimits,
   type WatchdogView,
 } from '@beacon/session';
-import type { ServerStateStore } from '@beacon/session-record';
+import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import type { WatchdogHealth } from './watchdog-health.js';
 
@@ -18,6 +18,7 @@ export interface WatchdogDeps {
   readonly state: ServerStateStore;
   readonly ledger: ProvisioningLedger;
   readonly health: WatchdogHealth;
+  readonly settings: SettingsStore;
   readonly limits: WatchdogLimits;
 }
 
@@ -35,13 +36,29 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   // in parallel, a machine born between the two reads appears in the inventory
   // while its intent is still absent from the query, and the watchdog destroys
   // a session on its first minute of life.
-  const [server, hosted, alreadyAnnounced] = await Promise.all([
+  const [server, session, hosted, alreadyAnnounced, settings] = await Promise.all([
     deps.state.read(),
+    deps.state.readSession(),
     deps.host.list(),
     deps.health.strandedLastPass(),
+    deps.settings.read(),
   ]);
+  // The intents last, and never in the batch above. §6 writes the intent
+  // before it calls the provider, so anything the provider holds was preceded
+  // by an intent — but only if the intents are read afterwards. Read in
+  // parallel, a machine born between the two reads appears in the inventory
+  // while its intent is still absent, and the watchdog destroys a session on
+  // its first minute of life.
   const openSessions = await deps.ledger.openSessions();
-  const view: WatchdogView = { now, server, hosted, openSessions, alreadyAnnounced };
+  const view: WatchdogView = {
+    now,
+    server,
+    session,
+    settings,
+    hosted,
+    openSessions,
+    alreadyAnnounced,
+  };
 
   const outcomes: ReclaimOutcome[] = [];
   for (const reclamation of reclamations(view, deps.limits)) {

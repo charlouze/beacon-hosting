@@ -62,4 +62,14 @@ describe('Deadline', () => {
     const instant = new Date('2026-09-07T00:00:00Z');
     expect(Deadline.at(instant).equals(Deadline.at(new Date(instant)))).toBe(true);
   });
+
+  it('reads its hour for an audit line, UTC and zero-padded', () => {
+    expect(Deadline.at(new Date('2026-09-06T09:05:00Z')).auditHour()).toBe('09:05 UTC');
+  });
+
+  // Exactly midnight has to read 00:00, not 24:00 — toISOString never
+  // produces the latter, but a hand-rolled formatter could.
+  it('reads midnight as 00:00 UTC, not 24:00', () => {
+    expect(Deadline.at(new Date('2026-09-07T00:00:00Z')).auditHour()).toBe('00:00 UTC');
+  });
 });

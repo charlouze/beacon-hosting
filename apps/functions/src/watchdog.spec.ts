@@ -13,7 +13,7 @@ import {
   scwServer,
   sessionTag,
 } from '@beacon/scaleway-compute';
-import { serverStateStore } from '@beacon/session-record';
+import { serverStateStore, settingsStore } from '@beacon/session-record';
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -109,6 +109,7 @@ const deps = (): WatchdogDeps => ({
   state: serverStateStore(db),
   ledger: afterTheInventory(provisioningLedger(db)),
   health: watchdogHealth(db),
+  settings: settingsStore(db),
   limits: DEFAULT_LIMITS,
 });
 

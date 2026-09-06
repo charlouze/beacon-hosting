@@ -45,7 +45,7 @@ const NOTHING: StateCorrection = {
 };
 
 interface ClosedMeaning {
-  readonly event: (reclamation: Reclamation) => DomainEvent;
+  readonly event: (reclamation: Reclamation, costEuros: number) => DomainEvent;
   /** What server/current keeps once the state is back to IDLE. */
   readonly idleReason: string | null;
 }
@@ -70,10 +70,22 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
     event: ({ sessionId, detail }) => ({ type: 'ProvisioningFailed', sessionId, detail }),
     idleReason: 'provisioning did not finish in time',
   },
+  'deadline-exceeded': {
+    event: ({ sessionId, detail }, costEuros) => ({
+      type: 'SessionStopped',
+      sessionId,
+      detail,
+      costEuros,
+    }),
+    idleReason: null,
+  },
   'stopping-timeout': {
-    // The session did end, just without its agent saying so. Tranche 2 adds
-    // the estimated cost this event carries in §11; there is no tariff yet.
-    event: ({ sessionId, detail }) => ({ type: 'SessionStopped', sessionId, detail }),
+    event: ({ sessionId, detail }, costEuros) => ({
+      type: 'SessionStopped',
+      sessionId,
+      detail,
+      costEuros,
+    }),
     idleReason: 'stopped without the agent reporting',
   },
 };
@@ -92,6 +104,15 @@ export function reconcile(
 ): StateCorrection {
   const events: DomainEvent[] = [];
   const closeIntents: SessionId[] = [];
+  const clock = { now: () => view.now };
+  // Zero when the document is unreadable, or when it reads as IDLE: an idle
+  // Session carries no fields to cost, and `estimatedCost` throws rather than
+  // guess — reachable now that a pass can follow a teardown seconds later,
+  // record/current already IDLE and reserved facts already cleared.
+  const costEuros =
+    view.session !== null && view.session.state !== 'IDLE'
+      ? view.session.estimatedCost(clock, view.settings)
+      : 0;
 
   for (const outcome of outcomes) {
     const { sessionId } = outcome.reclamation;
@@ -100,7 +121,7 @@ export function reconcile(
       continue;
     }
     closeIntents.push(sessionId);
-    events.push(CLOSED[outcome.reclamation.reason].event(outcome.reclamation));
+    events.push(CLOSED[outcome.reclamation.reason].event(outcome.reclamation, costEuros));
   }
 
   // Destroyed, failed and stranded are three independent facts, not a
@@ -180,6 +201,7 @@ export function reconcile(
       type: 'SessionStopped',
       sessionId: record.sessionId,
       detail: 'the provider holds nothing for this session',
+      costEuros,
     });
     return {
       state: 'IDLE',
@@ -195,5 +217,35 @@ export function reconcile(
     return { ...NOTHING, clearFacts: true, closeIntents, events };
   }
 
-  return { ...NOTHING, closeIntents, events };
+  // Only here: a session about to be destroyed has nothing to clamp, and a
+  // record already being corrected says what it becomes. This is the branch
+  // where the session is alive and unremarkable — the only one where a forged
+  // deadline is worth bringing back.
+  const clamped = clamping(view);
+  return { ...NOTHING, ...clamped, closeIntents, events: [...events, ...clamped.events] };
+}
+
+/**
+ * §6: `deadline - now` above the session duration is brought back to the
+ * bound, and the gap is audited. Nothing shows it — §4 has the interface bound
+ * on read, so the countdown never walks backwards under the players' eyes.
+ */
+function clamping(view: WatchdogView): { deadline: Deadline | null; events: DomainEvent[] } {
+  const session = view.session;
+  if (session === null || session.sessionId === null || session.state === 'IDLE') {
+    return { deadline: null, events: [] };
+  }
+  const clock = { now: () => view.now };
+  const clamped = session.deadline.clampedTo(clock, view.settings);
+  if (clamped.equals(session.deadline)) return { deadline: null, events: [] };
+  return {
+    deadline: clamped,
+    events: [
+      {
+        type: 'DeadlineClamped',
+        sessionId: session.sessionId,
+        detail: `brought back from ${session.deadline.auditHour()} to ${clamped.auditHour()}`,
+      },
+    ],
+  };
 }

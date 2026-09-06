@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { Deadline } from '../deadline.js';
 import type { HostedServer } from '../ports.js';
+import { Session } from '../session-aggregate.js';
 import type { SessionState } from '../session.js';
+import { DEFAULT_SETTINGS } from '../settings.js';
 import { reclamations } from './reclamations.js';
 import { DEFAULT_LIMITS, type ServerRecord, type WatchdogView } from './view.js';
 
@@ -24,8 +27,22 @@ const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
   hosted: [],
   openSessions: [],
   alreadyAnnounced: [],
+  session: null,
+  settings: DEFAULT_SETTINGS,
   ...parts,
 });
+
+const runningSession = (sessionId: string, deadlineIso: string) =>
+  Session.from({
+    state: 'RUNNING',
+    sessionId,
+    game: 'enshrouded',
+    startedBy: 'u1',
+    startedAt: new Date('2026-09-06T20:00:00Z'),
+    deadline: Deadline.at(new Date(deadlineIso)),
+    instanceSize: 'DEV1-L',
+    hasJoinInfo: true,
+  });
 
 const reasons = (v: WatchdogView) =>
   reclamations(v, DEFAULT_LIMITS).map((r) => `${r.sessionId}:${r.reason}`);
@@ -134,5 +151,29 @@ describe('reclamations', () => {
   it('carries the provider wording into the reclamation', () => {
     const [first] = reclamations(view({ hosted: [hosted('s1')] }), DEFAULT_LIMITS);
     expect(first.detail).toBe('server for s1');
+  });
+
+  // §6: deadline exceeded by more than two minutes, still RUNNING → forced stop.
+  // The grace exists because a watchdog runs every five minutes and a deadline
+  // that just passed is not a system that failed.
+  it('reclaims a session whose deadline passed by more than the grace', () => {
+    const v = view({
+      server: record('RUNNING', 's1', null),
+      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      now: new Date('2026-09-07T00:02:01Z'),
+    });
+    expect(reclamations(v, DEFAULT_LIMITS)[0]).toMatchObject({
+      sessionId: 's1',
+      reason: 'deadline-exceeded',
+    });
+  });
+
+  it('leaves a session alone inside the grace', () => {
+    const v = view({
+      server: record('RUNNING', 's1', null),
+      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      now: new Date('2026-09-07T00:01:59Z'),
+    });
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual([]);
   });
 });

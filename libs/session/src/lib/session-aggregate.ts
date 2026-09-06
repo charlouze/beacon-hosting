@@ -153,7 +153,7 @@ export class Session {
         {
           type: 'SessionExtended',
           sessionId: fields.sessionId,
-          detail: `${actor.name} extended to ${hourOf(deadline)}`,
+          detail: `${actor.name} extended to ${deadline.auditHour()}`,
         },
       ],
     };
@@ -216,9 +216,4 @@ export class Session {
     }
     return this.fields;
   }
-}
-
-/** `HH:MM UTC`, for an audit line a human reads. */
-function hourOf(deadline: Deadline): string {
-  return `${deadline.at.toISOString().slice(11, 16)} UTC`;
 }

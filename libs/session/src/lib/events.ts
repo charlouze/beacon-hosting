@@ -6,7 +6,9 @@ export type ReclaimReason =
   | 'provisioning-timeout'
   | 'stopping-timeout'
   /** The record already says FAILED: try the destruction again. */
-  | 'failed-retry';
+  | 'failed-retry'
+  /** The closing time passed and nobody extended (§6). */
+  | 'deadline-exceeded';
 
 export type DomainEvent =
   /**
@@ -44,4 +46,15 @@ export type DomainEvent =
   | { type: 'ResourceStranded'; sessionId: null; detail: string }
   | { type: 'CleanupFailed'; sessionId: SessionId | null; detail: string }
   | { type: 'ProvisioningFailed'; sessionId: SessionId; detail: string }
-  | { type: 'SessionStopped'; sessionId: SessionId; detail: string };
+  | {
+      type: 'SessionStopped';
+      sessionId: SessionId;
+      detail: string;
+      /**
+       * §11: the one event that carries a figure, and what the month is
+       * summed from. Zero when no readable session explains the stop — an
+       * honest hole beats an invented number on the only thing this product
+       * says about money.
+       */
+      costEuros: number;
+    };

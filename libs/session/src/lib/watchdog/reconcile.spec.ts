@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { Deadline } from '../deadline.js';
 import type { HostedServer, UnclaimedSweep } from '../ports.js';
+import { Session } from '../session-aggregate.js';
 import type { SessionState } from '../session.js';
+import { DEFAULT_SETTINGS } from '../settings.js';
 import type { Reclamation } from './reclamations.js';
 import { reconcile, type ReclaimOutcome } from './reconcile.js';
 import type { ServerRecord, WatchdogView } from './view.js';
@@ -21,8 +24,22 @@ const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
   hosted: [],
   openSessions: [],
   alreadyAnnounced: [],
+  session: null,
+  settings: DEFAULT_SETTINGS,
   ...parts,
 });
+
+const runningSession = (sessionId: string, deadlineIso: string) =>
+  Session.from({
+    state: 'RUNNING',
+    sessionId,
+    game: 'enshrouded',
+    startedBy: 'u1',
+    startedAt: new Date('2026-09-06T20:00:00Z'),
+    deadline: Deadline.at(new Date(deadlineIso)),
+    instanceSize: 'DEV1-L',
+    hasJoinInfo: true,
+  });
 
 const outcome = (
   sessionId: string,
@@ -232,5 +249,65 @@ describe('reconcile', () => {
     expect(correction.events).toEqual([
       { type: 'ResourceStranded', sessionId: null, detail: 'volume v-2 (80G)' },
     ]);
+  });
+
+  // §6: a forged deadline is brought back to the bound, and the gap is audited.
+  // It is never displayed: the interface already bounds on read (§4).
+  it('brings a forged deadline back and files the fact', () => {
+    // Hosted, so the machine is genuinely alive: without it, the "machine
+    // disappeared at the provider" branch above would fire first and this one
+    // would never run.
+    const v = view({
+      server: record('RUNNING', 's1'),
+      hosted: [hosted('s1')],
+      session: runningSession('s1', '2026-09-07T12:00:00Z'),
+      now: new Date('2026-09-06T20:00:00Z'),
+    });
+    const correction = reconcile(v, [], quiet);
+    expect(correction.deadline?.at).toEqual(new Date('2026-09-07T00:00:00Z'));
+    expect(correction.events).toEqual([
+      { type: 'DeadlineClamped', sessionId: 's1', detail: 'brought back from 12:00 UTC to 00:00 UTC' },
+    ]);
+  });
+
+  it('leaves an honest deadline alone, and files nothing', () => {
+    const v = view({
+      server: record('RUNNING', 's1'),
+      hosted: [hosted('s1')],
+      session: runningSession('s1', '2026-09-06T23:00:00Z'),
+      now: new Date('2026-09-06T20:00:00Z'),
+    });
+    const correction = reconcile(v, [], quiet);
+    expect(correction.deadline).toBeNull();
+    expect(correction.events).toEqual([]);
+  });
+
+  // §11: SessionStopped is the one event carrying a figure, and the month's
+  // total is summed from it. A stop that files no cost is a month that is wrong.
+  it('hangs the estimated cost on the stop it files', () => {
+    const v = view({
+      server: record('RUNNING', 's1'),
+      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      now: new Date('2026-09-07T00:03:00Z'),
+    });
+    const outcomes: ReclaimOutcome[] = [
+      { reclamation: { sessionId: 's1', reason: 'deadline-exceeded', detail: 'server x' }, closed: true },
+    ];
+    const stopped = reconcile(v, outcomes, quiet).events.find(
+      (e) => e.type === 'SessionStopped',
+    );
+    // Five started hours between 20:00 and 00:03, at the DEV1-L rate.
+    expect(stopped).toMatchObject({ sessionId: 's1', costEuros: 0.27 });
+  });
+
+  it('files a zero cost when no session explains the reclamation', () => {
+    const v = view({ server: record('STOPPING', 's1'), session: null });
+    const outcomes: ReclaimOutcome[] = [
+      { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
+    ];
+    const stopped = reconcile(v, outcomes, quiet).events.find(
+      (e) => e.type === 'SessionStopped',
+    );
+    expect(stopped).toMatchObject({ costEuros: 0 });
   });
 });

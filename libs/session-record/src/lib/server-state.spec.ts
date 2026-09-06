@@ -192,7 +192,7 @@ describe('serverStateStore', () => {
 
     await apply({
       state: 'IDLE',
-      events: [{ type: 'SessionStopped', sessionId: 'sess1', detail: 'gone' }],
+      events: [{ type: 'SessionStopped', sessionId: 'sess1', detail: 'gone', costEuros: 0 }],
     });
 
     const events = await db.collection('events').get();
@@ -200,6 +200,23 @@ describe('serverStateStore', () => {
     const server = await db.doc('server/current').get();
     expect(server.data()?.['state']).toBe('IDLE');
     expect(server.updateTime?.isEqual(events.docs[0].createTime)).toBe(true);
+  });
+
+  // §11: SessionStopped is the one event the month is summed from. Asserting
+  // on the domain event object would have passed even with a writer that
+  // drops the field — this reads the document back from the emulator, the
+  // way the actual defect went unnoticed. A non-zero figure matters too: 0 is
+  // also what a dropped field reads back as.
+  it('round-trips the cost a SessionStopped carries, so the month can be totalled', async () => {
+    await db.doc('server/current').set({ state: 'RUNNING', sessionId: 'sess1' });
+
+    await apply({
+      state: 'IDLE',
+      events: [{ type: 'SessionStopped', sessionId: 'sess1', detail: 'gone', costEuros: 0.42 }],
+    });
+
+    const [event] = (await db.collection('events').get()).docs;
+    expect(event.data()['costEuros']).toBe(0.42);
   });
 
   it('writes several events in one go', async () => {

@@ -141,9 +141,14 @@ export function serverStateStore(db: Firestore): ServerStateStore {
 
 function eventDocument(event: DomainEvent, at: Date) {
   return {
-    type: event.type,
+    // Spread rather than an enumerated field list, so a figure like
+    // SessionStopped's costEuros — or whatever the next event variant
+    // carries — reaches Firestore without this function being taught about
+    // it by hand. Enumerating once already dropped it silently: every stop
+    // wrote a document with no cost to read back, and §11's monthly total
+    // had nothing to sum.
+    ...event,
     sessionId: event.sessionId ?? null,
-    detail: event.detail,
     actor: { uid: 'system', name: 'system' },
     at: Timestamp.fromDate(at),
     expiresAt: Timestamp.fromDate(new Date(at.getTime() + TTL_DAYS * 86_400_000)),
