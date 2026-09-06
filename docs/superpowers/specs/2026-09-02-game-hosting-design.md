@@ -1190,6 +1190,17 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
 2. L'agent arrête le serveur de jeu **puis** pousse la save finale — dans cet
    ordre, pour que la sauvegarde soit cohérente — et rapporte `saved`.
 
+   **Il l'arrête par un canal à un seul verbe, et non par le socket Docker.**
+   L'agent est un conteneur ; arrêter un conteneur voisin demande un canal vers
+   l'hôte, et le socket en donnerait un qui vaut root sur la machine. Le §7 pose
+   qu'une VM compromise ne doit rien livrer de plus qu'une écriture sur le seau
+   des sauvegardes : le socket ne lui donnerait aucun identifiant cloud de plus,
+   mais il lui donnerait la machine, et c'est une extension qui se décide au lieu
+   de se découvrir. Le `cloud-init` pose donc une unité systemd qui regarde un
+   fichier d'un volume partagé et ne sait faire qu'une chose — arrêter le
+   conteneur du jeu. L'agent touche le fichier ; il ne peut rien demander
+   d'autre.
+
    **Pour Sunkenland, il n'existe pas de sauvegarde finale à provoquer.** Ni
    l'arrêt du conteneur, ni une fermeture polie, ni le départ du dernier joueur
    n'en déclenche une ; c'est mesuré six fois, section J. L'agent pousse donc le
