@@ -3,8 +3,11 @@
   "compilerOptions": {
     "outDir": "out-tsc/app",
     "types": ["node"],
-    "rootDir": "src",
-    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+    // No tsBuildInfoFile here: the esbuild build type-checks this same config
+    // with a non-emitting program, and an explicit path makes that program
+    // stamp a stub build-info there. `tsc --build` reads the stub as proof the
+    // project is up to date and skips the declarations the specs reference.
+    "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
   "exclude": [
