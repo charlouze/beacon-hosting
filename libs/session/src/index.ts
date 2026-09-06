@@ -1,5 +1,7 @@
 export * from './lib/deadline.js';
 export * from './lib/events.js';
+export * from './lib/game.js';
+export * from './lib/join-info.js';
 export * from './lib/ports.js';
 export * from './lib/session.js';
 export * from './lib/settings.js';
