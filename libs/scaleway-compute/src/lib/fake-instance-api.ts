@@ -10,6 +10,8 @@ export class FakeInstanceApi implements InstanceApi {
   /** What was posted per server, so a test can assert what will boot. */
   readonly userData = new Map<string, string>();
   failOn: string | null = null;
+  /** A specific error on a specific call, where `failOn` only throws a string. */
+  failWith: { call: string; error: unknown } | null = null;
   private nextId = 1;
   /**
    * Answers every listing with the whole array, tag filter ignored. Scaleway's
@@ -29,6 +31,9 @@ export class FakeInstanceApi implements InstanceApi {
     this.calls.push(call);
     if (this.failOn !== null && call.startsWith(this.failOn)) {
       throw new Error(`scaleway refused ${call}`);
+    }
+    if (this.failWith !== null && call.startsWith(this.failWith.call)) {
+      throw this.failWith.error;
     }
   }
 

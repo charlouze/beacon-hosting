@@ -122,7 +122,9 @@ describe('provisioning', () => {
     deps.host.open = vi.fn(async () => {
       throw new Error('no capacity');
     });
-    await runStateChange(deps, provisioning());
+    // Precisely where a pass has work to do: a boot that failed is retried at
+    // once rather than waiting out the schedule.
+    expect(await runStateChange(deps, provisioning())).toBe(true);
     expect(deps.host.close).toHaveBeenCalledWith('s1');
     expect(deps.state.apply).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'IDLE', clearFacts: true }),
@@ -139,7 +141,9 @@ describe('provisioning', () => {
     deps.host.close = vi.fn(async () => {
       throw new Error('api unreachable');
     });
-    await runStateChange(deps, provisioning());
+    // A cleanup that could not be guaranteed is exactly when a pass must run
+    // again — the resource may still be billed, and nothing else will retry.
+    expect(await runStateChange(deps, provisioning())).toBe(true);
     expect(deps.state.apply).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'FAILED', clearFacts: false }),
       NOW,
@@ -169,7 +173,9 @@ describe('stopping', () => {
     deps.host.close = vi.fn(async () => {
       throw new Error('refused');
     });
-    await runStateChange(deps, stopping());
+    // Same reason as the provisioning side: a cleanup that could not be
+    // guaranteed is exactly when a pass has work to do.
+    expect(await runStateChange(deps, stopping())).toBe(true);
     expect(deps.state.apply).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'FAILED' }),
       NOW,
@@ -177,6 +183,36 @@ describe('stopping', () => {
     // Same invariant as the provisioning side: something may still be billed,
     // and a closed intent is what makes the reconciliation stop looking.
     expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the caller learns', () => {
+  it('says it acted when it provisioned', async () => {
+    expect(await runStateChange(deps, provisioning())).toBe(true);
+  });
+
+  // A clean teardown already destroyed everything by tag, and would have
+  // thrown otherwise — nothing is left for an immediate pass to find, and
+  // asking for one anyway is what raced `terminate`, still in flight, into a
+  // CleanupFailed on the first real session.
+  it('asks for no immediate pass when it destroyed cleanly', async () => {
+    expect(await runStateChange(deps, stopping())).toBe(false);
+  });
+
+  // A double delivery claimed by someone else did nothing, so there is nothing
+  // for a pass to look at either.
+  it('says it did not act when another delivery had claimed it', async () => {
+    deps.state.claimProvisioning = vi.fn(async () => false);
+    expect(await runStateChange(deps, provisioning())).toBe(false);
+  });
+
+  // What bounds the loop: a pass writes IDLE, FAILED or RUNNING, and none of
+  // the three is a state this function acts on — so the trigger it fires dies
+  // here instead of asking for another pass.
+  it.each(['IDLE', 'RUNNING', 'FAILED'] as const)('says it did not act on %s', async (state) => {
+    expect(
+      await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state })),
+    ).toBe(false);
   });
 });
 

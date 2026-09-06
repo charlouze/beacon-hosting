@@ -1,0 +1,101 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
+import { FakeInstanceApi, ScalewayServerHost } from '@beacon/scaleway-compute';
+import { DEFAULT_LIMITS, type ServerHost, type Session } from '@beacon/session';
+import { serverStateStore, settingsStore, sessionFrom, SERVER_DOC } from '@beacon/session-record';
+import { provisioningLedger } from './provisioning-ledger.js';
+import { runStateChange, type ProvisionDeps } from './provisioning.js';
+import { runWatchdog, type WatchdogDeps } from './watchdog.js';
+import { watchdogHealth } from './watchdog-health.js';
+
+process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
+
+/**
+ * The hazard the immediate pass introduces, and the only test that can catch
+ * it: the pass runs seconds after a machine was created, against the very
+ * document the provisioning just wrote. If the intent, the tags and the state
+ * do not line up exactly, it reclaims the session it is meant to protect —
+ * five minutes of grace used to hide any such mistake.
+ */
+describe('a pass fired right after a provisioning', () => {
+  // Wiring is deliberately real on the Firestore side and fake on the provider
+  // side: what is under test is the agreement between the document, the intent
+  // and the inventory, and only one of the three is worth faking.
+  let api: FakeInstanceApi;
+  let host: ServerHost;
+
+  beforeEach(async () => {
+    if (getApps().length === 0) initializeApp({ projectId: 'demo-beacon' });
+    const db = getFirestore();
+    await db.recursiveDelete(db.collection('provisioning'));
+    await db.recursiveDelete(db.collection('events'));
+    await db.doc(SERVER_DOC).delete();
+    await db.doc('health/watchdog').delete();
+    await db.doc(SERVER_DOC).set(openingDocument());
+    api = new FakeInstanceApi();
+    host = new ScalewayServerHost(api, { resolve: async () => 'img-1' });
+  });
+
+  it('leaves the machine it just created alone', async () => {
+    const db = getFirestore();
+    const acted = await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
+    expect(acted).toBe(true);
+    expect(api.servers).toHaveLength(1);
+
+    await runWatchdog(watchdogDeps(db, host));
+
+    expect(api.servers).toHaveLength(1);
+    expect(api.ips).toHaveLength(1);
+    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('RUNNING');
+  });
+
+  it('destroys nothing more after a stop, and closes the intent', async () => {
+    const db = getFirestore();
+    await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
+    await db.doc(SERVER_DOC).set({ state: 'STOPPING' }, { merge: true });
+    await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
+
+    await runWatchdog(watchdogDeps(db, host));
+
+    expect(api.servers).toHaveLength(0);
+    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('IDLE');
+  });
+});
+
+const openingDocument = () => ({
+  state: 'PROVISIONING',
+  sessionId: 's1',
+  game: 'enshrouded',
+  startedBy: 'u1',
+  startedAt: new Date(),
+  deadline: new Date(Date.now() + 4 * 3_600_000),
+  provisionClaimedAt: null,
+});
+
+/** A parse failure here is its own bug, not the one this suite hunts. */
+const sessionOf = (snapshot: DocumentSnapshot): Session => {
+  const session = sessionFrom(snapshot.data() ?? {});
+  if (session === null) throw new Error('expected server/current to parse as a session');
+  return session;
+};
+
+const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
+  clock: { now: () => new Date() },
+  host,
+  dns: { point: async () => undefined },
+  state: serverStateStore(db),
+  settings: settingsStore(db),
+  ledger: provisioningLedger(db),
+  serverPassword: () => 'probe',
+});
+
+const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({
+  clock: { now: () => new Date() },
+  host,
+  state: serverStateStore(db),
+  settings: settingsStore(db),
+  ledger: provisioningLedger(db),
+  health: watchdogHealth(db),
+  limits: DEFAULT_LIMITS,
+});

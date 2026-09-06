@@ -123,6 +123,7 @@ export class ScalewayServerHost implements ServerHost {
       try {
         await this.api.deleteIp({ ip: ip.id });
       } catch (error) {
+        if (isAlreadyGone(error)) continue;
         failures.push(`ip ${ip.id}: ${String(error)}`);
       }
     }
@@ -130,6 +131,7 @@ export class ScalewayServerHost implements ServerHost {
       try {
         await this.destroyServer(server);
       } catch (error) {
+        if (isAlreadyGone(error)) continue;
         failures.push(`server ${server.id}: ${String(error)}`);
       }
     }
@@ -171,6 +173,7 @@ export class ScalewayServerHost implements ServerHost {
         await this.api.deleteIp({ ip: ip.id });
         destroyed.push(`ip ${ip.address}`);
       } catch (error) {
+        if (isAlreadyGone(error)) continue;
         errors.push(`ip ${ip.id}: ${String(error)}`);
       }
     }
@@ -179,6 +182,7 @@ export class ScalewayServerHost implements ServerHost {
         await this.destroyServer(server);
         destroyed.push(`server ${server.id}`);
       } catch (error) {
+        if (isAlreadyGone(error)) continue;
         errors.push(`server ${server.id}: ${String(error)}`);
       }
     }
@@ -252,6 +256,7 @@ export class ScalewayServerHost implements ServerHost {
       try {
         await this.api.deleteVolume({ volumeId });
       } catch (error) {
+        if (isAlreadyGone(error)) continue;
         failures.push(`${volumeId}: ${String(error)}`);
       }
     }
@@ -264,4 +269,23 @@ export class ScalewayServerHost implements ServerHost {
 /** Kept next to its only caller: the two death paths of close() need it. */
 export function volumeIdsOf(server: ScwServer): string[] {
   return Object.values(server.volumes).map((volume) => volume.id);
+}
+
+/**
+ * A resource the provider no longer holds. Not a failure: `close()` promises
+ * idempotence, and since a pass can now run seconds after another one, trying
+ * to delete what the previous pass just deleted is ordinary rather than
+ * exceptional.
+ *
+ * Read off the error's shape because the sdk exports no typed error for it —
+ * so the three forms it has been seen to take are all accepted, and nothing
+ * else is. Widening this to `catch (error) { return }` would make an
+ * unreachable provider look like a successful destruction, which is the one
+ * lie this system cannot afford.
+ */
+function isAlreadyGone(error: unknown): boolean {
+  const candidate = error as { status?: number; type?: string; message?: string } | null;
+  if (candidate?.status === 404) return true;
+  if (candidate?.type === 'not_found') return true;
+  return /not found|does not exist/i.test(candidate?.message ?? '');
 }

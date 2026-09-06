@@ -180,6 +180,35 @@ describe('close', () => {
   });
 });
 
+describe('closing something the provider no longer holds', () => {
+  // Two passes seconds apart is what the immediate pass makes ordinary: the
+  // second one lists an ip the first has just deleted. Treated as a failure,
+  // it files a CleanupFailed and pushes a healthy record to FAILED.
+  it('treats an ip that is already gone as closed', async () => {
+    const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
+    api.failWith = { call: 'deleteIp', error: notFound() };
+    await expect(new ScalewayServerHost(api, images).close('s1')).resolves.toBeUndefined();
+  });
+
+  it('treats a server that is already gone as closed', async () => {
+    const api = new FakeInstanceApi([scwServer('srv-1', ['beacon', 'session:s1'])]);
+    api.failWith = { call: 'terminate', error: notFound() };
+    await expect(new ScalewayServerHost(api, images).close('s1')).resolves.toBeUndefined();
+  });
+
+  // The distinction that matters: a refusal is still a refusal. Swallowing
+  // every error under the name of idempotence would make the watchdog report
+  // success on a provider that is simply unreachable.
+  it('still refuses when the provider says something else', async () => {
+    const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
+    api.failWith = { call: 'deleteIp', error: new Error('quota exceeded') };
+    await expect(new ScalewayServerHost(api, images).close('s1')).rejects.toThrow(/quota/);
+  });
+});
+
+/** What the sdk hands back for a resource that no longer exists. */
+const notFound = () => Object.assign(new Error('resource not found'), { status: 404 });
+
 describe('sweepUnclaimed', () => {
   it('destroys only what carries no session tag', async () => {
     api.servers = [scwServer('s-1', owned()), scwServer('s-2', owned('sess1'))];

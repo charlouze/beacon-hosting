@@ -55,6 +55,12 @@ export const onServerStateChange = onDocumentWritten(
     if (after === undefined || !after.exists) return;
     const session = sessionFrom(after.data() ?? {});
     if (session === null) return;
-    await runStateChange(buildProvisionDeps(), session);
+    const acted = await runStateChange(buildProvisionDeps(), session);
+    // In addition to the schedule, never instead of it. The five-minute pass
+    // catches what nothing announces — a resource no session explains — and
+    // that is worth exactly as much as the fact that nobody has to trigger it.
+    // This one only shortens the wait for what we just did: a failed boot gets
+    // reclaimed now instead of in five minutes, and a FAILED is retried at once.
+    if (acted) await runWatchdog(buildDeps());
   },
 );

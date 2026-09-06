@@ -27,21 +27,29 @@ export interface ProvisionDeps {
  * The only frontier to the secrets (§6). Two states do something; every other
  * one is a write this function has no business reacting to — including the
  * RUNNING it writes itself, which would otherwise re-enter here.
+ *
+ * It answers whether a pass has something to do right away, not whether this
+ * function acted: a successful teardown already destroyed everything it could
+ * find, by tag, and would have thrown otherwise — there is nothing left for a
+ * pass to sweep, and asking for one anyway races the provider's still
+ * in-flight destruction. Every failure path leaves a resource whose fate a
+ * pass still has to settle, so those keep asking.
  */
-export async function runStateChange(deps: ProvisionDeps, session: Session): Promise<void> {
+export async function runStateChange(deps: ProvisionDeps, session: Session): Promise<boolean> {
   if (session.state === 'PROVISIONING') return provision(deps, session);
   if (session.state === 'STOPPING') return tearDown(deps, session);
+  return false;
 }
 
-async function provision(deps: ProvisionDeps, session: Session): Promise<void> {
+async function provision(deps: ProvisionDeps, session: Session): Promise<boolean> {
   const sessionId = session.sessionId;
   const game = session.game;
-  if (sessionId === null || game === null) return;
+  if (sessionId === null || game === null) return false;
   const now = deps.clock.now();
 
   // Nothing before this line spends money, and nothing after it runs twice.
   const claimed = await deps.state.claimProvisioning(sessionId, now);
-  if (!claimed) return;
+  if (!claimed) return false;
 
   const size = session.instanceSize ?? (await deps.settings.read()).defaultInstanceSize;
 
@@ -61,7 +69,8 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<void> {
       }),
     });
   } catch (error) {
-    return failed(deps, sessionId, now, error);
+    await failed(deps, sessionId, now, error);
+    return true;
   }
 
   // §5: the intent carries the two ids **and** the address.
@@ -83,6 +92,7 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<void> {
     },
     now,
   );
+  return true;
 }
 
 /**
@@ -166,9 +176,9 @@ async function failed(
   await deps.ledger.close(sessionId, now);
 }
 
-async function tearDown(deps: ProvisionDeps, session: Session): Promise<void> {
+async function tearDown(deps: ProvisionDeps, session: Session): Promise<boolean> {
   const sessionId = session.sessionId;
-  if (sessionId === null) return;
+  if (sessionId === null) return false;
   const now = deps.clock.now();
   const settings = await deps.settings.read();
 
@@ -186,7 +196,7 @@ async function tearDown(deps: ProvisionDeps, session: Session): Promise<void> {
       },
       now,
     );
-    return;
+    return true;
   }
 
   const stopped: DomainEvent = {
@@ -210,4 +220,10 @@ async function tearDown(deps: ProvisionDeps, session: Session): Promise<void> {
     now,
   );
   await deps.ledger.close(sessionId, now);
+  // Not true: the destruction just succeeded, by tag, and threw if it could
+  // not — there is nothing left for an immediate pass to find. Tonight's
+  // first real session asked for one anyway and it raced `terminate`, still
+  // in flight, into a CleanupFailed that lied about a teardown that had
+  // already worked.
+  return false;
 }
