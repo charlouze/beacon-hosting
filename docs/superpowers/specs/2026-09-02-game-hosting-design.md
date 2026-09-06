@@ -1622,8 +1622,9 @@ d'événements pour n'en garder qu'une poignée.
 
 ## 12. Ce qui est vérifié, et ce qui reste ouvert
 
-La tranche 0 mesure les questions de la conception une par une, et la tranche
-1 bis celles que l'arrivée du second jeu a ouvertes. Le détail des commandes et
+La tranche 0 mesure les questions de la conception une par une, la tranche
+1 bis celles que l'arrivée du second jeu a ouvertes, et la première vraie
+session du 2026-09-06 celle qu'aucun double ne pouvait poser. Le détail des commandes et
 des observations est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md) —
 sections R à C pour la première, section V pour la seconde ; ci-dessous les
 réponses et ce qu'elles ont changé.
@@ -1651,6 +1652,7 @@ réponses et ce qu'elles ont changé.
 | `-publicip`, `-publicport` et `-port` sont-ils nécessaires ? | **Non, aucun des trois.** Mesuré le 2026-09-05 sur une `DEV1-L` derrière le NAT de Scaleway : le serveur n'annonce aucune adresse — `CustomPublicAddress` vide —, le joueur le trouve par la liste et **entre**. Découverte par Photon, transport en UDP direct sur `27015`, que le groupe de sécurité par défaut laisse passer sans qu'on pose de règle. Ce jeu n'a donc besoin ni d'IP flottante ni de `DnsUpdater` : une IP publique, oui, **stable, non**. |
 | `-steamID` réconcilie-t-il la disposition de dossiers du client ? | **Oui**, et il est **écarté quand même**. Mesuré le 2026-09-05 : avec l'option, le serveur lit le monde dans `SteamCloudData/<steamID64>/Worlds` au lieu de `Worlds`. Décision du commanditaire le même jour : indexer le monde *du serveur* sous le compte d'un *joueur* accrocherait la disposition du seau à une personne qui peut quitter le groupe. Le serveur n'a pas de compte Steam — c'est ce que dit sa `NullReferenceException` sur `IsSteamCloudReady` — et lui en prêter un serait une fiction. Le refus ne coûte rien : l'amorçage reste une copie, vers `Worlds/` au lieu d'en place. |
 | La cadence de sauvegarde tient-elle à 300 s, la valeur retenue ? | **Oui, sur quatre intervalles pleins** — 20:00:23, 20:05:23, 20:10:23, 20:15:23 le 2026-09-05, à la seconde. Une cinquième sauvegarde à 20:18:08, déclenchée depuis la console du jeu, **prouve au passage que `-adminSteamIDs` donne réellement les droits d'admin** : preuve par l'effet, là où la ligne `FromBatScript` que la section J cherchait ne s'imprime pas dans cette version. |
+| DynHost met-il à jour un enregistrement qui n'existe pas encore ? | **Non, et rien ne disait qu'il fallait le créer d'abord.** Mesuré le 2026-09-06, à la première vraie session : `ovh.com/nic/update` rend **`http 404`** sur `enshrouded.beacon.charlouze.com` tant que l'enregistrement A n'existe pas dans la zone — `nslookup` répondant *Non-existent domain*, alors que `beacon.charlouze.com` résout. DynHost **met à jour**, il ne crée pas : il faut poser l'enregistrement A dans la zone OVH, puis lui attacher un identifiant DynHost. Ni le §4, ni le §6, ni le §10 ne mentionnaient ce prérequis. Deux choses ont tenu *grâce* à cette panne : le §8 n'a pas interrompu la session, et **le recours de `JoinInfo` a servi pour de vrai** — la connexion s'est faite par l'IP brute, le moyen principal étant mort. |
 | Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
 
 ### Encore ouvert
