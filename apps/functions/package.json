@@ -81,6 +81,8 @@
     ]
   },
   "dependencies": {
+    "@beacon/cloud-init": "*",
+    "@beacon/ovh-dns": "*",
     "@scaleway/sdk": "^4.0.8",
     "@scaleway/sdk-client": "^2.7.0",
     "firebase-admin": "^13.10.0",

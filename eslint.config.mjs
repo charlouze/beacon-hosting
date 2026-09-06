@@ -38,6 +38,14 @@ export default [
               sourceTag: 'scope:catalog',
               onlyDependOnLibsWithTags: ['scope:domain'],
             },
+            // The wire format between the machine and the control plane. It
+            // needs the domain to name a session and a state, and nothing else
+            // — an adapter it could reach would let a provider's word travel on
+            // a wire the least trusted element of the system writes.
+            {
+              sourceTag: 'scope:protocol',
+              onlyDependOnLibsWithTags: ['scope:domain'],
+            },
             { sourceTag: 'scope:rules', onlyDependOnLibsWithTags: [] },
             {
               sourceTag: 'scope:app',
@@ -46,6 +54,7 @@ export default [
                 'scope:record',
                 'scope:adapter',
                 'scope:catalog',
+                'scope:protocol',
               ],
             },
           ],
