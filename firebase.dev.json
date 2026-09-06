@@ -1,0 +1,17 @@
+{
+  "firestore": {
+    "rules": "firestore.dev.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "apps/functions/dist",
+      "codebase": "default"
+    }
+  ],
+  "emulators": {
+    "firestore": { "port": 8080 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

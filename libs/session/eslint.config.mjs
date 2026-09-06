@@ -11,10 +11,18 @@ export default [
     // The day a client library reaches in here, §4's claim that swapping the
     // store costs one adapter stops being true, and nothing else would say so.
     //
-    // It lives here and not in the root config because flat-config `files`
-    // globs resolve against the base path of the config file that ESLint
-    // loaded, and `nx lint` runs `eslint .` from this directory: a
-    // `libs/session/**` glob written at the root never matches anything.
+    // It lives here and not in the root config because this project is linted
+    // by the inferred `@nx/eslint/plugin` target, which runs `eslint .` with
+    // `cwd` at this directory and lets ESLint auto-discover its config file —
+    // so ESLint sets `basePath` to this directory, and a `libs/session/**`
+    // glob written at the root would resolve to `libs/session/libs/session/**`
+    // and match nothing. A root-authored glob is not inherently dead: `nx`'s
+    // other lint integration, the legacy `@nx/eslint:lint` executor, chdirs to
+    // the workspace root and hands ESLint an already-resolved config path,
+    // which sets `basePath` there instead — a root-authored glob works for
+    // whichever project that executor happens to lint. Rely on that and the
+    // day a project migrates from one integration to the other, its coverage
+    // silently moves with it.
     files: ['**/*.ts'],
     rules: {
       'no-restricted-imports': [

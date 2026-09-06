@@ -23,6 +23,9 @@
     },
     {
       "path": "./libs/ovh-dns"
+    },
+    {
+      "path": "./apps/web"
     }
   ],
   "compilerOptions": {}
