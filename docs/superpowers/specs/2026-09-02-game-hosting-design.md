@@ -1059,7 +1059,7 @@ jamais bloqué ».
    L'ordre se tient donc dans le `docker-compose`, pas dans une convention : le
    conteneur de jeu attend que le compagnon ait fini sa restauration. Tant qu'il
    ne démarre pas, aucun client ne peut se connecter, et la fenêtre n'existe
-   pas. C'est le travail de la tranche 3, et le `deploy/docker-compose.yml`
+   pas. C'est le travail de la tranche 3, et le `deploy/cloud-init/src/lib/enshrouded.ts`
    d'aujourd'hui ne le fait pas — il n'a pas encore de compagnon à attendre.
 
    L'agent appelle alors `agentReport({phase: 'ready', ip})`. La Function met à jour

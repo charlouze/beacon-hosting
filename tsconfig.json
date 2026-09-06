@@ -17,6 +17,9 @@
     },
     {
       "path": "./libs/rules"
+    },
+    {
+      "path": "./deploy/cloud-init"
     }
   ],
   "compilerOptions": {}

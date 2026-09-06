@@ -30,6 +30,14 @@ export default [
               sourceTag: 'scope:adapter',
               onlyDependOnLibsWithTags: ['scope:domain'],
             },
+            // The catalogue knows images, ports and command-line options. It
+            // needs the domain for `Game` and `JoinInfo`, and nothing else —
+            // an adapter it could reach would let a provider's word back in
+            // through the one place §4 keeps free of it.
+            {
+              sourceTag: 'scope:catalog',
+              onlyDependOnLibsWithTags: ['scope:domain'],
+            },
             { sourceTag: 'scope:rules', onlyDependOnLibsWithTags: [] },
             {
               sourceTag: 'scope:app',
@@ -37,6 +45,7 @@ export default [
                 'scope:domain',
                 'scope:record',
                 'scope:adapter',
+                'scope:catalog',
               ],
             },
           ],
