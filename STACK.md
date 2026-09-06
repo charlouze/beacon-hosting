@@ -102,8 +102,18 @@ Les fichiers de ce jeu ne passent jamais par SteamCMD sur la VM : ils sont
 déposés dans le seau par `tools/game-depot`, depuis la machine d'un
 administrateur.
 
-La **seule image maison** est le compagnon (`rclone` + `curl`), poussée sur
-ghcr.io par son propre workflow.
+La **seule image maison** est le compagnon, poussée sur ghcr.io par son propre
+workflow. C'est un **projet Node du monorepo**, et non deux binaires appelés par
+un script : il parle A2S, tient une boucle de rapport, et partage avec la
+Function le plancher de taille qui garde les sauvegardes. Le §4 du spec dit
+pourquoi cette forme l'a emporté.
+
+**Il n'embarque pas `rclone`**, malgré ce que la sonde du 2026-09-05 employait :
+une sauvegarde est **un objet** — le compagnon archive le dossier avant de le
+confier —, donc un `PutObject` et un `GetObject` suffisent, et il n'existe aucune
+option destructrice à se retenir d'employer. Le seul cas qui réclame un outil de
+transfert parallèle est les 2,3 Go de fichiers de Sunkenland, en 247 objets, et
+il arrive avec le jeu qui les demande.
 
 Toutes sont référencées par un **tag immuable, jamais `latest`**. Le
 `cloud-init` est écrit au moment du provisionnement : avec un tag mobile, la

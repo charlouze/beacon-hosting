@@ -290,7 +290,8 @@ libs/
   membership-record/   ACL Firestore de members/. Ni libs/session ni apps/web
                        ne voient Firestore : tout passe par un module *-record
   agent-protocol/      format de fil entre la VM et le plan de contrôle —
-                       une ACL, pas du métier
+                       une ACL, pas du métier. Importée aux deux bouts, par
+                       agentReport et par le compagnon
   scaleway-compute/    adapter ServerHost   -> API Instance Scaleway
   scaleway-storage/    adapter SaveStore    -> Object Storage (S3)
   ovh-dns/             adapter DnsUpdater   -> DynHost
@@ -298,7 +299,8 @@ deploy/
   cloud-init/          génère le docker-compose.yml de l'instance
     games/             catalogue par jeu : image, ports, variables, options de
                        ligne de commande, chemin des sauvegardes dans le conteneur
-  companion/           image compagnon (rclone + curl) -> ghcr.io
+  companion/           projet Node, image sur ghcr.io. Restaure avant que le
+                       jeu démarre, synchronise, sonde le serveur et rapporte
 tools/
   game-depot/          commande d'administration : push, pull, purge des
                        fichiers de jeu dans le seau. NE CONNAÎT PAS le préfixe
@@ -311,7 +313,22 @@ Aucune image de serveur de jeu n'est construite : `mornedhels/enshrouded-server`
 et `melle2/sunkenland-ds` sont consommées telles quelles, la seconde avec son
 point d'entrée remplacé par un script **monté** — mesuré le 2026-09-05, et c'est
 ce qui évite de lui devoir un fork ou une image de plus (§2). La seule image
-maison est le compagnon, qui reste minimal.
+maison est le compagnon.
+
+**Le compagnon est un projet du monorepo, pas deux binaires appelés par un
+script.** Ce qu'il porte a débordé de ce que `rclone` et `curl` savent faire :
+il interroge le serveur en A2S pour savoir s'il répond, tient une boucle de
+rapport et en relit l'échéance, refuse de pousser une archive sous le plancher
+de `Save`, et vérifie qu'un fichier est apparu là où le script amont sort en
+`0` sans rien écrire (§12). Le défi/réponse A2S en shell serait la pièce la plus
+fragile du système à l'endroit où il compte le plus, et le format de fil serait
+réécrit à la main d'un côté de la ligne.
+
+Le prix est une image de quelques dizaines de mégaoctets au lieu de quelques-uns
+— sur une machine qui télécharge 8,8 Go, ça ne se mesure pas. Le gain est que le
+plancher de taille est **le même code** dans le compagnon et dans `agentReport`,
+appelé sur `Save` : la règle d'or du §8 n'existe qu'une fois dans le dépôt, et
+c'est exactement ce que le §4 exige de tout calcul.
 
 **`libs/session` ne connaît des jeux que leur identifiant.** Le catalogue
 `deploy/cloud-init/games/` est le seul endroit du dépôt qui sait qu'un serveur
@@ -391,9 +408,23 @@ vie du bucket, jamais du code.
 
 **Les événements sont des faits au passé** — `SessionStarted`,
 `SessionExtended`, `SessionStopRequested`, `SessionStopped`, `DeadlineClamped`,
-`ProvisioningFailed`, `CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
+`ProvisioningFailed`, `DnsUpdateFailed`, `AgentContradicted`, `SaveRefused`,
+`CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
 
-Deux d'entre eux se ressemblent et ne disent pas la même chose.
+**Trois d'entre eux disent qu'un pas a raté sans que la soirée soit perdue**, et
+c'est la distinction qui leur vaut d'exister séparément. `DnsUpdateFailed` :
+l'enregistrement n'a pas pu être pointé, le §8 ne coupe rien et le point de
+jonction porte déjà l'IP brute en recours. `AgentContradicted` : la machine a
+déclaré une adresse qui n'est pas celle que le plan de contrôle a réservée — on
+ne la suit pas (§6), et le désaccord vaut une ligne. `SaveRefused` : une
+sauvegarde sous le plancher n'a pas été enregistrée (§8).
+
+Les deux premiers ont été écrits parce que `ProvisioningFailed` faisait leur
+travail et mentait en le faisant : une session qui devient `RUNNING` la seconde
+d'après n'a pas échoué à se provisionner, et un journal qui l'affirme est lu par
+un humain au moment précis où il a besoin qu'il soit vrai.
+
+Deux autres se ressemblent et ne disent pas la même chose.
 `SessionStopRequested` est écrit par le navigateur, dans la même écriture que le
 passage à `STOPPING` : c'est le seul endroit qui garde **qui** a demandé
 l'arrêt, sans quoi couper la soirée d'un autre serait le seul geste anonyme du
@@ -752,6 +783,33 @@ rangement. Deux jeux qui partageraient un préfixe finiraient par se recouvrir,
 et le §3 fait de la perte d'une sauvegarde le seul échec grave du système. Le
 préfixe se dérive du `game` de la session, jamais d'un nom saisi.
 
+**Et les fichiers de jeu vivent dans un second seau, pas dans un second
+préfixe.** `beacon-saves` porte les sauvegardes, que la VM écrit ; `beacon-games`
+porte les 2,3 Go sous licence de Sunkenland, déposés à la main et que la VM ne
+fait que lire. Un seul seau aurait demandé qu'une politique restreigne
+l'écriture au préfixe des saves — donc que le fournisseur fasse ce qu'on suppose,
+et c'est exactement la supposition qui a coûté un hébergeur (§2). Deux seaux
+tiennent la frontière sans rien à vérifier : la clé qui monte sur la machine
+écrit dans l'un et lit l'autre, et sa portée se lit dans son nom.
+
+**Chaque sauvegarde est une clé neuve, jamais une clé réécrite.** L'`objectKey`
+s'écrit `saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`, et un document
+`saves/{id}` existe par objet déposé. C'est ce qui fait de la règle d'or une
+propriété et non une politique : le compagnon n'a pas à *éviter* d'écraser une
+sauvegarde, il n'en a jamais l'occasion. Une poussée fautive ajoute un objet
+suspect à côté des bons, là où une clé stable l'aurait mis à leur place.
+
+**L'origine est dans le chemin, et haut**, avant tout ce qui varie d'une session
+à l'autre. Ce n'est pas du rangement : les règles de cycle de vie d'un seau
+filtrent par préfixe littéral, et c'est ce qui permet à une poussée régulière de
+ne pas vivre aussi longtemps que la dernière d'une soirée. Une origine placée
+plus bas rendrait ces deux durées indistinguables.
+
+L'élagage est alors la seule chose qui supprime, et il vit **dans la règle de
+cycle de vie du seau**, jamais dans le dépôt. `saves/{id}` n'a pas de politique
+de rétention à tenir de son côté : ses documents survivent aux objets, et un
+document qui pointe une clé expirée dit une vérité — cette sauvegarde a existé.
+
 **`steamId` est la seule écriture d'un membre sur son propre document**, et elle
 force une règle que le reste du §5 n'avait pas besoin d'écrire : le sujet peut
 modifier ce champ-là et lui seul. La tentation serait d'ouvrir `members/{uid}`
@@ -854,7 +912,7 @@ champ réservé est refusée en bloc, même si le reste de l'écriture est légi
 
 **`stateSince` dit quand l'état courant a commencé**, et il est réécrit à chaque
 changement d'état, quel qu'en soit l'auteur. C'est ce qui rend mesurables les
-délais du §6 — « `PROVISIONING` depuis plus de 15 min », « `STOPPING` depuis
+délais du §6 — « `PROVISIONING` depuis plus de 25 min », « `STOPPING` depuis
 plus de 10 min ». `startedAt` date la session entière et ne répond pas à cette
 question ; `provisionClaimedAt` est un verrou, dont la présence est le mécanisme
 et non une durée.
@@ -1010,9 +1068,15 @@ jamais bloqué ».
    sans ce champ est invisible du watchdog, qui détruira la machine en plein
    provisionnement.
 5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
-   avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, des
-   identifiants S3 restreints au seul préfixe des saves, la configuration
-   serveur et l'échéance. `ipId`, `ip` et `instanceId` sont inscrits dans
+   avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, une clé S3
+   qui écrit dans `beacon-saves` et lit `beacon-games` — deux seaux, et le §5
+   dit pourquoi ce n'est pas un préfixe — et la configuration serveur.
+
+   **L'échéance n'y est pas**, et son absence est ce qui la garde vraie :
+   l'agent la relit dans la réponse à chacun de ses rapports, donc une valeur
+   figée au démarrage serait périmée dès la première prolongation. Une donnée
+   qui a deux sources dont l'une ne se met jamais à jour n'a pas deux sources,
+   elle en a une fausse. `ipId`, `ip` et `instanceId` sont inscrits dans
    `provisioning/{sessionId}` dès que Scaleway les retourne. L'IP d'abord :
    c'est la Function qui connaît l'adresse, et elle la connaît avant que la
    machine existe.
@@ -1145,6 +1209,17 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
 2. L'agent arrête le serveur de jeu **puis** pousse la save finale — dans cet
    ordre, pour que la sauvegarde soit cohérente — et rapporte `saved`.
 
+   **Il l'arrête par un canal à un seul verbe, et non par le socket Docker.**
+   L'agent est un conteneur ; arrêter un conteneur voisin demande un canal vers
+   l'hôte, et le socket en donnerait un qui vaut root sur la machine. Le §7 pose
+   qu'une VM compromise ne doit rien livrer de plus qu'une écriture sur le seau
+   des sauvegardes : le socket ne lui donnerait aucun identifiant cloud de plus,
+   mais il lui donnerait la machine, et c'est une extension qui se décide au lieu
+   de se découvrir. Le `cloud-init` pose donc une unité systemd qui regarde un
+   fichier d'un volume partagé et ne sait faire qu'une chose — arrêter le
+   conteneur du jeu. L'agent touche le fichier ; il ne peut rien demander
+   d'autre.
+
    **Pour Sunkenland, il n'existe pas de sauvegarde finale à provoquer.** Ni
    l'arrêt du conteneur, ni une fermeture polie, ni le départ du dernier joueur
    n'en déclenche une ; c'est mesuré six fois, section J. L'agent pousse donc le
@@ -1166,7 +1241,7 @@ système pour le budget.
 | Échéance dépassée de plus de 2 min, état encore `RUNNING` | Arrêt forcé |
 | `deadline - maintenant` supérieur à la durée de session | Échéance ramenée à la borne, écart journalisé |
 | État incohérent avec les champs réservés — `RUNNING` sans `instanceId`, `IDLE` avec une instance vivante | `server/current` remis d'équerre à partir de ce que Scaleway déclare réellement |
-| `PROVISIONING` depuis plus de 15 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
+| `PROVISIONING` depuis plus de 25 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
 | `STOPPING` depuis plus de 10 min | Destruction sans attendre l'agent — la save de moins de 10 min est déjà en Object Storage |
 | État `FAILED` | Nouvelle tentative de destruction ; retour à `IDLE` dès qu'aucune ressource taguée ne survit |
 | Ressource taguée `beacon` sans `provisioning/{sessionId}` ouvert | Destruction |
@@ -1177,6 +1252,21 @@ l'âge de la session. Un `stateSince` absent — un document semé avant que le
 champ existe — ne déclenche aucun délai : le watchdog ne devine pas une durée
 qu'on ne lui a pas donnée, et la ligne de réconciliation par tag rattrape de
 toute façon toute ressource qu'aucune intention ouverte n'explique.
+
+**Le délai de `PROVISIONING` est de 25 minutes et non de 15**, et c'est une
+correction que la définition de `RUNNING` a rendue nécessaire. Tant que la
+Function concluait dès l'IP réservée, cet état durait une demi-minute et le délai
+ne pouvait rien déclencher. Du jour où l'agent conclut, il couvre le boot, la
+restauration et le téléchargement du jeu : la sonde a mesuré 4 min 49 et 7 min 58
+sur deux sessions identiques, la première vraie session au plus 11 min 48. Une
+soirée lente aurait mangé les trois quarts de la marge, et le watchdog aurait
+détruit une machine en train de télécharger.
+
+Allonger ne coûte rien, et c'est le §12 qui le dit : la facturation est à l'heure
+entamée. Quinze minutes et vingt-cinq minutes tombent dans la même heure due, sur
+chacune des trois ressources. Le délai ne borne donc pas une dépense — il borne
+une attente, et sa seule valeur juste est celle qui ne coupe pas une machine
+saine.
 
 `FAILED` n'a pas de délai : il se retente à chaque passage.
 
@@ -1195,7 +1285,7 @@ watchdog doit connaître les deux.** Mesuré en tranche 0 :
 | arrêtée, jamais démarrée | `terminate` **est refusé** ; suppression simple | **le volume survit**, détaché et facturé |
 
 C'est le cas dangereux, parce qu'il croise la ligne « `PROVISIONING` depuis plus
-de 15 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
+de 25 min » ci-dessus : une instance dont le boot a échoué est arrêtée, donc le
 watchdog la supprime — et abandonne son disque. Le volume ne porte **aucun tag**,
 les étiquettes posées sur l'instance ne descendant pas dessus ; il n'apparaît
 donc ni dans la liste des instances, ni dans celle des IP, et rien ne le
@@ -1311,7 +1401,8 @@ Les règles se testent donc comme de la sécurité : par leurs refus (voir §9).
 **Aucun identifiant d'API cloud ne réside sur la VM de jeu.** C'est une machine
 exposée sur Internet qui exécute un binaire propriétaire sous Wine ; si elle est
 compromise, l'attaquant ne doit rien obtenir de plus que des droits d'écriture
-sur un préfixe de bucket. La conséquence assumée est que l'instance ne peut pas
+sur le seau des sauvegardes — et une lecture sur celui des fichiers de jeu, que
+le §5 sépare pour cette raison. La conséquence assumée est que l'instance ne peut pas
 s'auto-détruire : le watchdog est le seul réclamateur, complété par une alerte
 de budget Scaleway comme garde-fou humain.
 
@@ -1369,20 +1460,34 @@ C'est le seul invariant du système dont la violation détruit une donnée
 irremplaçable, et il ne s'applique pas là où on serait tenté de le ranger. Les
 sauvegardes ne s'écrivent physiquement que dans le compagnon, sur la VM :
 `libs/session/saves` ne voit que des métadonnées, et toujours après coup. Une
-règle revendiquée par une bibliothèque TypeScript mais exécutée par un script
-`rclone` n'est protégée que par la rigueur du script.
+règle revendiquée par le plan de contrôle mais appliquée sur la VM n'est
+protégée que par la rigueur de ce qui tourne là-bas — d'où le compagnon en
+TypeScript (§4), qui appelle exactement le même plancher que `agentReport` au
+lieu de le réécrire dans une autre langue.
 
 Trois lignes de défense, de la plus proche du disque à la plus lointaine :
 
-1. **Le compagnon refuse de synchroniser une archive vide ou anormalement
-   petite**, et n'emploie que des options `rclone` non destructives — jamais de
-   miroir qui propage une suppression locale vers le bucket.
-2. **Le stockage objet conserve un historique**, et l'élagage est une règle de
-   cycle de vie du bucket, côté fournisseur. **Aucun code du projet ne supprime
-   une sauvegarde** : le port `SaveStore` n'expose ni suppression ni élagage, et
-   c'est délibéré — sur la seule donnée irremplaçable du système, la meilleure
-   ligne de code est celle qui n'existe pas. Écraser reste réversible tant que la
-   version précédente est dans la fenêtre de rétention.
+1. **Le compagnon refuse de pousser une archive vide ou anormalement petite**,
+   et il le demande **avant** d'agir : une archive refusée plus loin a déjà
+   quitté la machine. Il n'a aucune option destructrice à éviter — une
+   sauvegarde est un objet, déposé sous une clé neuve (§5), et il n'existe ni
+   miroir ni suppression dont il faudrait se retenir.
+
+   **Et ce qu'il refuse en premier n'est pas une taille, c'est une confusion.**
+   « Ce jeu n'a jamais été sauvegardé » et « le seau n'a pas répondu » ne sont
+   pas la même réponse. Prendre la seconde pour la première laisserait le
+   serveur générer un monde vierge, que la poussée suivante déposerait comme la
+   sauvegarde la plus récente, et que la session d'après restaurerait. Aucune
+   ligne de code n'aurait écrasé quoi que ce soit ; le monde serait perdu quand
+   même. C'est la seule façon dont la règle d'or se viole sans qu'aucune
+   écriture ne la viole.
+2. **Le stockage objet conserve un historique**, et il le conserve par
+   construction : chaque poussée écrit une clé neuve (§5), donc écraser n'est pas
+   une chose qui peut arriver. L'élagage est une règle de cycle de vie du seau,
+   côté fournisseur. **Aucun code du projet ne supprime une sauvegarde** : le
+   port `SaveStore` n'expose ni suppression ni élagage, et c'est délibéré — sur
+   la seule donnée irremplaçable du système, la meilleure ligne de code est celle
+   qui n'existe pas.
 3. **`agentReport` refuse d'enregistrer une `Save`** dont la taille passe sous
    un plancher, et journalise le refus. C'est le seul des trois qui vit dans du
    code TypeScript testable, et il arrive en dernier.
