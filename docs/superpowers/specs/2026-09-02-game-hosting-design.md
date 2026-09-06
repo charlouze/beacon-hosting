@@ -1398,6 +1398,15 @@ Trois lignes de défense, de la plus proche du disque à la plus lointaine :
    quitté la machine. Il n'a aucune option destructrice à éviter — une
    sauvegarde est un objet, déposé sous une clé neuve (§5), et il n'existe ni
    miroir ni suppression dont il faudrait se retenir.
+
+   **Et ce qu'il refuse en premier n'est pas une taille, c'est une confusion.**
+   « Ce jeu n'a jamais été sauvegardé » et « le seau n'a pas répondu » ne sont
+   pas la même réponse. Prendre la seconde pour la première laisserait le
+   serveur générer un monde vierge, que la poussée suivante déposerait comme la
+   sauvegarde la plus récente, et que la session d'après restaurerait. Aucune
+   ligne de code n'aurait écrasé quoi que ce soit ; le monde serait perdu quand
+   même. C'est la seule façon dont la règle d'or se viole sans qu'aucune
+   écriture ne la viole.
 2. **Le stockage objet conserve un historique**, et l'élagage est une règle de
    cycle de vie du bucket, côté fournisseur. **Aucun code du projet ne supprime
    une sauvegarde** : le port `SaveStore` n'expose ni suppression ni élagage, et
