@@ -6,3 +6,43 @@ python = "3.14.7"
 # machine de jeu. Épinglé parce que c'est l'outil qui touche la seule donnée
 # irremplaçable du système.
 rclone = "1.75.1"
+
+# Les gestes du developpement qui ont besoin d'un environnement, et que chaque
+# shell ecrit differemment — `VAR=x cmd` n'existe pas en PowerShell. Les poser
+# ici les rend portables, et surtout : une tache qui fixe toujours
+# FIRESTORE_EMULATOR_HOST ne *peut pas* atteindre la base de production, meme
+# lancee par distraction. La cible est l'emulateur, toujours.
+
+[tasks.seed]
+description = "Seme server/current et config/settings dans l'emulateur"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
+run = "npx nx run functions:seed"
+
+# Le build efface `dist/`, et l'emulateur y cherche deux fichiers : `.env` pour
+# les parametres, `.secret.local` pour les secrets — `defineSecret` ne lit pas
+# `.env`, il interroge Secret Manager sauf override local. Les deux se
+# reposent donc apres chaque construction. `.secret.local` porte de vraies
+# valeurs : il est ignore par git et ne doit jamais quitter la machine.
+[tasks.dev-functions]
+description = "Construit les Functions pour l'emulateur, et y repose .env et .secret.local"
+run = [
+  "npm run predeploy:functions",
+  "node tools/dev-secrets.mjs",
+]
+
+[tasks.emulators]
+description = "Demarre Firestore et les Functions sur les regles de developpement"
+# L'emulateur ne sert a rien sans un `dist/` construit et ses deux fichiers
+# d'environnement : sans eux il charge zero Function, ou les charge et va
+# chercher les secrets dans Secret Manager. La dependance rend cet etat
+# inatteignable au lieu de le documenter.
+depends = ["dev-functions"]
+run = "npx firebase emulators:start --config firebase.dev.json --project demo-beacon --only firestore,functions"
+
+[tasks.serve]
+description = "Sert le pilote, qui ne parle qu'a l'emulateur"
+run = "npx nx serve web"
+
+[tasks.inventory]
+description = "Liste ce que le compte Scaleway detient — lecture seule, ne cree rien"
+run = "npm --prefix probe run scw:inventory"

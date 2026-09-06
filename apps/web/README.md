@@ -15,10 +15,17 @@ document : tout passe par `@beacon/session-record/client` (§4 du spec). Une
 règle de lint le vérifie.
 
 ```bash
-npx firebase emulators:start --config firebase.dev.json --project demo-beacon --only firestore
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-beacon npx nx run functions:seed
-npx nx serve web
+mise run dev-functions  # construit, et repose .env et .secret.local dans dist/
+mise run emulators   # Firestore et les Functions, sur firebase.dev.json
+mise run seed        # server/current et config/settings
+mise run serve       # le pilote
 ```
+
+Ce sont des tâches `mise` et non des lignes à recopier, pour deux raisons. `VAR=valeur commande` n'existe pas en PowerShell, donc la forme
+POSIX ne marche pas pour tout le monde. Et surtout : une tâche qui pose
+toujours `FIRESTORE_EMULATOR_HOST` ne **peut pas** atteindre la base de
+production, même lancée par distraction — la sûreté vient de la tâche, pas de
+la vigilance de celui qui tape.
 
 Les règles chargées par `firebase.dev.json` laissent tout passer : ce sont
 celles du développement, jamais celles du déploiement. Les vraies arrivent en
