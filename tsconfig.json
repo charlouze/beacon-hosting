@@ -20,6 +20,9 @@
     },
     {
       "path": "./deploy/cloud-init"
+    },
+    {
+      "path": "./libs/ovh-dns"
     }
   ],
   "compilerOptions": {}

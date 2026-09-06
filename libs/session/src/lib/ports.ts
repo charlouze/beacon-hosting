@@ -75,6 +75,17 @@ export interface OpenedServer {
   };
 }
 
+/**
+ * Point an A record at an address. It is not called for every game: only when
+ * the join point carries an address — true for one, false for the other, where
+ * there is nothing to point at. That is not a branch in the domain; the game's
+ * catalogue entry knows, and a port one does not call is cheaper than a port
+ * made optional (§4).
+ */
+export interface DnsUpdater {
+  point(hostname: string, address: string): Promise<void>;
+}
+
 export interface ServerHost {
   /**
    * Open one game server for this session, and answer where it is. Whatever
