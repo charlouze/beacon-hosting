@@ -58,6 +58,26 @@ describe('the enshrouded catalogue entry', () => {
     expect(rendered).toContain("SERVER_PASSWORD=a$&b$'c$`d");
   });
 
+  // The compose travels as a block scalar, so its depth is its syntax: a line
+  // landing short of the six spaces closes the block, and everything after it
+  // becomes cloud-init keys nobody wrote. Nothing else catches that — the
+  // `cloud-init schema` recipe of `deploy/README.md` is run by hand, if at all,
+  // and by then the broken document is already on a billed machine.
+  it('lays the compose inside the block scalar, every line at its own depth', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('    content: |\n      services:\n        enshrouded:\n');
+    expect(rendered).toContain('\n          image: mornedhels/enshrouded-server@sha256:');
+    expect(rendered).toContain('\n            - "15637:15637/udp"');
+    expect(rendered).toContain('\n            - ./data:/opt/enshrouded\n');
+  });
+
+  // A marker left behind is a hole in the document that still looks like a
+  // document: cloud-init runs, and the machine boots on a literal
+  // `__SERVER_PASSWORD__`.
+  it('leaves no marker of its own behind', () => {
+    expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('__');
+  });
+
   it('starts the compose it just wrote, and nothing else', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('[ docker, compose, -f, /opt/beacon/docker-compose.yml,');
