@@ -247,3 +247,18 @@ ce paragraphe croirait le contraire.
   **avant** d'écrire le plan de la tranche suivante. Écrite pour la tranche 0,
   la règle vaut pour toute sonde : la tranche 1 bis en est la deuxième
   démonstration, et elle s'est intercalée exactement pour ça.
+- **Les ressources qui ne sont pas dans le dépôt.** Le seau et ses règles de
+  cycle de vie, la clé S3 et sa politique, le job Scheduler, l'alerte de budget,
+  l'alerte Cloud Monitoring, l'enregistrement A et son identifiant DynHost : tout
+  cela naît d'un geste de console, tranche après tranche, et rien ne dit ce qui
+  existe. **À terme, ces ressources se décrivent en code** — Scaleway et GCP
+  ont chacun leur fournisseur —, et la question n'est pas de savoir si c'est
+  souhaitable mais quand ça vaut le détour.
+
+  Deux choses le rendent moins urgent qu'il n'y paraît : il n'y a qu'un seul
+  environnement, donc rien à reproduire, et le watchdog rend déjà la seule
+  ressource qui coûte de l'argent — l'instance — entièrement éphémère et gérée
+  par du code. Ce qui reste à la main est ce qui vit longtemps et change
+  rarement. La bascule se paiera le jour où l'un de ces gestes sera fait de
+  travers sans que personne ne s'en aperçoive, et le candidat le plus probable
+  est une règle de cycle de vie sur les sauvegardes.
