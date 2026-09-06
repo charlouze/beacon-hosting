@@ -1,4 +1,5 @@
 import {
+  mustSweep,
   reclamations,
   reconcile,
   type Clock,
@@ -30,25 +31,31 @@ export interface WatchdogDeps {
 export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   const now = deps.clock.now();
 
-  // The inventory first, the intents last, and never together. §6 writes the
-  // intent before it calls the provider, so anything the provider holds was
-  // preceded by an intent — but only if the intents are read afterwards. Read
-  // in parallel, a machine born between the two reads appears in the inventory
-  // while its intent is still absent from the query, and the watchdog destroys
-  // a session on its first minute of life.
-  const [server, session, hosted, alreadyAnnounced, settings] = await Promise.all([
+  // Firestore only, and first. These four reads decide whether this pass has
+  // any reason to reach for the provider at all.
+  const [server, session, previous, settings] = await Promise.all([
     deps.state.read(),
     deps.state.readSession(),
-    deps.host.list(),
-    deps.health.strandedLastPass(),
+    deps.health.previousPass(),
     deps.settings.read(),
   ]);
-  // The intents last, and never in the batch above. §6 writes the intent
+
+  // The job still fires every five minutes, and that is the point: the
+  // Monitoring alert of §6 is the only signal of a dead watchdog, it only
+  // detects a job that stops, and a pass that does less stays invisible to it
+  // where a paused job would be indistinguishable from a dead one.
+  if (!mustSweep(server, previous.sweptAt, now, deps.limits)) {
+    await deps.health.beat(now, previous.stranded, null);
+    return;
+  }
+
+  const hosted = await deps.host.list();
+  // The intents last, and never beside the inventory. §6 writes the intent
   // before it calls the provider, so anything the provider holds was preceded
   // by an intent — but only if the intents are read afterwards. Read in
   // parallel, a machine born between the two reads appears in the inventory
-  // while its intent is still absent, and the watchdog destroys a session on
-  // its first minute of life.
+  // while its intent is still absent from the query, and the watchdog destroys
+  // a session on its first minute of life.
   const openSessions = await deps.ledger.openSessions();
   const view: WatchdogView = {
     now,
@@ -57,7 +64,7 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     settings,
     hosted,
     openSessions,
-    alreadyAnnounced,
+    alreadyAnnounced: previous.stranded,
   };
 
   const outcomes: ReclaimOutcome[] = [];
@@ -97,6 +104,7 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   // is stranded now, which is what the next pass must not announce again. A
   // refused sweep keeps what the last sweep that *looked* saw: recording an
   // empty set would claim nothing is stranded, and re-announce it all in five
-  // minutes.
-  await deps.health.beat(now, swept ? sweep.stranded : alreadyAnnounced);
+  // minutes. `now` as the sweep instant either way: this pass did reach for
+  // the provider, whatever the provider answered.
+  await deps.health.beat(now, swept ? sweep.stranded : previous.stranded, now);
 }

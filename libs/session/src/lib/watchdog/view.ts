@@ -56,6 +56,18 @@ export interface WatchdogLimits {
    * fell thirty seconds ago is a normal system, not a stuck one.
    */
   readonly deadlineGraceMs: number;
+  /**
+   * How long a pass may go without asking the provider anything, while the
+   * record says nothing is open. Not a budget decision — §11 makes the started
+   * hour due on each resource, so a stray reclaimed at thirty minutes costs
+   * exactly what it would at five — but an ecological one: five api calls
+   * every five minutes, 8 640 times a month, to find nothing.
+   *
+   * **Thirty minutes is a ceiling, not a preference.** At sixty, a single
+   * missed pass pushes a stray into a second billed hour, and the property
+   * that makes this safe stops holding.
+   */
+  readonly quietSweepIntervalMs: number;
 }
 
 /**
@@ -67,4 +79,5 @@ export const DEFAULT_LIMITS: WatchdogLimits = {
   provisioningTimeoutMs: 15 * 60_000,
   stoppingTimeoutMs: 10 * 60_000,
   deadlineGraceMs: 2 * 60_000,
+  quietSweepIntervalMs: 30 * 60_000,
 };

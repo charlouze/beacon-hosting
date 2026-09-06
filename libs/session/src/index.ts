@@ -8,4 +8,5 @@ export * from './lib/session.js';
 export * from './lib/settings.js';
 export * from './lib/watchdog/reclamations.js';
 export * from './lib/watchdog/reconcile.js';
+export * from './lib/watchdog/sweep.js';
 export * from './lib/watchdog/view.js';
