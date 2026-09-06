@@ -53,6 +53,31 @@ write_files:
       SERVER_NAME=__SERVER_NAME__
       SERVER_PASSWORD=__SERVER_PASSWORD__
       SERVER_SLOT_COUNT=__SLOT_COUNT__
+  # The machine's only credentials (§7): an s3 pair scoped to two buckets, and
+  # a token that dies with the session. Nothing here can create a resource.
+  #
+  # BEACON_SAVE_DIR is only correct if the compose that writes this box's
+  # companion mount resolves it to /opt/enshrouded/server/savegame on the
+  # host — where probe/RESULTS.md (2026-09-03) measured the world actually
+  # living. Nothing here asserts that; the compose is what must get it right.
+  - path: /opt/beacon/companion.env
+    permissions: "0600"
+    content: |
+      BEACON_SESSION_ID=__SESSION_ID__
+      BEACON_GAME=enshrouded
+      BEACON_TOKEN=__AGENT_TOKEN__
+      BEACON_ENDPOINT=__ENDPOINT__
+      BEACON_S3_ENDPOINT=__S3_ENDPOINT__
+      BEACON_S3_REGION=__S3_REGION__
+      BEACON_S3_ACCESS_KEY=__S3_ACCESS_KEY__
+      BEACON_S3_SECRET_KEY=__S3_SECRET_KEY__
+      BEACON_SAVES_BUCKET=__SAVES_BUCKET__
+      BEACON_GAMES_BUCKET=__GAMES_BUCKET__
+      BEACON_SAVE_DIR=/opt/enshrouded/savegame
+      BEACON_SAVE_OWNER=4711:4711
+      BEACON_READY_PROBE=a2s://enshrouded:15637
+      BEACON_STOP_FLAG=/opt/beacon/control/stop
+      BEACON_PUSH_INTERVAL_MS=600000
 
 runcmd:
   - [ systemctl, enable, --now, docker ]
@@ -88,7 +113,16 @@ export const enshrouded: GameCatalogEntry = {
     let rendered = fill(CLOUD_INIT, '__DOCKER_COMPOSE__', indent(COMPOSE));
     rendered = fill(rendered, '__SERVER_NAME__', request.serverName);
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);
-    return fill(rendered, '__SLOT_COUNT__', String(request.slotCount));
+    rendered = fill(rendered, '__SLOT_COUNT__', String(request.slotCount));
+    rendered = fill(rendered, '__SESSION_ID__', request.sessionId);
+    rendered = fill(rendered, '__AGENT_TOKEN__', request.agentToken);
+    rendered = fill(rendered, '__ENDPOINT__', request.endpoint);
+    rendered = fill(rendered, '__S3_ENDPOINT__', request.saves.endpoint);
+    rendered = fill(rendered, '__S3_REGION__', request.saves.region);
+    rendered = fill(rendered, '__S3_ACCESS_KEY__', request.saves.accessKey);
+    rendered = fill(rendered, '__S3_SECRET_KEY__', request.saves.secretKey);
+    rendered = fill(rendered, '__SAVES_BUCKET__', request.saves.savesBucket);
+    return fill(rendered, '__GAMES_BUCKET__', request.saves.gamesBucket);
   },
 
   joinInfo(address: string): JoinInfo {

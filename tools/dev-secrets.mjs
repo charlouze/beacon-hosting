@@ -15,7 +15,20 @@ import { readFileSync, writeFileSync } from 'node:fs';
  * must never leave the machine — which is also why it is written into `dist/`
  * and not tracked anywhere.
  */
-const SECRETS = ['SCW_SECRET_KEY', 'SERVER_PASSWORD', 'DYNHOST_USER', 'DYNHOST_PASSWORD'];
+/**
+ * Must list every `defineSecret` the Functions declare. The two live apart —
+ * this array and `container.ts` — and nothing makes them agree, so adding a
+ * secret there without adding it here is a silent gap: the emulator falls back
+ * to Secret Manager and fails to authenticate, minutes into a session, far
+ * from the commit that caused it. It happened once with `S3_SECRET_KEY`.
+ */
+const SECRETS = [
+  'SCW_SECRET_KEY',
+  'SERVER_PASSWORD',
+  'DYNHOST_USER',
+  'DYNHOST_PASSWORD',
+  'S3_SECRET_KEY',
+];
 
 const source = 'apps/functions/.env';
 const target = 'apps/functions/dist/.secret.local';

@@ -331,10 +331,10 @@ describe('runWatchdog', () => {
     await db.doc('server/current').set({
       state: 'PROVISIONING',
       sessionId: 'sess1',
-      stateSince: minutesAgo(16),
+      stateSince: minutesAgo(26),
       instanceId: 'i-1',
       joinInfo: { serverId: 'abc~123' },
-      provisionClaimedAt: minutesAgo(16),
+      provisionClaimedAt: minutesAgo(26),
     });
 
     await runWatchdog(deps());

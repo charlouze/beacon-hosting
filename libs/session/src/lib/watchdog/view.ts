@@ -48,6 +48,17 @@ export interface WatchdogView {
 }
 
 export interface WatchdogLimits {
+  /**
+   * §6, and twenty-five minutes rather than fifteen since the agent publishes
+   * RUNNING: this delay now covers the boot, the restore and an 8.8 GB
+   * download. Two identical probe sessions took 4 min 49 and 7 min 58, the
+   * first real one at most 11 min 48 — fifteen would have reaped a healthy
+   * machine on a slow evening.
+   *
+   * Allowing more costs nothing: §12 measured billing at the started hour, so
+   * fifteen and twenty-five fall inside the same hour due on each of the three
+   * resources. It bounds a wait, not a spend.
+   */
   readonly provisioningTimeoutMs: number;
   readonly stoppingTimeoutMs: number;
   /**
@@ -76,7 +87,7 @@ export interface WatchdogLimits {
  * move and this constant becomes the fallback.
  */
 export const DEFAULT_LIMITS: WatchdogLimits = {
-  provisioningTimeoutMs: 15 * 60_000,
+  provisioningTimeoutMs: 25 * 60_000,
   stoppingTimeoutMs: 10 * 60_000,
   deadlineGraceMs: 2 * 60_000,
   quietSweepIntervalMs: 30 * 60_000,
