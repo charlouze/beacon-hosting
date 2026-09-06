@@ -769,6 +769,15 @@ rangement. Deux jeux qui partageraient un préfixe finiraient par se recouvrir,
 et le §3 fait de la perte d'une sauvegarde le seul échec grave du système. Le
 préfixe se dérive du `game` de la session, jamais d'un nom saisi.
 
+**Et les fichiers de jeu vivent dans un second seau, pas dans un second
+préfixe.** `beacon-saves` porte les sauvegardes, que la VM écrit ; `beacon-games`
+porte les 2,3 Go sous licence de Sunkenland, déposés à la main et que la VM ne
+fait que lire. Un seul seau aurait demandé qu'une politique restreigne
+l'écriture au préfixe des saves — donc que le fournisseur fasse ce qu'on suppose,
+et c'est exactement la supposition qui a coûté un hébergeur (§2). Deux seaux
+tiennent la frontière sans rien à vérifier : la clé qui monte sur la machine
+écrit dans l'un et lit l'autre, et sa portée se lit dans son nom.
+
 **`steamId` est la seule écriture d'un membre sur son propre document**, et elle
 force une règle que le reste du §5 n'avait pas besoin d'écrire : le sujet peut
 modifier ce champ-là et lui seul. La tentation serait d'ouvrir `members/{uid}`
@@ -1027,9 +1036,10 @@ jamais bloqué ».
    sans ce champ est invisible du watchdog, qui détruira la machine en plein
    provisionnement.
 5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
-   avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, des
-   identifiants S3 restreints au seul préfixe des saves, la configuration
-   serveur et l'échéance. `ipId`, `ip` et `instanceId` sont inscrits dans
+   avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, une clé S3
+   qui écrit dans `beacon-saves` et lit `beacon-games` — deux seaux, et le §5
+   dit pourquoi ce n'est pas un préfixe —, la configuration serveur et
+   l'échéance. `ipId`, `ip` et `instanceId` sont inscrits dans
    `provisioning/{sessionId}` dès que Scaleway les retourne. L'IP d'abord :
    c'est la Function qui connaît l'adresse, et elle la connaît avant que la
    machine existe.
@@ -1328,7 +1338,8 @@ Les règles se testent donc comme de la sécurité : par leurs refus (voir §9).
 **Aucun identifiant d'API cloud ne réside sur la VM de jeu.** C'est une machine
 exposée sur Internet qui exécute un binaire propriétaire sous Wine ; si elle est
 compromise, l'attaquant ne doit rien obtenir de plus que des droits d'écriture
-sur un préfixe de bucket. La conséquence assumée est que l'instance ne peut pas
+sur le seau des sauvegardes — et une lecture sur celui des fichiers de jeu, que
+le §5 sépare pour cette raison. La conséquence assumée est que l'instance ne peut pas
 s'auto-détruire : le watchdog est le seul réclamateur, complété par une alerte
 de budget Scaleway comme garde-fou humain.
 
