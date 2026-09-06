@@ -29,6 +29,9 @@
     },
     {
       "path": "./libs/agent-protocol"
+    },
+    {
+      "path": "./libs/scaleway-storage"
     }
   ],
   "compilerOptions": {}
