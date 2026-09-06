@@ -207,14 +207,19 @@ export function reconcile(
       state: 'IDLE',
       lastError: 'the machine disappeared at the provider',
       clearFacts: true,
-      closeIntents,
+      closeIntents: closing(closeIntents, record.sessionId),
       events,
       deadline: null,
     };
   }
 
   if (record.state === 'IDLE' && record.hasReservedFacts) {
-    return { ...NOTHING, clearFacts: true, closeIntents, events };
+    return {
+      ...NOTHING,
+      clearFacts: true,
+      closeIntents: closing(closeIntents, record.sessionId),
+      events,
+    };
   }
 
   // Only here: a session about to be destroyed has nothing to clamp, and a
@@ -224,6 +229,18 @@ export function reconcile(
   const clamped = clamping(view);
   return { ...NOTHING, ...clamped, closeIntents, events: [...events, ...clamped.events] };
 }
+
+/**
+ * Every route to IDLE closes the intent in the same breath, and these two are
+ * routes to IDLE. Left open, the id comes back from `openSessions()` on every
+ * later pass, and a resource tagged with it that surfaces afterwards is
+ * reclaimed by nobody: `reclamations()` reads the open intent as a session
+ * still being born and holds off, `sweepUnclaimed()` sees a session tag and
+ * skips it. §4 hangs on this branch — no Scaleway resource outlives its
+ * session — and a billed machine nothing will ever destroy is how it breaks.
+ */
+const closing = (closeIntents: readonly SessionId[], sessionId: SessionId | null): SessionId[] =>
+  sessionId === null ? [...closeIntents] : [...closeIntents, sessionId];
 
 /**
  * §6: `deadline - now` above the session duration is brought back to the

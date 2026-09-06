@@ -161,6 +161,17 @@ describe('reconcile', () => {
     expect(types(correction.events)).toEqual(['SessionStopped']);
   });
 
+  // An intent left open outlives the session it was opened for: `openSessions()`
+  // hands the id back on every pass, and a resource that surfaces under its tag
+  // afterwards is then reclaimed by nobody — held off by the intent, skipped by
+  // the sweep. §4: no Scaleway resource outlives its session.
+  it('closes the intent of the session whose machine vanished', () => {
+    const v = view({ server: record('RUNNING', 's1', true), openSessions: ['s1'] });
+    const correction = reconcile(v, [], quiet);
+    expect(correction.state).toBe('IDLE');
+    expect(correction.closeIntents).toEqual(['s1']);
+  });
+
   // An outcome is not an outcome for *this* record. `no-open-session` produces
   // reclamations for sessions the record never names, and one of them failing
   // must not drag a healthy RUNNING session to FAILED: FAILED is the exit from
@@ -188,6 +199,17 @@ describe('reconcile', () => {
     const correction = reconcile(v, [], quiet);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(true);
+    expect(correction.closeIntents).toEqual([]);
+  });
+
+  // Same reason as above: the facts go, and the intent goes with them. An IDLE
+  // record still naming a session is the one shape where clearing the facts
+  // alone would leave the id open for every pass to come.
+  it('closes the intent of an IDLE record it empties', () => {
+    const v = view({ server: record('IDLE', 's1', true), openSessions: ['s1'] });
+    const correction = reconcile(v, [], quiet);
+    expect(correction.clearFacts).toBe(true);
+    expect(correction.closeIntents).toEqual(['s1']);
   });
 
   it('records the sweep of what no session claimed, with a null subject', () => {
