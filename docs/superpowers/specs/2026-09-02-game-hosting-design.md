@@ -409,20 +409,28 @@ vie du bucket, jamais du code.
 **Les événements sont des faits au passé** — `SessionStarted`,
 `SessionExtended`, `SessionStopRequested`, `SessionStopped`, `DeadlineClamped`,
 `ProvisioningFailed`, `DnsUpdateFailed`, `AgentContradicted`, `SaveRefused`,
-`CleanupFailed`, `SessionReclaimed`, `SessionExpired`, `ResourceStranded`.
+`AgentReportedFailure`, `CleanupFailed`, `SessionReclaimed`, `SessionExpired`,
+`ResourceStranded`.
 
-**Trois d'entre eux disent qu'un pas a raté sans que la soirée soit perdue**, et
+**Quatre d'entre eux disent qu'un pas a raté sans que la soirée soit perdue**, et
 c'est la distinction qui leur vaut d'exister séparément. `DnsUpdateFailed` :
 l'enregistrement n'a pas pu être pointé, le §8 ne coupe rien et le point de
 jonction porte déjà l'IP brute en recours. `AgentContradicted` : la machine a
 déclaré une adresse qui n'est pas celle que le plan de contrôle a réservée — on
 ne la suit pas (§6), et le désaccord vaut une ligne. `SaveRefused` : une
 sauvegarde sous le plancher n'a pas été enregistrée (§8).
+`AgentReportedFailure` : la machine annonce un échec **hors** `PROVISIONING` —
+un jeu qui meurt, une poussée qui n'aboutit pas.
 
-Les deux premiers ont été écrits parce que `ProvisioningFailed` faisait leur
-travail et mentait en le faisant : une session qui devient `RUNNING` la seconde
+Trois d'entre eux — `DnsUpdateFailed`, `AgentContradicted` et
+`AgentReportedFailure` — ont été écrits parce que `ProvisioningFailed` faisait
+leur travail et mentait en le faisant : une session qui devient `RUNNING` la seconde
 d'après n'a pas échoué à se provisionner, et un journal qui l'affirme est lu par
-un humain au moment précis où il a besoin qu'il soit vrai.
+un humain au moment précis où il a besoin qu'il soit vrai. Ce n'est pas une
+crainte théorique : la soirée du 2026-09-07 a produit `AgentReportedFailure`
+pour une poussée refusée sous le plancher, sur une session qui tournait
+parfaitement — sans cette distinction, le journal l'aurait appelée un échec de
+provisionnement.
 
 Deux autres se ressemblent et ne disent pas la même chose.
 `SessionStopRequested` est écrit par le navigateur, dans la même écriture que le
@@ -797,9 +805,21 @@ préfixe.** `beacon-saves` porte les sauvegardes, que la VM écrit ; `beacon-gam
 porte les 2,3 Go sous licence de Sunkenland, déposés à la main et que la VM ne
 fait que lire. Un seul seau aurait demandé qu'une politique restreigne
 l'écriture au préfixe des saves — donc que le fournisseur fasse ce qu'on suppose,
-et c'est exactement la supposition qui a coûté un hébergeur (§2). Deux seaux
-tiennent la frontière sans rien à vérifier : la clé qui monte sur la machine
-écrit dans l'un et lit l'autre, et sa portée se lit dans son nom.
+et c'est exactement la supposition qui a coûté un hébergeur (§2).
+
+**Deux seaux ne tiennent pas la frontière à eux seuls, et le croire était la
+même supposition.** Mesuré le 2026-09-07 sur le compte : l'IAM Scaleway ne
+descend pas sous le projet — aucune règle ne nomme un seau —, et **une clé
+n'opère que dans son projet par défaut**, ce qui interdit de séparer les deux
+seaux en deux projets tant que la machine n'en porte qu'une. Ce qui tient
+réellement la frontière est une **politique de seau** posée sur `beacon-games`,
+en liste blanche : tous droits au propriétaire, `s3:GetObject` et
+`s3:ListBucket` à l'application de la machine, et rien d'autre. Le §7 dit ce
+qu'elle garantit et le fichier qui l'énonce vit dans `deploy/scaleway/`.
+
+Le second seau reste la bonne forme malgré cela — une politique qui nomme un
+seau se relit, là où une politique de préfixe se vérifie caractère par
+caractère —, mais il ne se suffit pas, et cette section l'affirmait.
 
 **Chaque sauvegarde est une clé neuve, jamais une clé réécrite.** L'`objectKey`
 s'écrit `saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`, et un document
@@ -807,6 +827,18 @@ s'écrit `saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`, et un document
 propriété et non une politique : le compagnon n'a pas à *éviter* d'écraser une
 sauvegarde, il n'en a jamais l'occasion. Une poussée fautive ajoute un objet
 suspect à côté des bons, là où une clé stable l'aurait mis à leur place.
+
+**Ce format vit à trois endroits, et deux d'entre eux ne peuvent pas voir le
+premier.** Il est *construit* dans l'adapter de stockage ; il est *reconnu* dans
+la Function, qui refuse à une session d'enregistrer une clé qui ne la nomme pas,
+et qui ne peut pas importer l'adapter sans traîner son SDK S3 dans un bundle que
+le §7 tient à l'écart ; et il est *filtré littéralement* par les règles de cycle
+de vie du seau, qui ne sont pas du code. Rien ne casse quand ces trois-là
+divergent — c'est un test qui épingle la chaîne entière qui les tient ensemble.
+La réponse permanente est un module sans SDK exportant le préfixe, que la
+Function et l'adapter importent tous deux ; elle attend une tranche qui touche à
+ce chemin. Le troisième endroit, lui, restera manuel : il est chez le
+fournisseur, et le dépôt n'en garde que l'énoncé, dans `deploy/scaleway/`.
 
 **L'origine est dans le chemin, et haut**, avant tout ce qui varie d'une session
 à l'autre. Ce n'est pas du rangement : les règles de cycle de vie d'un seau
@@ -818,6 +850,27 @@ L'élagage est alors la seule chose qui supprime, et il vit **dans la règle de
 cycle de vie du seau**, jamais dans le dépôt. `saves/{id}` n'a pas de politique
 de rétention à tenir de son côté : ses documents survivent aux objets, et un
 document qui pointe une clé expirée dit une vérité — cette sauvegarde a existé.
+
+**Les règles ne portent que sur les poussées régulières** : `{jeu}/auto/` expire
+à sept jours. Ni `pre-shutdown/` ni `manual/` ne sont touchés par quoi que ce
+soit, et c'est le §8 qui l'impose — une règle qui effacerait la dernière
+sauvegarde d'un monde parce que personne n'y a joué pendant un an optimiserait
+quelques centimes par mois contre la seule chose que ce système existe pour
+empêcher. Ce que coûte cette rétention sans fin est au §11 : une croissance
+lente, et acceptée.
+
+Le préfixe étant littéral, **il y a une règle par jeu et non une règle**. Une
+seule est posée aujourd'hui, sur `saves/enshrouded/auto/` ; celle de Sunkenland
+naît avec la tranche qui l'implémente, et aucun test ne réclamera cette ligne.
+
+**Un piège que rien ne laisse deviner, et qui a failli passer.** Sur un seau
+**versionné**, une règle `Expiration` ne supprime rien : elle pose un marqueur
+de suppression, l'objet quitte les listings, et la version précédente reste
+stockée et facturée indéfiniment. La règle donne alors l'illusion d'une
+expiration et le chiffre du §11 devient faux, sans qu'aucune relecture de la
+règle ne le montre. Le versionnement est donc **suspendu** sur le seau des
+sauvegardes, et c'est cohérent : chaque sauvegarde étant une clé neuve, rien
+n'écrase jamais rien, donc le versionnement ne protégeait de rien.
 
 **`steamId` est la seule écriture d'un membre sur son propre document**, et elle
 force une règle que le reste du §5 n'avait pas besoin d'écrire : le sujet peut
@@ -1132,8 +1185,9 @@ jamais bloqué ».
    L'ordre se tient donc dans le `docker-compose`, pas dans une convention : le
    conteneur de jeu attend que le compagnon ait fini sa restauration. Tant qu'il
    ne démarre pas, aucun client ne peut se connecter, et la fenêtre n'existe
-   pas. C'est le travail de la tranche 3, et le `deploy/cloud-init/src/lib/enshrouded.ts`
-   d'aujourd'hui ne le fait pas — il n'a pas encore de compagnon à attendre.
+   pas. `deploy/cloud-init/src/lib/enshrouded.ts` le tient depuis la tranche 3,
+   par un `service_completed_successfully` sur le service de restauration : c'est
+   Docker qui refuse de démarrer le jeu, pas un script qui attend poliment.
 
    L'agent appelle alors `agentReport({phase: 'ready', ip})`. La Function met à jour
    DynHost **depuis l'`ip` de `provisioning/{sessionId}`, pas depuis celle que
@@ -1449,6 +1503,27 @@ le §5 sépare pour cette raison. La conséquence assumée est que l'instance ne
 s'auto-détruire : le watchdog est le seul réclamateur, complété par une alerte
 de budget Scaleway comme garde-fou humain.
 
+**Cette lecture-seule est tenue par une politique de seau, et elle est
+mesurée** — les trois conditions relevées dans le même état le 2026-09-07, ce
+qu'aucune tentative isolée n'avait réuni :
+
+| Mesure | Résultat |
+|---|---|
+| Lecture de `beacon-games` par la clé de la machine | accordée |
+| Écriture dans `beacon-saves` | `PutObject` réussi |
+| Écriture dans `beacon-games` | **`403` sur `PutObject`** |
+
+Le refus porte bien sur l'écriture elle-même : un `403` sur `CreateBucket` ne
+prouverait que la danse de vérification d'un client, pas la frontière. C'est
+`deploy/scaleway/beacon-games-policy.json` qui l'énonce.
+
+**Et une contrainte d'exploitation qui n'a pas d'autre endroit où vivre : la clé
+qui monte sur la VM doit avoir pour projet par défaut celui où elle écrit.** Une
+clé Scaleway ne résout les seaux que dans son projet par défaut — les règles IAM
+portées sur un autre projet n'y donnent pas accès. Avec le mauvais projet par
+défaut, la toute première poussée de sauvegarde échoue en `403` sur son
+`PutObject`, sans qu'aucun message ne nomme le projet.
+
 **Aucun identifiant Steam non plus.** C'est la raison profonde du choix du §2 de
 faire venir les 2,3 Go de Sunkenland par le stockage objet plutôt que par
 SteamCMD : télécharger à chaud imposerait de poser sur cette machine les
@@ -1537,6 +1612,17 @@ Trois lignes de défense, de la plus proche du disque à la plus lointaine :
 
 L'ordre compte : la protection réelle est en 1, pas en 3.
 
+**Ce que le plancher ne fait pas, et il faut l'écrire pour que personne ne s'y
+fie.** Il sépare « vide » de « non vide », pas « complet » de « tronqué ».
+Mesuré le 2026-09-07 sur deux soirées consécutives : 97 octets sont refusés,
+4 307 octets passent — un monde de trois minutes —, et 36 860 octets passent
+aussi alors que le même monde en pesait 72 767 vingt-trois minutes plus tôt. Aucun des
+trois chiffres n'était prévisible, et un plancher calibré sur les 31 374 octets
+que la tranche 0 donnait comme « plus petit monde réel » **aurait refusé une
+sauvegarde légitime**, produisant la panne exacte que cette section existe pour
+empêcher. Mesurer la complétude d'un monde demanderait de le comprendre, ce que
+le §4 refuse au système : c'est donc une limite, pas une dette.
+
 ## 9. Stratégie de test
 
 L'essentiel de l'effort porte sur `libs/session` : tests unitaires purs avec un
@@ -1598,11 +1684,34 @@ L'adapter Scaleway dispose de tests de contrat lancés à la demande contre le c
 réel, jamais en intégration continue : c'est le seul moyen de vérifier que l'API
 se comporte comme sa documentation le prétend.
 
-Le `docker-compose` complet a un test de fumée en GitHub Actions : il démarre les
-deux conteneurs, vérifie que le serveur écoute, et contrôle qu'une sauvegarde
-survit à un aller-retour restauration puis synchronisation. Le refus de
-synchroniser une archive vide y est testé nommément : c'est le seul endroit du
-système où un bug détruit des données irremplaçables, et il est en shell.
+**Le test de fumée du compagnon est la barrière de publication de son image**, en
+GitHub Actions. Il démarre les deux services **du compagnon** — la restauration
+puis l'agent —, contrôle qu'une sauvegarde survit à l'aller-retour restauration
+puis poussée, et vérifie le refus nommé d'une archive sous le plancher : c'est le
+seul endroit du système où un bug détruit des données irremplaçables.
+
+**Il éprouve aussi l'arrêt propre**, et c'est la seule chose du dépôt qui le
+fasse contre un vrai conteneur : dit `STOPPING`, le compagnon doit arrêter le jeu
+par son canal à un seul verbe, déposer une sauvegarde `pre-shutdown` et rapporter
+`saved` — dans cet ordre, le drapeau observé **avant** tout dépôt. Cette pile n'a
+ni Function ni ressource à détruire, donc elle ne reproduit pas le défaut de plan
+de contrôle que la revue de branche a trouvé ; elle ferme l'autre moitié.
+
+**Ce qu'il ne démarre pas, c'est le serveur de jeu**, et ce n'est pas un
+manquement : 8,8 Go de SteamCMD n'entrent pas dans un runner. Le harnais
+substitue au jeu un conteneur qui écrit dans le même volume, de sorte que le
+compose éprouvé soit celui que le catalogue produit et non une variante écrite
+pour le test. Que le vrai serveur démarre, réponde, et restaure le bon monde se
+prouve ailleurs : sur une vraie machine, à la fin de chaque tranche qui touche à
+ce chemin.
+
+**Et une session réelle contre l'émulateur n'éprouve pas le watchdog.**
+L'émulateur Firebase écarte les fonctions planifiées faute d'émulateur Pub/Sub,
+et le job de production est en pause pendant ces sessions pour qu'il ne réclame
+pas une machine qu'il ne connaît pas. Les deux moitiés du filet sont donc
+absentes en même temps : pendant une session d'essai, si l'agent se tait, rien
+ne détruit la machine, et le budget n'est protégé que par la vigilance de qui
+tient la console.
 
 ## 10. Livraison
 
@@ -1680,9 +1789,10 @@ Le déploiement, lui, doit bien s'authentifier auprès de Firebase : il utilise
 l'identité fédérée GitHub (OIDC) vers un compte de service dédié, ce qui évite
 d'entreposer une clé de longue durée.
 
-**Sur une pull request, rien qui sorte du runner** : ni appel à Scaleway, ni test de
-fumée Docker — ce dernier est trop lent pour une boucle de relecture et tourne
-après fusion, ou à la demande.
+**Sur une pull request, rien qui sorte du runner** : ni appel à Scaleway, ni test
+de fumée Docker — ce dernier est trop lent pour une boucle de relecture, et il
+tourne là où il sert de barrière, sur le tag qui publie l'image et nulle part
+ailleurs.
 
 ## 11. Coûts attendus
 
@@ -1691,7 +1801,7 @@ après fusion, ou à la demande.
 | Instance `DEV1-L` (0,04284 €/h) | 0 € | ~1,71 € |
 | Ses 80 Go de disque local (~0,0067 €/h) | 0 € | ~0,27 € |
 | IPv4 flexible (0,005 €/h, facturée même détachée) | 0 € | ~0,20 € |
-| Object Storage (saves 2-3 Go, plus les 2,3 Go du jeu Sunkenland) | ~0,06 € | ~0,06 € |
+| Object Storage (saves 2-3 Go **en croissance lente**, plus les 2,3 Go du jeu Sunkenland) | ~0,06 € | ~0,06 € |
 | Images Docker (amont + compagnon sur ghcr.io) | 0 € | 0 € |
 | DNS (DynHost) | 0 € | 0 € |
 | Firebase (Hosting, Auth, Firestore, Functions, Scheduler) | 0 € | 0 € |
@@ -1705,6 +1815,16 @@ facturées** par mois.
 son propre minimum de 60 minutes. Une soirée de 4 h plus ses cinq minutes de
 démarrage se paie 5 h. Les 32 h de jeu de la colonne ci-dessus valent donc
 **~40 h facturées** sur huit soirées, ce que le total reflète.
+
+**La ligne du stockage n'est pas un palier, et c'est une décision et non une
+dérive.** Les seules règles de cycle de vie qui suppriment quelque chose portent
+sur les poussées régulières, à sept jours (§5). Les sauvegardes de fin de session ne sont
+touchées par rien, donc leur nombre croît d'un objet par soirée et leur taille
+avec le monde. Le §8 refuse d'y toucher : effacer la dernière sauvegarde d'un
+monde pour économiser quelques centimes serait payer la seule chose que ce
+système protège. L'ordre de grandeur rassure — la sauvegarde de fin de la
+première soirée Enshrouded pèse **72 767 octets** —, mais c'est un chiffre à
+relire sur la facture plutôt qu'à extrapoler.
 
 Une remarque sur ce tableau. Le disque y a sa ligne parce **qu'aucun disque
 n'est compris dans un prix d'instance** chez Scaleway ; ce qui distingue le
@@ -1777,9 +1897,14 @@ des observations est dans [`probe/RESULTS.md`](../../../probe/RESULTS.md) —
 sections R à C pour la première, section V pour la seconde ; ci-dessous les
 réponses et ce qu'elles ont changé.
 
+S'y ajoutent les deux sessions Enshrouded consécutives du 2026-09-07, relevées
+dans
+[`2026-09-07-tranche-3-les-saves-session.md`](../plans/2026-09-07-tranche-3-les-saves-session.md),
+et les mesures faites sur le compte Scaleway le même jour.
+
 ### Vérifié
 
-| Question | Réponse, mesurée le 2026-09-03 |
+| Question | Réponse, mesurée le 2026-09-03 sauf date indiquée |
 |---|---|
 | Les règles Firestore savent-elles restreindre champ par champ, via `affectedKeys().hasOnly([...])` ? | **Oui.** `{deadline, ip}` est refusé là où `{deadline}` passe. `server/current` reste un document unique et le §5 tient. Deux effets de bord pour la tranche 4 : une réécriture à valeur identique donne un `affectedKeys()` vide, et une suppression de champ s'y lit comme une modification. |
 | L'API OVH accepte-t-elle des métadonnées libres sur l'instance et sur l'IP flottante ? | **Non, ni l'une ni l'autre, et aucun modèle de lecture n'en rend.** C'est ce qui a fait changer d'hébergeur (§2). Chez Scaleway, `tags` est natif sur les deux et filtrable **d'après la documentation** — la vérification en vivo est la première ligne d'« Encore ouvert », ci-dessous. |
@@ -1801,6 +1926,16 @@ réponses et ce qu'elles ont changé.
 | `-steamID` réconcilie-t-il la disposition de dossiers du client ? | **Oui**, et il est **écarté quand même**. Mesuré le 2026-09-05 : avec l'option, le serveur lit le monde dans `SteamCloudData/<steamID64>/Worlds` au lieu de `Worlds`. Décision du commanditaire le même jour : indexer le monde *du serveur* sous le compte d'un *joueur* accrocherait la disposition du seau à une personne qui peut quitter le groupe. Le serveur n'a pas de compte Steam — c'est ce que dit sa `NullReferenceException` sur `IsSteamCloudReady` — et lui en prêter un serait une fiction. Le refus ne coûte rien : l'amorçage reste une copie, vers `Worlds/` au lieu d'en place. |
 | La cadence de sauvegarde tient-elle à 300 s, la valeur retenue ? | **Oui, sur quatre intervalles pleins** — 20:00:23, 20:05:23, 20:10:23, 20:15:23 le 2026-09-05, à la seconde. Une cinquième sauvegarde à 20:18:08, déclenchée depuis la console du jeu, **prouve au passage que `-adminSteamIDs` donne réellement les droits d'admin** : preuve par l'effet, là où la ligne `FromBatScript` que la section J cherchait ne s'imprime pas dans cette version. |
 | DynHost met-il à jour un enregistrement qui n'existe pas encore ? | **Non, et rien ne disait qu'il fallait le créer d'abord.** Mesuré le 2026-09-06, à la première vraie session : `ovh.com/nic/update` rend **`http 404`** sur `enshrouded.beacon.charlouze.com` tant que l'enregistrement A n'existe pas dans la zone — `nslookup` répondant *Non-existent domain*, alors que `beacon.charlouze.com` résout. DynHost **met à jour**, il ne crée pas : il faut poser l'enregistrement A dans la zone OVH, puis lui attacher un identifiant DynHost. Ni le §4, ni le §6, ni le §10 ne mentionnaient ce prérequis. Deux choses ont tenu *grâce* à cette panne : le §8 n'a pas interrompu la session, et **le recours de `JoinInfo` a servi pour de vrai** — la connexion s'est faite par l'IP brute, le moyen principal étant mort. |
+| Combien de temps entre `RUNNING` et un serveur réellement joignable ? | **Rien** — c'est ce que la tranche 3 supprime, et c'est mesuré deux fois. `RUNNING` s'écrit sur le rapport d'une sonde de l'agent, et une sonde A2S indépendante répond en 61 puis 79 ms dans la foulée. Le prix se voit ailleurs : `PROVISIONING` passe de 26 s à 7-8 min, c'est-à-dire que le délai n'est pas apparu, il était menti. |
+| Un monde déposé par une session revient-il dans la suivante ? | **Oui**, deux soirées consécutives le 2026-09-07. La session 2 restaure la clé `saves/enshrouded/pre-shutdown/df39cecf-…/2026-09-07T22-31-16Z.tar.gz`, 72 767 octets — celle que la session 1 avait déposée, au bit près, et la `pre-shutdown` plutôt que l'`auto` plus ancienne. En jeu : l'autel, les fondations, le coffre **et son contenu**, que nul monde neuf ne porte. |
+| L'arrêt propre se déroule-t-il dans l'ordre du §6 ? | **Oui**, observé de bout en bout pour la première fois : `STOPPING` sans destruction, poussée finale, puis destruction sur le rapport `saved` d'origine `pre-shutdown`. **52 s** et **36 s** sur les deux soirées. Les cinq maillons ne pouvaient tomber qu'ensemble — sans l'unité systemd pas d'arrêt, sans arrêt pas de silence, sans silence pas de poussée, sans poussée pas de rapport, sans rapport pas de destruction. `beacon-stop.path` s'arme seul, 80 s après le démarrage. |
+| Que protège réellement le plancher de taille ? | **« Vide », pas « incomplet ».** 97 octets refusés, 4 307 acceptés — un monde de trois minutes —, 36 860 acceptés pour un monde qui pesait 72 767 vingt-trois minutes plus tôt. Un plancher calibré sur les 31 374 octets de la tranche 0 aurait refusé une sauvegarde légitime. Voir §8 : c'est une limite, pas une dette. |
+| Enshrouded écrit-il son monde sur disque en s'arrêtant ? | **Oui.** Dossier de sauvegarde vidé à la main pendant une session, repeuplé au `docker stop`, poussée finale passée. L'arrêt propre ne dépend donc pas de la cadence du jeu — contrairement à Sunkenland (§8), dont l'arrêt propre ne fait pas mieux que le crash. |
+| L'IAM Scaleway sait-il restreindre une clé à un seau ? | **Non**, et le repli évident ne marche pas non plus. Les règles portent `"permission_sets_scope_type":"projects"` et aucun champ de seau ; et **une clé n'opère que dans son projet par défaut** — établi par opposition, la clé et les règles inchangées : lecture accordée quand le projet par défaut est celui du seau, `403` sinon, dix minutes plus tard. Deux seaux dans deux projets sont donc impossibles avec une clé unique sur la VM. La frontière du §7 tient par une **politique de seau**. |
+| Combien de temps une règle IAM Scaleway met-elle à prendre effet ? | **Plus de cinq minutes**, et rien ne le documente. Trois relectures rapprochées ont rendu `403` et fait naître deux hypothèses fausses ; une quatrième une demi-heure plus tard, **avant tout changement**, rend le résultat attendu. Une politique de seau, elle, était effective à sept minutes. Sur ce fournisseur, une mesure isolée après un geste IAM ne prouve rien : il faut une paire. |
+| Une règle d'expiration libère-t-elle le stockage ? | **Pas sur un seau versionné** — elle pose un marqueur de suppression, l'objet quitte les listings, la version précédente reste facturée sans fin. La règle paraît correcte à la relecture et le chiffre du §11 devient faux. Le versionnement est suspendu sur `beacon-saves` (§5). |
+| Une session réelle contre l'émulateur éprouve-t-elle le watchdog ? | **Non, et les deux moitiés manquent en même temps.** L'émulateur écarte les fonctions planifiées faute de Pub/Sub (`function ignored because the pubsub emulator does not exist or is not running`), et le job de production est en pause pendant la session. Le filet des dix minutes n'existe pas ; le budget n'est tenu que par qui regarde la console (§9). |
+| La destruction d'une instance change-t-elle la clé d'hôte SSH ? | **Oui, à chaque session**, y compris sous la même IP réattribuée. C'est le §3 qui fonctionne, mais ça se lit comme une attaque : se connecter demande de retirer l'ancienne entrée. Une clé d'hôte stable est **écartée** — ce serait un secret de longue durée écrit dans un `cloud-init` rendu à chaque provisionnement, ce que le §7 interdit. |
 | Comportement de `mornedhels/enshrouded-server` | Backups en `AAAA-MM-JJ_HH-MM-SS-3ad85aea.zip` sous `/opt/enshrouded/server/backups`, déclenchables à la demande par `supervisorctl start enshrouded-backup` — ce dont le compagnon a besoin. Auto-update **déjà désactivé par défaut**, `UPDATE_CRON` étant vide. Et un piège : `SERVER_PASSWORD` est dépréciée *et* tronque la configuration, le serveur démarrant alors avec un mot de passe aléatoire ; le mot de passe passe par `SERVER_ROLE_0_PASSWORD`. |
 
 ### Encore ouvert
@@ -1821,13 +1956,20 @@ tag est qu'un fournisseur ne fait pas ce qu'on suppose.
   jours plus tard : c'est précisément parce qu'un fournisseur ne fait pas
   toujours ce que sa documentation annonce que cette ligne n'est pas encore dans
   le tableau du dessus — la question du tag OVH est née de la même confiance.
+
+  **Les deux sessions du 2026-09-07 ne la referment pas**, et il faut dire
+  pourquoi : la restauration d'un monde Enshrouded pèse 72 Ko et passe en une
+  fraction de seconde. Le volume qui intéresse cette ligne est celui des 2,3 Go
+  de fichiers de jeu, que seule la tranche 3 bis fera tirer par une machine.
 - **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,
   Sunkenland tient sur un cœur des quatre et 5,3 Gio.
 
-S'y ajoutent deux questions nées non d'une mesure mais d'une revue, ce qui ne les
-rend pas moins ouvertes.
+S'y ajoutent deux questions que n'a ouvertes aucune sonde : une venue d'une
+revue, ce qui ne la rend pas moins ouverte, et une d'une observation qu'on a
+laissé passer. Une troisième les précédait et s'est fermée ; elle reste ici,
+barrée, parce que ce qu'elle a coûté vaut plus que sa réponse.
 
 - **Le §5 décrit une règle que le dépôt ne tient pas encore.** « Ce qui atteint
   un champ lisible est borné et expurgé » est vrai de `server/current.lastError`
@@ -1840,14 +1982,22 @@ rend pas moins ouvertes.
   tranche 3 a trouvé au §6** : un paragraphe qu'on lit comme la description de ce
   qui est construit.
 
-- **L'arrêt propre n'a jamais été observé de bout en bout.** L'ordre du §6 —
-  `STOPPING`, l'agent pousse, son rapport déclenche la destruction — a été écrit
-  ici, jamais vu tourner. La revue de la tranche 3 a montré que le code écrit
-  jusque-là détruisait la machine **avant** que l'agent apprenne l'arrêt, sur les
-  deux chemins, si bien que `pre-shutdown` ne désignait rien : le §6 décrivait un
-  système que le plan ne construisait pas. La correction est écrite ci-dessus ;
-  ce qui reste à prouver est qu'un objet apparaisse réellement sous
-  `saves/{jeu}/pre-shutdown/` à la fin d'une soirée.
+- **~~L'arrêt propre n'a jamais été observé de bout en bout.~~ Fermée le
+  2026-09-07**, et elle est passée au tableau ci-dessus. Elle mérite d'être
+  gardée comme trace : l'ordre du §6 — `STOPPING`, l'agent pousse, son rapport
+  déclenche la destruction — avait été écrit ici sans jamais tourner, et la revue
+  de la tranche 3 a découvert que le code détruisait la machine **avant** que
+  l'agent apprenne l'arrêt, sur les deux chemins, si bien que `pre-shutdown` ne
+  désignait rien. Le §6 décrivait un système que le plan ne construisait pas, et
+  seule une soirée réelle pouvait le confirmer une fois corrigé.
+
+- **`beacon-stop.path` après avoir tiré.** L'unité systemd qui porte la moitié
+  hôte du canal à un seul verbe est vue armée, et vue fonctionner ; ce qu'on n'a
+  pas vu est l'état qu'elle laisse une fois déclenchée, la machine ayant été
+  détruite avant qu'on interroge `systemctl`. Enjeu faible — une unité qui casse
+  sur une machine qui disparaît dans la seconde ne coûte rien — mais la fenêtre
+  d'observation est de quelques dizaines de secondes, **entre** l'arrêt du jeu et
+  la destruction, et il faut la viser exprès.
 
 Reste, de l'arrivée du second jeu, la seule question que la tranche 1 bis n'a
 pas mesurée — les quatre autres sont passées au tableau ci-dessus.
