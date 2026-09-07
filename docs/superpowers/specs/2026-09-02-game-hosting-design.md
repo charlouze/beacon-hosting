@@ -1826,8 +1826,19 @@ tag est qu'un fournisseur ne fait pas ce qu'on suppose.
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,
   Sunkenland tient sur un cœur des quatre et 5,3 Gio.
 
-S'y ajoute une question née non d'une mesure mais d'une revue, ce qui ne la rend
-pas moins ouverte.
+S'y ajoutent deux questions nées non d'une mesure mais d'une revue, ce qui ne les
+rend pas moins ouvertes.
+
+- **Le §5 décrit une règle que le dépôt ne tient pas encore.** « Ce qui atteint
+  un champ lisible est borné et expurgé » est vrai de `server/current.lastError`
+  et faux des `detail` d'événements : `CleanupFailed`, `ProvisioningFailed` et
+  les échecs de réconciliation y recopient encore le texte brut d'un fournisseur,
+  alors que le §5 range `events/{id}` parmi ce que tout membre lit. La dette est
+  sans effet tant que `firestore.rules` refuse toute lecture cliente, et elle se
+  ferme avec la tranche qui les ouvre. **Elle est écrite ici parce qu'un spec qui
+  décrit une intention sans le dire est exactement le défaut que la revue de la
+  tranche 3 a trouvé au §6** : un paragraphe qu'on lit comme la description de ce
+  qui est construit.
 
 - **L'arrêt propre n'a jamais été observé de bout en bout.** L'ordre du §6 —
   `STOPPING`, l'agent pousse, son rapport déclenche la destruction — a été écrit
