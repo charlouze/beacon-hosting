@@ -155,7 +155,6 @@ flowchart TD
     T8 --> T9
     T9 --> T9T
     T5 --> T9B
-    T9B --> T9T
     T9 --> T10
     T5 --> T11
     T10 --> T11
@@ -176,11 +175,17 @@ règles qui suppriment des objets, et font jouer quelqu'un.
 
 **Les tâches 9 bis et 9 ter, en bleu, ont été ajoutées après coup** — par la
 revue de branche du 2026-09-07, qui a constaté que la sauvegarde `pre-shutdown`
-ne pouvait jamais avoir lieu. Elles ne dépendent ni de l'image ni du compte
-réel, et elles arrivent **avant** la tâche 13 pour une raison qui se chiffre :
-une soirée de jeu coûte plus cher que quatre-vingt-dix secondes de script. Le
-même raisonnement vaudra chaque fois qu'une revue trouvera un chemin que rien
-n'exécute.
+ne pouvait jamais avoir lieu. Elles ne dépendent ni de l'image ni du compte réel,
+et elles arrivent **avant** la tâche 13 pour une raison qui se chiffre : une
+soirée de jeu coûte plus cher que quatre-vingt-dix secondes de script.
+
+**Elles sont indépendantes l'une de l'autre, et c'est le point.** L'arrêt propre
+a deux moitiés : le plan de contrôle qui attend, et le compagnon qui pousse.
+La 9 bis ferme la première contre l'émulateur, la 9 ter la seconde contre un vrai
+conteneur. Aucune des deux ne peut fermer l'autre — la pile de fumée n'a pas de
+Function, et l'émulateur n'a pas de conteneur de jeu. **Rien ne les prouve
+ensemble avant la tâche 13**, et le plan préfère l'écrire que de laisser croire
+la chaîne close.
 
 **La tâche 11 attend la 10, et il faut le lire comme une contrainte et non comme
 une maladresse.** Le §10 veut que le `cloud-init` référence l'image par un digest
@@ -4731,10 +4736,22 @@ destruction, et la faire voyager dans la même liste demanderait à l'appelant d
 lire un champ pour savoir s'il doit saisir ou demander — exactement le genre de
 drapeau que le §4 refuse.
 
-Faire porter au watchdog deux sorties nommées pour ce qu'elles sont. Le nom de
-la seconde se choisit dans le vocabulaire du §4, pas dans celui de
-l'infrastructure : ce qu'elle exprime est « cette session est finie », et
+**Un seul parcours, un seul retour, deux listes nommées.** Pas deux fonctions :
+elles reliraient la même vue deux fois et pourraient en tirer des conclusions
+qui se contredisent, ce qui est un cas d'incohérence qu'aucun test n'irait
+chercher. L'appelant reçoit ce qu'il faut détruire et ce qu'il faut demander,
+sans avoir à interpréter quoi que ce soit.
+
+Le nom de la seconde liste se choisit dans le vocabulaire du §4, pas dans celui
+de l'infrastructure : ce qu'elle exprime est « cette session est finie », et
 l'écriture de `STOPPING` en est la conséquence, pas la définition.
+
+**`deadline-exceeded` doit être tranché, pas laissé en place.** C'est
+aujourd'hui une `ReclaimReason`, c'est-à-dire un motif de destruction. Après
+cette tâche, plus rien ne détruit pour cette raison. Soit la variante déménage
+dans le vocabulaire de la nouvelle décision, soit elle disparaît — une variante
+d'union que plus aucun chemin ne produit est du code mort qui se lit comme une
+capacité.
 
 Contraintes : la fonction reste **pure** — elle décide de ce que le fournisseur
 déclare et de ce que le plan de contrôle a enregistré, jamais d'un identifiant
@@ -4778,6 +4795,12 @@ Contraintes :
 - ce qui journalise et ce qui détruit ne se dédoublent pas : la tranche 3 a déjà
   eu à réparer un journal qui mentait sur l'état d'où venait une panne.
 
+**Dire ce que `STOPPING` déclenche désormais, et l'écrire.** Si la réponse est
+« rien », c'est une réponse — l'agent apprend l'arrêt à son rapport suivant, par
+le canal qu'il possède déjà, et il n'y a rien à pousser vers lui. Mais alors un
+déclencheur qui ne fait rien doit porter la phrase qui dit pourquoi il existe
+encore, sinon le prochain lecteur le supprimera ou lui rajoutera du travail.
+
 - [ ] **Step 6: Lancer la suite complète**
 
 ```bash
@@ -4794,13 +4817,25 @@ déclencheur.
 ### Task 9 ter: La barrière de fumée éprouve l'arrêt propre
 
 La barrière de la tâche 9 prouve qu'un monde revient. Elle ne prouve pas qu'il
-part une dernière fois — et c'est précisément ce que la revue de branche a
-trouvé cassé. Elle a déjà tout ce qu'il faut : un faux plan de contrôle, un
-serveur bouchonné, un MinIO.
+part une dernière fois. Elle a déjà tout ce qu'il faut pour le prouver : un faux
+plan de contrôle, un serveur bouchonné, un MinIO.
 
-**Le calcul est simple.** Quatre-vingt-dix secondes de script contre une soirée
-de jeu et un aller-retour de correction. La tâche 13 ne doit pas être le premier
-endroit où l'arrêt propre s'éprouve.
+**Ce qu'elle prouve, et ce qu'elle ne prouvera pas — à écrire ici parce que la
+tentation est de croire l'inverse.** Le défaut trouvé par la revue est du côté du
+**plan de contrôle** : la Function détruisait la machine trop tôt. Or la pile de
+fumée n'a pas de Function et ne détruit rien, donc **cette barrière ne peut pas
+reproduire ce défaut-là**. Ce qu'elle éprouve est l'autre moitié, que rien
+n'éprouve non plus aujourd'hui : que le compagnon, **à qui l'on dit `STOPPING`**,
+arrête bien le jeu par son canal à un seul verbe, pousse bien une archive
+`pre-shutdown`, et rapporte bien `saved` — dans cet ordre.
+
+Les deux moitiés se ferment donc séparément : celle-ci contre un vrai conteneur,
+celle de la tâche 9 bis contre l'émulateur. **Rien ne les prouve ensemble avant
+la tâche 13**, et c'est une limite à dire plutôt qu'à laisser croire fermée.
+
+**Le calcul reste favorable.** Quatre-vingt-dix secondes de script contre une
+soirée de jeu et un aller-retour de correction : la tâche 13 ne doit pas être le
+premier endroit où l'on découvre que le compagnon ne sait pas s'arrêter.
 
 **Fichiers :**
 - Modifier : `deploy/companion/smoke/run.sh`
@@ -4841,8 +4876,13 @@ sur un journal vide dans les deux cas, un compte d'objets qui passe à zéro, un
 contrôle de vie qui passe sur un conteneur déjà mort : ce sont les trois formes
 qu'a prises ce défaut dans cette tranche.
 
-Attendu au premier passage : **rouge**, tant que la tâche 9 bis n'est pas
-livrée — c'est la preuve que la barrière voit ce que la revue a vu.
+**Comment obtenir un rouge honnête**, puisque le compagnon est censé déjà bien
+se comporter et que la barrière passerait donc du premier coup — ce qui ne
+prouverait rien. Avant d'écrire l'implémentation de l'étape 1, lancer les
+assertions de l'étape 2 seules : sans le faux plan de contrôle capable de dire
+`STOPPING`, aucun objet n'apparaît sous `pre-shutdown/` et l'assertion rougit
+pour la bonne raison. **Coller ce rouge au rapport** ; une barrière verte du
+premier coup, sans preuve qu'elle savait rougir, est une décoration.
 
 - [ ] **Step 3: Lancer la barrière**
 
