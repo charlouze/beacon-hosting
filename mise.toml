@@ -12,6 +12,13 @@ rclone = "1.75.1"
 # fait pas. Épinglé pour la même raison que rclone : ce qu'il interroge décide
 # de ce qui est facturé.
 scaleway = "2.62.0"
+# Le tunnel des vraies sessions. Depuis la tranche 3 le trafic change de sens —
+# la machine appelle l'émulateur — et un poste derrière un NAT n'a pas d'adresse
+# publique à lui donner. Une redirection de port ferait le même travail ; le
+# tunnel évite d'y toucher, rend une URL en https, et survit à une box en CGNAT
+# comme à une adresse qui bouge. Épinglé parce que chaque tranche qui éprouve
+# une vraie machine repassera par là.
+cloudflared = "2026.8.3"
 
 # Les gestes du developpement qui ont besoin d'un environnement, et que chaque
 # shell ecrit differemment — `VAR=x cmd` n'existe pas en PowerShell. Les poser
