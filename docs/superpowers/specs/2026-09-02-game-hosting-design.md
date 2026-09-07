@@ -1286,6 +1286,16 @@ champ existe — ne déclenche aucun délai : le watchdog ne devine pas une dur�
 qu'on ne lui a pas donnée, et la ligne de réconciliation par tag rattrape de
 toute façon toute ressource qu'aucune intention ouverte n'explique.
 
+**Sauf en `STOPPING`, et c'est une exception à tenir, pas une nuance.** Depuis
+que la destruction suit le rapport de l'agent, ce délai n'est plus une doublure :
+c'est le **seul** destructeur du chemin normal quand l'agent se tait. Or le
+rattrapage par tag ne le remplace pas — il saute toute session dont l'intention
+de provisionnement est encore ouverte, et celle d'une session vivante l'est. Un
+enregistrement `STOPPING` sans `stateSince` serait donc une machine facturée que
+plus rien ne détruit. **Toute écriture de `STOPPING` pose `stateSince` dans la
+même écriture** ; les règles de la tranche 4 l'exigent du navigateur, au même
+titre que la transition elle-même.
+
 **Le délai de `PROVISIONING` est de 25 minutes et non de 15**, et c'est une
 correction que la définition de `RUNNING` a rendue nécessaire. Tant que la
 Function concluait dès l'IP réservée, cet état durait une demi-minute et le délai
