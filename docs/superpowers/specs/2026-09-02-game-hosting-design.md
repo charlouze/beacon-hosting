@@ -778,6 +778,15 @@ machine exposée sur Internet et les coûts — sur un produit dont la liste bla
 est une contrainte produit. Le §9 la teste par ses refus, collection par
 collection.
 
+**Un `detail` d'événement est lu par un membre**, et c'est ce qui contraint ce
+qu'on y écrit. Le tableau ouvre `events/{id}` à tout membre, et plusieurs
+`detail` recopient le texte d'erreur d'un fournisseur — or l'appel qui a échoué
+portait le `cloud-init`, donc le jeton d'agent et la clé S3. Rien ne garantit
+qu'un SDK les tienne hors de sa prose d'erreur. **Ce qui atteint un champ
+lisible est donc borné et expurgé** ; ce qui garde la trace entière est le
+journal de la plateforme, que seul l'exploitant lit. La même règle vaut pour
+`server/current.lastError`, lisible par les mêmes.
+
 **Les sauvegardes sont cloisonnées par jeu dans le seau**, et ce n'est pas du
 rangement. Deux jeux qui partageraient un préfixe finiraient par se recouvrir,
 et le §3 fait de la perte d'une sauvegarde le seul échec grave du système. Le
