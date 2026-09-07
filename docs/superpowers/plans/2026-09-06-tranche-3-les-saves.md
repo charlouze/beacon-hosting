@@ -4917,7 +4917,22 @@ npx nx run companion:smoke
 
 Attendu : vert. Le tag ne se pose pas sur un travail rouge.
 
-- [ ] **Step 2: Poser le tag**
+- [ ] **Step 2: Pousser la branche, sans quoi le tag ne porte sur rien**
+
+La branche n'a pas d'upstream tant que personne ne l'a poussée, et `main` ne
+connaît pas `companion.yml`. Le workflow n'a pas besoin d'être sur la branche par
+défaut — pour un événement `push`, Actions lit les workflows **du ref poussé** —
+mais il faut que le commit existe sur le distant.
+
+**Pousser la branche n'est pas une mise en production** : le `CLAUDE.md` réserve
+ce mot à la fusion dans `main`, qui reste interdite ici tant que la tâche 11
+n'est pas faite.
+
+```bash
+git push -u origin tranche-3-les-saves
+```
+
+- [ ] **Step 3: Poser le tag**
 
 À lancer par un humain, depuis la branche :
 
@@ -4926,13 +4941,25 @@ git tag companion-v1
 git push origin companion-v1
 ```
 
-- [ ] **Step 3: Relever le digest**
+Deux échecs ne se voient qu'au premier passage, et aucun des deux n'est un défaut
+du workflow :
+
+- **Le paquet `ghcr.io/charlouze/beacon-companion` n'existe pas encore.** Le
+  `GITHUB_TOKEN` peut le créer, mais un paquet neuf n'est pas automatiquement lié
+  au dépôt : un `403` à l'étape de poussée se règle dans les réglages du paquet,
+  pas dans le YAML.
+- **La barrière tourne avant la publication** (§10), soit quelques minutes de
+  conteneurs. Un rouge là ne dit rien de la publication elle-même.
+
+- [ ] **Step 4: Relever le digest**
 
 Le workflow l'écrit dans son résumé d'exécution. Le relire, ou le redemander au
-registre :
+registre — **le tag d'image n'est pas celui du tag git** : `companion-v1` dit
+quel artefact du dépôt est publié, l'image s'appelle déjà `beacon-companion`, et
+le workflow retire donc le préfixe.
 
 ```bash
-docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:companion-v1
+docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:1
 ```
 
 Noter la ligne `Digest: sha256:…`. C'est ce que la tâche 11 écrit dans le
