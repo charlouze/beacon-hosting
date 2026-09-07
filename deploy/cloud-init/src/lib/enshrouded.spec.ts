@@ -18,6 +18,21 @@ const REQUEST = {
   },
 };
 
+/**
+ * One service's own lines, not the whole compose: depth is syntax here
+ * exactly as it is in the cloud-init's own block scalar (see the test below
+ * that checks it) — a line belongs to a service until the next line at its
+ * own two-space depth opens the next one.
+ */
+function serviceBlock(compose: string, name: string): string {
+  const lines = compose.split('\n');
+  const start = lines.findIndex((line) => line === `  ${name}:`);
+  if (start === -1) throw new Error(`no "${name}" service in this compose`);
+  let end = start + 1;
+  while (end < lines.length && !/^ {2}\S/.test(lines[end])) end += 1;
+  return lines.slice(start, end).join('\n');
+}
+
 describe('the enshrouded catalogue entry', () => {
   // §10: an immutable digest, never a moving tag. With a moving one, tonight's
   // session could pull an image nobody tested and nothing would say which ran.
@@ -80,7 +95,9 @@ describe('the enshrouded catalogue entry', () => {
   // and by then the broken document is already on a billed machine.
   it('lays the compose inside the block scalar, every line at its own depth', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
-    expect(rendered).toContain('    content: |\n      services:\n        enshrouded:\n');
+    expect(rendered).toContain('    content: |\n      services:\n');
+    expect(rendered).toContain('\n        restore:\n');
+    expect(rendered).toContain('\n        enshrouded:\n');
     expect(rendered).toContain('\n          image: mornedhels/enshrouded-server@sha256:');
     expect(rendered).toContain('\n            - "15637:15637/udp"');
     expect(rendered).toContain('\n            - ./data:/opt/enshrouded\n');
@@ -156,5 +173,86 @@ describe('the enshrouded catalogue entry', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toMatch(/path: \/opt\/beacon\/\.env\n {4}permissions: "0600"/);
     expect(rendered).toMatch(/path: \/opt\/beacon\/companion\.env\n {4}permissions: "0600"/);
+  });
+
+  // §10, on our image exactly as on the one we borrow: with a moving tag,
+  // tonight's session could pull a companion nobody tested, on the one
+  // component that writes to the bucket.
+  it('pins the companion by digest and never by tag', () => {
+    const compose = renderCompose('enshrouded');
+    expect(compose).toContain('ghcr.io/charlouze/beacon-companion@sha256:');
+    expect(compose).not.toMatch(/beacon-companion:[^@]/);
+  });
+
+  // §6, étape 7, and the reason the golden rule holds: the ordering is in the
+  // tool, not in a convention. Until `restore` exits zero there is no game
+  // container at all, so nobody can join a world that is not the right one and
+  // have that evening saved over the real one.
+  it('makes the game wait for a restore that succeeded', () => {
+    const compose = renderCompose('enshrouded');
+    expect(compose).toMatch(
+      /enshrouded:[\s\S]*depends_on:[\s\S]*restore:[\s\S]*condition: service_completed_successfully/,
+    );
+  });
+
+  it('runs the two services from one image, on two commands', () => {
+    const compose = renderCompose('enshrouded');
+    expect(compose).toContain('command: ["/app/restore.mjs"]');
+    expect(compose).toContain('command: ["/app/agent.mjs"]');
+  });
+
+  // The one-verb channel (§6, arrêt propre). The companion touches a file; a
+  // unit on the host runs `docker stop` and nothing else. A socket mounted in
+  // the companion would have been root on the machine. `-t 90` matches the
+  // compose's own stop_grace_period, so the unit gives the world the same
+  // grace to flush that the compose already promises it.
+  it('gives the host a unit that can only stop the game', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('ExecStart=-/usr/bin/docker stop -t 90 enshrouded');
+    expect(rendered).toContain('PathExists=/opt/beacon/control/stop');
+  });
+
+  // PathExists= re-fires every time the unit it triggers deactivates, for as
+  // long as the flag it watches still exists. Without ExecStartPost=
+  // clearing it, the unit retriggers on its own success, exhausts systemd's
+  // default start rate limit, and beacon-stop.path ends failed after every
+  // session. That alone is not the whole fix: an unprefixed ExecStart= that
+  // fails skips every ExecStartPost= below it (systemd.service(5)), and
+  // `docker stop` against a container already gone — the ordinary shape of
+  // a retry — exits non-zero. ExecStart='s own leading `-` is what makes the
+  // clear happen either way; pinned here alongside the clear itself, since a
+  // fix to one without the other is silent until the failure path runs.
+  it('clears its own stop flag so the path unit does not retrigger, on failure too', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('ExecStart=-/usr/bin/docker stop -t 90 enshrouded');
+    expect(rendered).toContain('ExecStartPost=-/bin/rm -f /opt/beacon/control/stop');
+  });
+
+  // §7: what a compromised companion can obtain is what its s3 key allows, and
+  // nothing more. The socket is the one mount that would change that answer.
+  it('mounts no docker socket anywhere', () => {
+    expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('docker.sock');
+  });
+
+  // A block, not the whole compose: `[\s\S]*` crosses service boundaries, so
+  // matching against the full text would still pass with restore's own mount
+  // deleted, as long as some *other* service still mentions ./data — the same
+  // "nothing says the world was never saved" failure the BEACON_SAVE_DIR fix
+  // above exists to catch. Scoped to each service's own block instead.
+  it('gives both companion services the world, and the agent the control folder', () => {
+    const compose = renderCompose('enshrouded');
+    expect(serviceBlock(compose, 'restore')).toContain('./data:/opt/enshrouded');
+    expect(serviceBlock(compose, 'agent')).toContain('./control:/opt/beacon/control');
+  });
+
+  // The comment above BEACON_SAVE_DIR in the write_files block: the value is
+  // only correct if the mount the compose gives the companion resolves it
+  // where probe/RESULTS.md (2026-09-03) measured the world actually living.
+  // `./data:/opt/enshrouded` puts the game's own install — and its
+  // savegame/ — under /opt/enshrouded/server, so the value must carry that
+  // segment or every push silently saves nothing.
+  it('points the save dir where the compose actually mounts the world', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('BEACON_SAVE_DIR=/opt/enshrouded/server/savegame');
   });
 });
