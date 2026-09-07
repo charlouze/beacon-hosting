@@ -10,11 +10,18 @@ PHASES_LOG=./tmp/beacon-smoke-phases.log
 rm -rf ./tmp
 rm -f /tmp/roundtrip.tar.gz
 
+# A hard kill of a previous run (Ctrl-C, a crashed runner) can leave this
+# stack's volumes behind. A stale `smoke_control` in particular would carry
+# yesterday's `stop` file into a fresh container, and the clean-shutdown
+# block below would find its flag already there at t=0 — passing on
+# leftover state instead of on anything this run did.
+docker compose down -v 2>/dev/null || true
+
 # The endpoint the companion reports to. A one-file server, because what is
 # under test is the companion and not the Function — which has its own suite
 # against the emulator.
 node ./fake-endpoint.mjs & endpoint=$!
-trap 'kill $endpoint 2>/dev/null || true; docker compose down -v; rm -rf ./tmp' EXIT
+trap 'kill $endpoint 2>/dev/null || true; docker compose down -v; rm -rf ./tmp; rm -f /tmp/roundtrip.tar.gz' EXIT
 
 # A failed report is deliberately non-fatal in the companion (agent-loop.ts,
 # push.ts): the stack can run to a green finish with no control plane at all
@@ -84,3 +91,90 @@ docker compose logs agent | grep -q 'under the floor of a save'
 test "$(docker inspect -f '{{.State.Running}}' "$(docker compose ps -q agent)")" = "true"
 
 echo "smoke: the round trip holds and the empty archive was refused"
+
+# 4 — clean shutdown (§6, task 9 ter). Told STOPPING, the companion must stop
+# the game through its one-verb channel, archive a `pre-shutdown` save, and
+# report `saved` — in that order. This stack has no Function and destroys no
+# resource, so it cannot reproduce the control-plane defect the whole-branch
+# review found (the Function destroying the machine too early); it closes the
+# other half, against a real container, which nothing else exercises today.
+# Last, because it ends the agent process for good, the moment it sees STOPPING.
+#
+# The refusal test above emptied the world; repopulate it here, or the final
+# push below is refused too and the wait for an object below never ends, for
+# the wrong reason.
+docker compose exec -T agent sh -c '
+  head -c 20000 /dev/urandom > /opt/enshrouded/savegame/3ad85aea
+  head -c 512 /dev/urandom > /opt/enshrouded/savegame/3ad85aea-index
+'
+
+STOPPING_FLAG=./tmp/beacon-smoke-stopping
+touch "$STOPPING_FLAG"
+
+# The companion only ever touches a file (push.ts, stopAndPush) — on the real
+# host a systemd unit watches it and runs `docker stop`, and the companion
+# never gets a docker socket (§7). Nothing in this stack plays that unit's
+# part, so this script does, exactly as the unit would: watch the file, then
+# `docker stop`. If the companion never touches it, this times out before the
+# game is ever asked to stop — the honest way for this to fail.
+#
+# `sh -c '...'`, not a bare `test -f` argument: passed directly, Git Bash on
+# Windows rewrites a leading `/opt/...` into a host path before Docker ever
+# sees it, and the check fails for a path that was never the one being asked
+# about — the same reason every other absolute path above already goes
+# through a shell string instead of a bare argument.
+timeout 120 bash -c "until docker compose exec -T agent sh -c 'test -f /opt/beacon/control/stop' 2>/dev/null; do sleep 1; done" ||
+  { echo "smoke: the companion never touched its one-verb stop flag" >&2; exit 1; }
+
+# The order §6 requires — stop before archive — is what this line pins, not
+# the wait above it: that wait only proves the flag was *observed* before the
+# object was *observed*, which a `stopAndPush` that pushed first and touched
+# the flag afterwards would also satisfy (the flag would still be there by
+# the time this script got around to checking, and the object would already
+# exist too). This script has not called `docker compose stop game` yet, so
+# the game is still running — a correctly-ordered companion is still polling
+# for quiet and cannot legitimately have deposited anything yet.
+#
+# Output and exit status are checked separately, and neither is discarded: a
+# transient failure of `docker compose exec` or `mc find` prints empty stdout
+# and would otherwise pass exactly as if the prefix were legitimately empty —
+# the same "passes when the command errored" class this whole barrier exists
+# to eliminate, on the one assertion singled out for adversarial reading.
+#
+# The search root is the bucket, not the `pre-shutdown` prefix itself: that
+# prefix names no object yet at this point in the script, and `mc find`
+# treats a target path that does not exist as an error, not an empty match —
+# querying it directly would make the legitimate case indistinguishable from
+# the failure this guard exists to catch. `local/beacon-saves` was created a
+# few lines up, so its absence is never legitimate.
+if full_listing=$(docker compose exec -T bucket mc find local/beacon-saves --name '*.tar.gz' 2>&1); then
+  pre_shutdown_listing=$(printf '%s\n' "$full_listing" | grep 'pre-shutdown' || true)
+  if [ -n "$pre_shutdown_listing" ]; then
+    echo "smoke: a pre-shutdown save already existed before the game stopped: $pre_shutdown_listing" >&2
+    exit 1
+  fi
+else
+  echo "smoke: listing local/beacon-saves failed before the game ever stopped: $full_listing" >&2
+  exit 1
+fi
+
+docker compose stop game
+
+# By the time the companion is told STOPPING, a routine push has already run
+# at least once: `BEACON_PUSH_INTERVAL_MS` is a threshold the loop only
+# checks once per report cycle (REPORT_INTERVAL_MS), so the effective push
+# cadence in this stack is that report cycle — sixty seconds — not the
+# threshold itself. `saved` is therefore already in the log before this
+# point; the origin fake-endpoint.mjs appends to each `saved` line is what
+# pins this one to the pre-shutdown push rather than to a routine one.
+timeout 120 bash -c 'until docker compose exec -T bucket mc find local/beacon-saves/saves/enshrouded/pre-shutdown --name "*.tar.gz" 2>/dev/null | grep -q tar.gz; do sleep 2; done' ||
+  { echo "smoke: no pre-shutdown archive ever appeared under saves/enshrouded/pre-shutdown/" >&2; exit 1; }
+grep -q '^saved pre-shutdown$' "$PHASES_LOG"
+
+# A cheap post-condition, not proof of the one-verb channel: this script just
+# called `docker compose stop game` itself, and `set -e` already means a
+# failed stop would have ended the script above it. The assertion that
+# actually proves the channel worked is the negative check before the stop.
+test "$(docker inspect -f '{{.State.Running}}' "$(docker compose ps -a -q game)")" = "false"
+
+echo "smoke: the clean shutdown stopped the game, archived, and reported"
