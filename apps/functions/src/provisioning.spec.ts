@@ -223,46 +223,19 @@ describe('provisioning', () => {
       const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(applied.lastError.length).toBeLessThan(600);
     });
-
-    it('sanitises lastError on a failed teardown too', async () => {
-      deps.host.close = vi.fn(async () => {
-        throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
-      });
-      await runStateChange(deps, stopping());
-      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(applied.lastError).not.toContain(secret);
-    });
   });
 });
 
+// Rewritten for task 9 bis: `onServerStateChange` used to destroy the instant
+// STOPPING was written, before the agent had a chance to learn it was
+// stopping — the whole-branch review found neither stop path could ever let
+// the agent push a final save. Destruction now waits for the agent's `saved`
+// report (agent-report.ts); this trigger has nothing left to do on STOPPING.
 describe('stopping', () => {
-  it('destroys, returns to IDLE, and hangs the cost on the audit line', async () => {
-    await runStateChange(deps, stopping());
-    expect(deps.host.close).toHaveBeenCalledWith('s1');
-    expect(deps.state.apply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        state: 'IDLE',
-        clearFacts: true,
-        events: [expect.objectContaining({ type: 'SessionStopped', costEuros: 0.05 })],
-      }),
-      NOW,
-    );
-    expect(deps.ledger.close).toHaveBeenCalledWith('s1', NOW);
-  });
-
-  it('goes to FAILED when the destruction is refused', async () => {
-    deps.host.close = vi.fn(async () => {
-      throw new Error('refused');
-    });
-    // Same reason as the provisioning side: a cleanup that could not be
-    // guaranteed is exactly when a pass has work to do.
-    expect(await runStateChange(deps, stopping())).toBe(true);
-    expect(deps.state.apply).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'FAILED' }),
-      NOW,
-    );
-    // Same invariant as the provisioning side: something may still be billed,
-    // and a closed intent is what makes the reconciliation stop looking.
+  it('does nothing at all: destruction now waits for the agent to report saved', async () => {
+    expect(await runStateChange(deps, stopping())).toBe(false);
+    expect(deps.host.close).not.toHaveBeenCalled();
+    expect(deps.state.apply).not.toHaveBeenCalled();
     expect(deps.ledger.close).not.toHaveBeenCalled();
   });
 });
@@ -272,14 +245,6 @@ describe('what the caller learns', () => {
     expect(await runStateChange(deps, provisioning())).toBe(true);
   });
 
-  // A clean teardown already destroyed everything by tag, and would have
-  // thrown otherwise — nothing is left for an immediate pass to find, and
-  // asking for one anyway is what raced `terminate`, still in flight, into a
-  // CleanupFailed on the first real session.
-  it('asks for no immediate pass when it destroyed cleanly', async () => {
-    expect(await runStateChange(deps, stopping())).toBe(false);
-  });
-
   // A double delivery claimed by someone else did nothing, so there is nothing
   // for a pass to look at either.
   it('says it did not act when another delivery had claimed it', async () => {
@@ -287,18 +252,21 @@ describe('what the caller learns', () => {
     expect(await runStateChange(deps, provisioning())).toBe(false);
   });
 
-  // What bounds the loop: a pass writes IDLE, FAILED or RUNNING, and none of
-  // the three is a state this function acts on — so the trigger it fires dies
-  // here instead of asking for another pass.
-  it.each(['IDLE', 'RUNNING', 'FAILED'] as const)('says it did not act on %s', async (state) => {
-    expect(
-      await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state })),
-    ).toBe(false);
-  });
+  // What bounds the loop: a pass writes IDLE, FAILED, RUNNING or STOPPING, and
+  // none of the four is a state this function acts on — so the trigger it
+  // fires dies here instead of asking for another pass.
+  it.each(['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const)(
+    'says it did not act on %s',
+    async (state) => {
+      expect(
+        await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state })),
+      ).toBe(false);
+    },
+  );
 });
 
 describe('every other state', () => {
-  it.each(['IDLE', 'RUNNING', 'FAILED'] as const)('does nothing on %s', async (state) => {
+  it.each(['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const)('does nothing on %s', async (state) => {
     await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state }));
     expect(deps.host.open).not.toHaveBeenCalled();
     expect(deps.host.close).not.toHaveBeenCalled();

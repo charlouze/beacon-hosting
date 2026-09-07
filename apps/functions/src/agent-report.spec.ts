@@ -48,6 +48,12 @@ beforeEach(() => {
     },
     saves: { record: vi.fn(async () => undefined) },
     dns: { point: vi.fn(async () => undefined) },
+    host: {
+      open: vi.fn(),
+      close: vi.fn(async () => undefined),
+      list: vi.fn(async () => []),
+      sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
+    },
   };
 });
 
@@ -276,6 +282,146 @@ describe('agentReport', () => {
       phase: 'alive',
     });
     expect(answer?.state).toBe('STOPPING');
+  });
+
+  // §6 étape 3, and the whole point of task 9 bis: the final save is the only
+  // trigger destruction waits for — the machine has stopped the game and
+  // pushed it by the time it reports this. The save is recorded first: the
+  // destruction is one more consequence of the deposit, never a replacement
+  // for it (brief bullet 4, review finding 5).
+  it('records the save, then destroys the instance and the ip, once the final save is reported on a STOPPING session', async () => {
+    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    const order: string[] = [];
+    deps.saves.record = vi.fn(async () => void order.push('record'));
+    deps.host.close = vi.fn(async () => void order.push('destroy'));
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'pre-shutdown',
+      },
+    });
+    expect(order).toEqual(['record', 'destroy']);
+    expect(deps.host.close).toHaveBeenCalledWith('s1');
+    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(correction.state).toBe('IDLE');
+    expect(correction.clearFacts).toBe(true);
+    expect(correction.events[0].type).toBe('SessionStopped');
+    expect(deps.ledger.close).toHaveBeenCalledWith('s1', NOW);
+  });
+
+  // Review finding: idempotence through `ServerHost.close()` covers the
+  // *state* both destroyers compute, never the *audit* — each would otherwise
+  // file its own `SessionStopped` carrying `costEuros`, and §11 sums that
+  // field twice for one stop. This is the window closing: the
+  // stopping-timeout net gets there first — `server/current` is no longer
+  // STOPPING for this session by the time the re-read runs — and this call
+  // has nothing left to record.
+  it('destroys the machine but records nothing when the stopping-timeout net already moved the session on', async () => {
+    deps.state.readSession = vi
+      .fn()
+      .mockResolvedValueOnce(sessionIn('STOPPING'))
+      .mockResolvedValueOnce(Session.idle());
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'pre-shutdown',
+      },
+    });
+    expect(deps.host.close).toHaveBeenCalledWith('s1');
+    expect(deps.state.apply).not.toHaveBeenCalled();
+    expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+
+  // The most important test of this task. The cadence push reports `saved`
+  // every ten minutes of ordinary play — confusing it with the last one would
+  // kill the machine mid-game, every session.
+  it('destroys nothing when a saved report arrives while RUNNING', async () => {
+    deps.state.readSession = vi.fn(async () => sessionIn('RUNNING'));
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'auto',
+      },
+    });
+    expect(deps.host.close).not.toHaveBeenCalled();
+    expect(deps.saves.record).toHaveBeenCalled();
+  });
+
+  // Review finding 1, spec fix ed130a8: the agent loop is sequential, so a
+  // cadence push can be mid-flight — archived and uploaded — the instant a
+  // stop is requested, and it reports `saved` with origin `auto` after
+  // STOPPING has already been written. Destroying on it would skip §6 étape 2
+  // entirely: the game never stopped, the final save never pushed, and
+  // `pre-shutdown` naming nothing. The ten-minute stopping-timeout net still
+  // covers a final save that never arrives at all.
+  it('destroys nothing when an in-flight cadence save reports saved on a STOPPING session', async () => {
+    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'auto',
+      },
+    });
+    expect(deps.host.close).not.toHaveBeenCalled();
+    expect(deps.saves.record).toHaveBeenCalled();
+  });
+
+  // Moved here with the destruction it guards: `server/current.lastError` is
+  // read by every member's browser, live, and nothing proves the provider's
+  // SDK keeps a secret out of an error's text.
+  it('sanitises lastError when the destruction itself is refused', async () => {
+    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    const secret = 'a'.repeat(64);
+    deps.host.close = vi.fn(async () => {
+      throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
+    });
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'pre-shutdown',
+      },
+    });
+    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(correction.state).toBe('FAILED');
+    expect(correction.lastError).not.toContain(secret);
+  });
+
+  // As stale as any other report about a session that has moved on — the
+  // session-equality guard above answers for it before destruction is ever a
+  // question.
+  it('destroys nothing when a saved report names a session that is not the current one', async () => {
+    deps.state.readSession = vi.fn(async () =>
+      Session.from({ ...fieldsOf(sessionIn('STOPPING')), sessionId: 's2' }),
+    );
+    const answer = await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'saved',
+      save: {
+        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        sizeBytes: 50_000,
+        origin: 'pre-shutdown',
+      },
+    });
+    expect(deps.host.close).not.toHaveBeenCalled();
+    expect(deps.saves.record).not.toHaveBeenCalled();
+    expect(answer).toEqual({ state: 'IDLE', deadlineIso: null });
   });
 
   // The default session in `deps` is PROVISIONING: a `failed` reported before

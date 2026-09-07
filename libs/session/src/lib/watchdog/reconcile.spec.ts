@@ -55,7 +55,7 @@ const types = (events: readonly { type: string }[]) => events.map((e) => e.type)
 
 describe('reconcile', () => {
   it('corrects nothing when nothing happened', () => {
-    const correction = reconcile(view(), [], quiet);
+    const correction = reconcile(view(), [], quiet, []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(false);
     expect(correction.events).toEqual([]);
@@ -64,7 +64,7 @@ describe('reconcile', () => {
 
   it('leaves the state alone when server/current does not exist', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'no-open-session', true)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'no-open-session', true)], quiet, []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['SessionReclaimed']);
     expect(correction.closeIntents).toEqual(['s1']);
@@ -72,21 +72,21 @@ describe('reconcile', () => {
 
   it('closes the intent of a session it destroyed', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'no-open-session', true)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'no-open-session', true)], quiet, []);
     expect(correction.closeIntents).toEqual(['s1']);
   });
 
   // Leaving the intent open is what brings the watchdog back to it next pass.
   it('leaves the intent open when the destruction failed', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'no-open-session', false)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'no-open-session', false)], quiet, []);
     expect(correction.closeIntents).toEqual([]);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
   it('sends a timed-out PROVISIONING back to IDLE once destroyed', () => {
     const v = view({ server: record('PROVISIONING', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'provisioning-timeout', true)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'provisioning-timeout', true)], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(correction.lastError).toContain('provisioning');
@@ -97,7 +97,7 @@ describe('reconcile', () => {
   // ordinary failure — §5.
   it('sends a PROVISIONING whose cleanup failed to FAILED, keeping the facts', () => {
     const v = view({ server: record('PROVISIONING', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'provisioning-timeout', false)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'provisioning-timeout', false)], quiet, []);
     expect(correction.state).toBe('FAILED');
     expect(correction.clearFacts).toBe(false);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
@@ -105,7 +105,7 @@ describe('reconcile', () => {
 
   it('sends a timed-out STOPPING back to IDLE and says the session stopped', () => {
     const v = view({ server: record('STOPPING', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'stopping-timeout', true)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'stopping-timeout', true)], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionStopped']);
@@ -113,7 +113,7 @@ describe('reconcile', () => {
 
   it('leaves FAILED once the retried destruction succeeds', () => {
     const v = view({ server: record('FAILED', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'failed-retry', true)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'failed-retry', true)], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionReclaimed']);
@@ -123,7 +123,7 @@ describe('reconcile', () => {
   // failed-retry reclamation above has already answered for it.
   it('leaves FAILED when the record names no session to retry', () => {
     const v = view({ server: record('FAILED', null, true) });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
   });
@@ -132,12 +132,12 @@ describe('reconcile', () => {
   // that the previous attempt failed once the state is back to IDLE.
   it('does not erase the recorded error on its way out of FAILED', () => {
     const v = view({ server: record('FAILED', null, true) });
-    expect(reconcile(v, [], quiet).lastError).toBeNull();
+    expect(reconcile(v, [], quiet, []).lastError).toBeNull();
   });
 
   it('stays in FAILED while the destruction keeps failing', () => {
     const v = view({ server: record('FAILED', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'failed-retry', false)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'failed-retry', false)], quiet, []);
     expect(correction.state).toBe('FAILED');
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
@@ -147,7 +147,7 @@ describe('reconcile', () => {
   // next pass retries it through the tag.
   it('does not send an IDLE record to FAILED when a residual cleanup fails', () => {
     const v = view({ server: record('IDLE', 's1', true), hosted: [hosted('s1')] });
-    const correction = reconcile(v, [outcome('s1', 'no-open-session', false)], quiet);
+    const correction = reconcile(v, [outcome('s1', 'no-open-session', false)], quiet, []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
@@ -155,7 +155,7 @@ describe('reconcile', () => {
   // §5's state diagram: RUNNING --> IDLE, the machine vanished at the provider.
   it('sends RUNNING back to IDLE when the provider holds nothing for it', () => {
     const v = view({ server: record('RUNNING', 's1', true) });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionStopped']);
@@ -167,7 +167,7 @@ describe('reconcile', () => {
   // the sweep. §4: no Scaleway resource outlives its session.
   it('closes the intent of the session whose machine vanished', () => {
     const v = view({ server: record('RUNNING', 's1', true), openSessions: ['s1'] });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.state).toBe('IDLE');
     expect(correction.closeIntents).toEqual(['s1']);
   });
@@ -182,21 +182,21 @@ describe('reconcile', () => {
       hosted: [hosted('s1'), hosted('s2')],
       openSessions: ['s1'],
     });
-    const correction = reconcile(v, [outcome('s2', 'no-open-session', false)], quiet);
+    const correction = reconcile(v, [outcome('s2', 'no-open-session', false)], quiet, []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
   it('leaves RUNNING alone while the provider still holds its session', () => {
     const v = view({ server: record('RUNNING', 's1', true), hosted: [hosted('s1')], openSessions: ['s1'] });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(false);
   });
 
   it('empties the reserved facts left over on an IDLE record', () => {
     const v = view({ server: record('IDLE', null, true) });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(true);
     expect(correction.closeIntents).toEqual([]);
@@ -207,41 +207,46 @@ describe('reconcile', () => {
   // alone would leave the id open for every pass to come.
   it('closes the intent of an IDLE record it empties', () => {
     const v = view({ server: record('IDLE', 's1', true), openSessions: ['s1'] });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.clearFacts).toBe(true);
     expect(correction.closeIntents).toEqual(['s1']);
   });
 
   it('records the sweep of what no session claimed, with a null subject', () => {
-    const correction = reconcile(view(), [], { ...quiet, destroyed: ['ip 51.15.0.1'] });
+    const correction = reconcile(view(), [], { ...quiet, destroyed: ['ip 51.15.0.1'] }, []);
     expect(correction.events).toEqual([
       { type: 'SessionReclaimed', sessionId: null, detail: 'ip 51.15.0.1' },
     ]);
   });
 
   it('says nothing when the sweep found nothing', () => {
-    expect(reconcile(view(), [], quiet).events).toEqual([]);
+    expect(reconcile(view(), [], quiet, []).events).toEqual([]);
   });
 
   it('records a sweep that could not run', () => {
-    const correction = reconcile(view(), [], { ...quiet, errors: ['api down'] });
+    const correction = reconcile(view(), [], { ...quiet, errors: ['api down'] }, []);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
   // The whole reason the sweep reports three lists: what it destroyed has to
   // survive a refusal on what came after, or that spending is never audited.
   it('keeps what the sweep destroyed even when part of it refused', () => {
-    const correction = reconcile(view(), [], {
-      destroyed: ['ip 51.15.0.1'],
-      stranded: [],
-      errors: ['scaleway refused terminate s-1'],
-    });
+    const correction = reconcile(
+      view(),
+      [],
+      {
+        destroyed: ['ip 51.15.0.1'],
+        stranded: [],
+        errors: ['scaleway refused terminate s-1'],
+      },
+      [],
+    );
     expect(types(correction.events).sort()).toEqual(['CleanupFailed', 'SessionReclaimed']);
   });
 
   // §6: signalé, jamais détruit. Announcing is the entire action.
   it('announces a stranded volume on its appearance and destroys nothing', () => {
-    const correction = reconcile(view(), [], { ...quiet, stranded: ['volume v-1 (80G)'] });
+    const correction = reconcile(view(), [], { ...quiet, stranded: ['volume v-1 (80G)'] }, []);
     expect(correction.events).toEqual([
       { type: 'ResourceStranded', sessionId: null, detail: 'volume v-1 (80G)' },
     ]);
@@ -255,7 +260,7 @@ describe('reconcile', () => {
   it('says nothing of a volume a previous pass already announced', () => {
     const v = view({ alreadyAnnounced: ['volume v-1 (80G)'] });
 
-    const correction = reconcile(v, [], { ...quiet, stranded: ['volume v-1 (80G)'] });
+    const correction = reconcile(v, [], { ...quiet, stranded: ['volume v-1 (80G)'] }, []);
 
     expect(correction.events).toEqual([]);
   });
@@ -263,10 +268,15 @@ describe('reconcile', () => {
   it('announces the volume that appeared beside one already announced', () => {
     const v = view({ alreadyAnnounced: ['volume v-1 (80G)'] });
 
-    const correction = reconcile(v, [], {
-      ...quiet,
-      stranded: ['volume v-1 (80G)', 'volume v-2 (80G)'],
-    });
+    const correction = reconcile(
+      v,
+      [],
+      {
+        ...quiet,
+        stranded: ['volume v-1 (80G)', 'volume v-2 (80G)'],
+      },
+      [],
+    );
 
     expect(correction.events).toEqual([
       { type: 'ResourceStranded', sessionId: null, detail: 'volume v-2 (80G)' },
@@ -285,7 +295,7 @@ describe('reconcile', () => {
       session: runningSession('s1', '2026-09-07T12:00:00Z'),
       now: new Date('2026-09-06T20:00:00Z'),
     });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.deadline?.at).toEqual(new Date('2026-09-07T00:00:00Z'));
     expect(correction.events).toEqual([
       { type: 'DeadlineClamped', sessionId: 's1', detail: 'brought back from 12:00 UTC to 00:00 UTC' },
@@ -299,7 +309,7 @@ describe('reconcile', () => {
       session: runningSession('s1', '2026-09-06T23:00:00Z'),
       now: new Date('2026-09-06T20:00:00Z'),
     });
-    const correction = reconcile(v, [], quiet);
+    const correction = reconcile(v, [], quiet, []);
     expect(correction.deadline).toBeNull();
     expect(correction.events).toEqual([]);
   });
@@ -315,7 +325,7 @@ describe('reconcile', () => {
     const outcomes: ReclaimOutcome[] = [
       { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
     ];
-    const stopped = reconcile(v, outcomes, quiet).events.find(
+    const stopped = reconcile(v, outcomes, quiet, []).events.find(
       (e) => e.type === 'SessionStopped',
     );
     // Five started hours between 20:00 and 00:03, at the DEV1-L rate.
@@ -327,9 +337,46 @@ describe('reconcile', () => {
     const outcomes: ReclaimOutcome[] = [
       { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
     ];
-    const stopped = reconcile(v, outcomes, quiet).events.find(
+    const stopped = reconcile(v, outcomes, quiet, []).events.find(
       (e) => e.type === 'SessionStopped',
     );
     expect(stopped).toMatchObject({ costEuros: 0 });
+  });
+
+  // Review finding 2: a session `reclamations()` puts in `expired` still has
+  // to become something server/current can hold. Folded into reconcile so a
+  // single function owns the answer, rather than a second write racing this
+  // one from the caller.
+  describe('with an expired session', () => {
+    const expiring = (sessionId: string) => [{ sessionId, detail: 'closing time was 00:00 UTC' }];
+
+    it('writes STOPPING and files SessionExpired for a session the provider still holds', () => {
+      const v = view({ server: record('RUNNING', 's1'), hosted: [hosted('s1')] });
+      const correction = reconcile(v, [], quiet, expiring('s1'));
+      expect(correction.state).toBe('STOPPING');
+      expect(correction.clearFacts).toBe(false);
+      expect(correction.events).toEqual([
+        { type: 'SessionExpired', sessionId: 's1', detail: 'closing time was 00:00 UTC' },
+      ]);
+    });
+
+    // The case the review found: a machine already gone at the provider must
+    // ground to IDLE, never park in STOPPING waiting on an agent that no
+    // longer exists — that grounding already carries the cost, and writing
+    // STOPPING over it would leave a second, contradictory SessionStopped for
+    // the ten-minute net to file later, doubling the cost §11 sums.
+    it('grounds a vanished session to IDLE even when its deadline has also passed', () => {
+      const v = view({ server: record('RUNNING', 's1') });
+      const correction = reconcile(v, [], quiet, expiring('s1'));
+      expect(correction.state).toBe('IDLE');
+      expect(correction.clearFacts).toBe(true);
+      expect(types(correction.events)).toEqual(['SessionStopped']);
+    });
+
+    it('leaves an unrelated session alone', () => {
+      const v = view({ server: record('RUNNING', 's1'), hosted: [hosted('s1')] });
+      const correction = reconcile(v, [], quiet, expiring('s2'));
+      expect(correction.state).toBeNull();
+    });
   });
 });

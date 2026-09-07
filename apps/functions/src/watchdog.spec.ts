@@ -350,6 +350,39 @@ describe('runWatchdog', () => {
     expect(await eventTypes()).toEqual(['ProvisioningFailed']);
   });
 
+  // Task 9 bis, and the load-bearing rule of the whole tranche: a deadline
+  // finishes a session, it does not seize its resources. Destroying here is
+  // exactly the bug the whole-branch review found — the machine was gone
+  // before the agent ever learned it was stopping, and `pre-shutdown` never
+  // meant anything.
+  it('writes STOPPING and destroys nothing once a deadline passes the grace', async () => {
+    host.hosted = [hosted('sess1')];
+    await db.doc('provisioning/sess1').set({ closedAt: null });
+    await db.doc('server/current').set({
+      state: 'RUNNING',
+      sessionId: 'sess1',
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: minutesAgo(60),
+      deadline: minutesAgo(3),
+      stateSince: minutesAgo(60),
+      instanceId: 'i-1',
+      ipId: 'ip-1',
+      ip: '1.2.3.4',
+    });
+
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual([]);
+    const after = (await db.doc('server/current').get()).data();
+    expect(after?.['state']).toBe('STOPPING');
+    expect(after?.['stateSince'].toDate()).toEqual(NOW);
+    // Untouched: the machine is still alive, and the clean shutdown of §6
+    // needs it to stay that way until the agent reports back.
+    expect(after?.['instanceId']).toBe('i-1');
+    expect(await eventTypes()).toEqual(['SessionExpired']);
+  });
+
   // The only test that composes the real adapter with the real watchdog.
   // watchdog.spec drives a fake host, scaleway-server-host.spec drives a fake
   // api, and the seam between the two is precisely what neither can see: that
