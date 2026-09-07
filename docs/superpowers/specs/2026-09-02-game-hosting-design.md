@@ -1227,7 +1227,22 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
    ordre — arrêter avant de pousser — mais elle ne promet rien de plus que ce
    que le disque contient déjà. Le `pre-shutdown` du §5 n'a, pour ce jeu, pas
    d'autre sens que « la dernière que le jeu a bien voulu écrire ».
-3. La Function détruit l'instance **et l'IP**.
+3. **C'est le rapport `saved` qui déclenche la destruction.** `agentReport` reçoit
+   la phase, constate que la session est en `STOPPING`, et détruit l'instance
+   **et l'IP**.
+
+   **Rien n'attend.** L'autre écriture possible — une Function qui boucle
+   jusqu'à voir le dépôt — ferait d'un mécanisme de livraison le gardien d'une
+   règle du domaine, et facturerait dix minutes de veille pour ne rien faire. Le
+   fait métier est « la dernière sauvegarde est déposée » ; il arrive par le seul
+   canal que la machine possède déjà, et la destruction en est la conséquence.
+
+   **Ce qui couvre le cas où il n'arrive jamais** est la ligne « `STOPPING`
+   depuis plus de 10 min » du watchdog. C'est le filet, pas le chemin : une
+   machine muette ne retient pas ses ressources indéfiniment, et une machine
+   vivante n'est pas détruite avant d'avoir parlé. Sans cette étape 3, l'étape 2
+   n'a pas lieu — la machine disparaît avant que l'agent ait seulement appris
+   qu'on l'arrêtait, et `pre-shutdown` ne désigne rien.
 4. L'état repasse à `IDLE`, `stateSince` avec lui, et les champs réservés de
    `server/current` sont remis à vide par la Function.
 
@@ -1238,7 +1253,7 @@ système pour le budget.
 
 | Condition | Action |
 |---|---|
-| Échéance dépassée de plus de 2 min, état encore `RUNNING` | Arrêt forcé |
+| Échéance dépassée de plus de 2 min, état encore `RUNNING` | Passage à `STOPPING`, et rien de plus — **pas une destruction**. Une échéance finit une session, elle ne saisit pas ses ressources : l'arrêt propre ci-dessus suit son cours, et la ligne `STOPPING` ci-dessous reste le filet |
 | `deadline - maintenant` supérieur à la durée de session | Échéance ramenée à la borne, écart journalisé |
 | État incohérent avec les champs réservés — `RUNNING` sans `instanceId`, `IDLE` avec une instance vivante | `server/current` remis d'équerre à partir de ce que Scaleway déclare réellement |
 | `PROVISIONING` depuis plus de 25 min | Destruction, puis `IDLE` avec `lastError` — ou `FAILED` si la destruction échoue |
@@ -1782,6 +1797,18 @@ tag est qu'un fournisseur ne fait pas ce qu'on suppose.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,
   Sunkenland tient sur un cœur des quatre et 5,3 Gio.
+
+S'y ajoute une question née non d'une mesure mais d'une revue, ce qui ne la rend
+pas moins ouverte.
+
+- **L'arrêt propre n'a jamais été observé de bout en bout.** L'ordre du §6 —
+  `STOPPING`, l'agent pousse, son rapport déclenche la destruction — a été écrit
+  ici, jamais vu tourner. La revue de la tranche 3 a montré que le code écrit
+  jusque-là détruisait la machine **avant** que l'agent apprenne l'arrêt, sur les
+  deux chemins, si bien que `pre-shutdown` ne désignait rien : le §6 décrivait un
+  système que le plan ne construisait pas. La correction est écrite ci-dessus ;
+  ce qui reste à prouver est qu'un objet apparaisse réellement sous
+  `saves/{jeu}/pre-shutdown/` à la fin d'une soirée.
 
 Reste, de l'arrivée du second jeu, la seule question que la tranche 1 bis n'a
 pas mesurée — les quatre autres sont passées au tableau ci-dessus.
