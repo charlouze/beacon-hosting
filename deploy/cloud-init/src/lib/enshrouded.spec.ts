@@ -206,6 +206,23 @@ describe('the enshrouded catalogue entry', () => {
   // the companion would have been root on the machine. `-t 90` matches the
   // compose's own stop_grace_period, so the unit gives the world the same
   // grace to flush that the compose already promises it.
+  // §7: the agent token is the only credential that rides to the machine, and
+  // the companion sends it back in an `authorization` header once a minute for
+  // the whole session. An http endpoint would put it on the wire in clear, and
+  // nothing downstream would notice — the reports would succeed, the session
+  // would run, and the leak would leave no trace.
+  //
+  // Refused here rather than on the machine because this is the only place the
+  // value enters the system: it comes from `AGENT_ENDPOINT`, filled by a human,
+  // and a tunnel url pasted in a hurry is exactly the shape this catches. The
+  // companion stays permissive so the smoke harness can keep answering on http
+  // over a docker bridge, where no wire leaves the developer's machine.
+  it('refuses to write a cloud-init that would carry the token in clear', () => {
+    expect(() =>
+      renderCloudInit('enshrouded', { ...REQUEST, endpoint: 'http://control.example/agentReport' }),
+    ).toThrow(/endpoint/i);
+  });
+
   it('gives the host a unit that can only stop the game', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('ExecStart=-/usr/bin/docker stop -t 90 enshrouded');
