@@ -26,6 +26,15 @@
     },
     {
       "path": "./apps/web"
+    },
+    {
+      "path": "./libs/agent-protocol"
+    },
+    {
+      "path": "./libs/scaleway-storage"
+    },
+    {
+      "path": "./deploy/companion"
     }
   ],
   "compilerOptions": {}

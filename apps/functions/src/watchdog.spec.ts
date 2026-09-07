@@ -103,6 +103,7 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
   },
   open: (sessionId, intent, at) => inner.open(sessionId, intent, at),
   record: (sessionId, facts) => inner.record(sessionId, facts),
+  read: (sessionId) => inner.read(sessionId),
   close: (sessionId, at) => inner.close(sessionId, at),
 });
 
@@ -150,6 +151,7 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
     openSessions: vi.fn(async () => []),
     open: vi.fn(),
     record: vi.fn(),
+    read: vi.fn(async () => null),
     close: vi.fn(),
   },
   health: {
@@ -329,10 +331,10 @@ describe('runWatchdog', () => {
     await db.doc('server/current').set({
       state: 'PROVISIONING',
       sessionId: 'sess1',
-      stateSince: minutesAgo(16),
+      stateSince: minutesAgo(26),
       instanceId: 'i-1',
       joinInfo: { serverId: 'abc~123' },
-      provisionClaimedAt: minutesAgo(16),
+      provisionClaimedAt: minutesAgo(26),
     });
 
     await runWatchdog(deps());
@@ -346,6 +348,39 @@ describe('runWatchdog', () => {
     expect(after?.['joinInfo']).toBeNull();
     expect(after?.['provisionClaimedAt']).toBeNull();
     expect(await eventTypes()).toEqual(['ProvisioningFailed']);
+  });
+
+  // Task 9 bis, and the load-bearing rule of the whole tranche: a deadline
+  // finishes a session, it does not seize its resources. Destroying here is
+  // exactly the bug the whole-branch review found — the machine was gone
+  // before the agent ever learned it was stopping, and `pre-shutdown` never
+  // meant anything.
+  it('writes STOPPING and destroys nothing once a deadline passes the grace', async () => {
+    host.hosted = [hosted('sess1')];
+    await db.doc('provisioning/sess1').set({ closedAt: null });
+    await db.doc('server/current').set({
+      state: 'RUNNING',
+      sessionId: 'sess1',
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: minutesAgo(60),
+      deadline: minutesAgo(3),
+      stateSince: minutesAgo(60),
+      instanceId: 'i-1',
+      ipId: 'ip-1',
+      ip: '1.2.3.4',
+    });
+
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual([]);
+    const after = (await db.doc('server/current').get()).data();
+    expect(after?.['state']).toBe('STOPPING');
+    expect(after?.['stateSince'].toDate()).toEqual(NOW);
+    // Untouched: the machine is still alive, and the clean shutdown of §6
+    // needs it to stay that way until the agent reports back.
+    expect(after?.['instanceId']).toBe('i-1');
+    expect(await eventTypes()).toEqual(['SessionExpired']);
   });
 
   // The only test that composes the real adapter with the real watchdog.

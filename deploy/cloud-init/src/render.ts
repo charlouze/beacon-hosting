@@ -19,6 +19,19 @@ if (process.env['WHAT'] === 'compose') {
       serverName: process.env['SERVER_NAME'] ?? 'Beacon',
       serverPassword,
       slotCount: Number(process.env['SLOT_COUNT'] ?? 4),
+      // Rendering values, never real credentials: this target exists so a human
+      // can read the cloud-init, and it must not be a way to print a token.
+      sessionId: 'render',
+      agentToken: '0'.repeat(64),
+      endpoint: 'https://example.invalid/agentReport',
+      saves: {
+        endpoint: 'https://s3.fr-par.scw.cloud',
+        region: 'fr-par',
+        savesBucket: 'beacon-saves',
+        gamesBucket: 'beacon-games',
+        accessKey: 'RENDER-ONLY',
+        secretKey: 'RENDER-ONLY',
+      },
     }),
   );
 }

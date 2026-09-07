@@ -1,7 +1,7 @@
 # Lotissement de l'implémentation
 
 Date : 2026-09-02
-Statut : **proposé**, non validé par le commanditaire
+Statut : **validé** par le commanditaire le 2026-09-08
 
 Ce document dit dans quel ordre le spec
 [`2026-09-02-game-hosting-design.md`](../specs/2026-09-02-game-hosting-design.md)
@@ -60,19 +60,21 @@ règles, et c'est par elles qu'il faut le relire s'il est un jour contesté.
 
 ## Les tranches
 
-La sonde du second jeu n'y figure pas : elle est intercalée entre la 1 et la 2 et
-n'ajoute pas de tranche, comme sa section le dit plus bas. La 3 bis, elle, en est
-une — c'est la 3 coupée en deux, un jeu par tranche.
+La sonde du second jeu y figure pour qu'on sache qu'elle a eu lieu, mais elle
+n'est pas une tranche : elle s'est intercalée entre la 1 et la 2, comme sa
+section le dit plus bas. La 3 bis, elle, en est une — c'est la 3 coupée en deux,
+un jeu par tranche.
 
-| # | Tranche | Ce qu'elle livre |
-|---|---|---|
-| 0 | Sonder | Un serveur jouable, démarré à la main, et les réponses du §12 |
-| 1 | Le faucheur | Rien ne reste allumé, quoi qu'il arrive |
-| 2 | Le cycle | Une session naît, se prolonge et meurt — sans interface |
-| 3 | Les saves | Le monde survit aux sessions |
-| 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID |
-| 4 | La sécurité | Le système peut être exposé |
-| 5 | L'écran | Le produit décrit dans `.impeccable/` |
+| # | Tranche | Ce qu'elle livre | État |
+|---|---|---|---|
+| 0 | Sonder | Un serveur jouable, démarré à la main, et les réponses du §12 | livrée |
+| 1 | Le faucheur | Rien ne reste allumé, quoi qu'il arrive | livrée |
+| 1 bis | Sonder le second jeu | Ce qu'une machine seule pouvait dire de Sunkenland | livrée |
+| 2 | Le cycle | Une session naît, se prolonge et meurt — sans interface | livrée |
+| 3 | Les saves | Le monde survit aux sessions | **livrée le 2026-09-07** |
+| 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | à venir |
+| 4 | La sécurité | Le système peut être exposé | à venir |
+| 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
 
 ### 0 · Sonder
 
@@ -180,6 +182,28 @@ soit finie et ses tests verts.** Il se lève jeu par jeu — à la fin de celle-
 pour Enshrouded, à la fin de la 3 bis pour Sunkenland, dont le monde reste dans
 le seau jusque-là.
 
+**Livrée le 2026-09-07, et le gate est levé pour Enshrouded.** Deux sessions
+consécutives sur une vraie machine : la seconde restaure la clé que la première
+avait déposée, à l'octet près, et le coffre revient avec son contenu. Le relevé
+est dans
+[`2026-09-07-tranche-3-les-saves-session.md`](2026-09-07-tranche-3-les-saves-session.md)
+et les mesures sont versées au §12 du spec. Formellement le gate se lève à la
+fusion, la production étant `main`.
+
+Deux choses de cette tranche méritent de survivre à son plan. **La méthode
+d'abord** : neuf tâches de tests unitaires contre des doubles ont prouvé la
+logique, et rien ne prouvait que l'artefact démarrait — le test de fumée, écrit
+en dernier, a trouvé quatre défauts qui rendaient l'image inutilisable, puis la
+revue de branche a trouvé l'ordre suivant du même défaut, et la première vraie
+session l'ordre d'après. Chaque niveau ne voit que ce que le précédent ne
+pouvait pas voir, et l'ordre dans lequel on les écrit décide de ce qu'on
+découvre tard. **Et une leçon d'écriture de plan** : onze contradictions ont été
+trouvées entre le code embarqué dans ce plan et ses propres tests — du code
+jamais exécuté se périme entre son écriture et sa lecture. Son graphe de
+dépendances omettait par ailleurs une arête que l'exécution a trouvée seule. Les
+tâches ajoutées en cours de route ont été écrites avec leurs tests et leurs
+contraintes, sans code d'implémentation, et c'est la forme à reprendre.
+
 ### 3 bis · Le second jeu
 
 L'entrée Sunkenland du catalogue, l'adoption du script de démarrage que la
@@ -191,6 +215,33 @@ lu dans la sortie du conteneur et vérifié par son préfixe de GUID,
 Elle n'ajoute rien au modèle : le §4 a écrit `JoinInfo` à deux formes et le port
 `ServerHost` à un jeu libre précisément pour que ce jeu-ci ne coûte qu'une
 entrée de catalogue. C'est ce que cette tranche vérifie.
+
+**Ce que la tranche 3 lui laisse nommément**, au-delà de son propre périmètre :
+
+- **La sonde de disponibilité ne connaît que `a2s://`.** `probeFor` refuse tout
+  le reste en nommant ce qu'elle a reçu ; la 3 bis ajoute la forme qui lit le
+  ServerID dans la sortie du conteneur, et le §6 dit déjà pourquoi ce n'est pas
+  un pis-aller.
+- **`catalogFor('sunkenland')` lève toujours**, et son message nomme encore la
+  tranche 3 : il devra désigner celle qui l'implémente.
+- **Le compagnon ne restaure pas de fichiers de jeu.** `beacon-games` existe, sa
+  politique de lecture seule est posée et mesurée, et le compagnon lit déjà le
+  nom du seau ; rien d'autre n'est écrit — ni clé d'objet, ni chemin de
+  restauration.
+- **La règle de cycle de vie de ce jeu n'est pas posée**, sur
+  `saves/sunkenland/auto/` et rien d'autre : les sauvegardes de fin de session
+  n'expirent jamais (§5, §8). Le préfixe est littéral, donc aucun test ne
+  réclamera cette ligne et personne ne verra qu'elle manque — les poussées
+  automatiques d'un second jeu s'accumuleraient sans fin. Le fichier à modifier
+  est [`deploy/scaleway/beacon-saves-lifecycle.json`](../../../deploy/scaleway/beacon-saves-lifecycle.json).
+- **L'egress objet intra-région**, ouvert depuis la tranche 0, se mesure enfin
+  ici : c'est la première tranche dont la restauration tire 2,3 Go plutôt que
+  72 Ko.
+- **`beacon-stop.path` après avoir tiré.** L'unité est vue armée et vue
+  fonctionner ; l'état qu'elle laisse une fois déclenchée n'a pas été observé,
+  la machine ayant été détruite avant. À interroger **entre** l'arrêt du jeu et
+  la destruction, une fenêtre de quelques dizaines de secondes qu'il faut viser
+  exprès.
 
 ### 4 · La sécurité
 
@@ -262,3 +313,15 @@ ce paragraphe croirait le contraire.
   rarement. La bascule se paiera le jour où l'un de ces gestes sera fait de
   travers sans que personne ne s'en aperçoive, et le candidat le plus probable
   est une règle de cycle de vie sur les sauvegardes.
+
+  **C'est arrivé une tranche plus tard, et exactement là.** Le seau des
+  sauvegardes était versionné, ce que personne n'avait décidé ; sur un seau
+  versionné une règle d'expiration ne supprime rien et facture la version
+  précédente indéfiniment. La règle paraissait juste à la relecture, et seule
+  une relecture depuis le seau l'a montrée. Un premier pas a été fait sans
+  attendre la bascule : la politique du seau des fichiers de jeu et cette règle
+  de cycle de vie vivent maintenant dans
+  [`deploy/scaleway/`](../../../deploy/scaleway/README.md), avec les commandes
+  qui les posent et les relisent. Ce ne sont pas des ressources gérées en code —
+  rien ne les applique —, mais elles se relisent en revue au lieu de se
+  redécouvrir dans une console.

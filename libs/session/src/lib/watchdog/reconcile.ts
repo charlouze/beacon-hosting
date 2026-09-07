@@ -2,7 +2,7 @@ import type { Deadline } from '../deadline.js';
 import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
-import type { Reclamation } from './reclamations.js';
+import type { Expiration, Reclamation } from './reclamations.js';
 import type { WatchdogView } from './view.js';
 
 export type ReclaimOutcome =
@@ -53,7 +53,7 @@ interface ClosedMeaning {
 /**
  * What each reason means once its destruction succeeded. A table and not a
  * switch with a default: a reason added tomorrow must not compile until it has
- * an answer here. With a default, a deadline-exceeded reclamation would file
+ * an answer here. With a default, a stopping-timeout reclamation would file
  * itself as SessionReclaimed and lose the session cost §11 hangs on it, and
  * nothing at all would say so.
  */
@@ -69,15 +69,6 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
   'provisioning-timeout': {
     event: ({ sessionId, detail }) => ({ type: 'ProvisioningFailed', sessionId, detail }),
     idleReason: 'provisioning did not finish in time',
-  },
-  'deadline-exceeded': {
-    event: ({ sessionId, detail }, costEuros) => ({
-      type: 'SessionStopped',
-      sessionId,
-      detail,
-      costEuros,
-    }),
-    idleReason: null,
   },
   'stopping-timeout': {
     event: ({ sessionId, detail }, costEuros) => ({
@@ -96,11 +87,18 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
  * It never concludes from `view.hosted` alone that a machine survives: that
  * listing predates the closes, so a session still in it may be gone. Survival
  * is `hosted` for a session nothing was tried on.
+ *
+ * `expired` (review finding 2, task 9 bis) is folded in here rather than
+ * written by a second call from the caller: a session `reclamations()` marks
+ * expired can, in the same pass, also be a machine the provider already holds
+ * nothing for — and only one function may decide what such a session becomes,
+ * or the two can disagree about it in the same breath.
  */
 export function reconcile(
   view: WatchdogView,
   outcomes: readonly ReclaimOutcome[],
   sweep: UnclaimedSweep,
+  expired: readonly Expiration[],
 ): StateCorrection {
   const events: DomainEvent[] = [];
   const closeIntents: SessionId[] = [];
@@ -209,6 +207,23 @@ export function reconcile(
       clearFacts: true,
       closeIntents: closing(closeIntents, record.sessionId),
       events,
+      deadline: null,
+    };
+  }
+
+  // Reached only once the grounding above has had first say: a session whose
+  // machine already vanished at the provider is not waiting on a clean
+  // shutdown, whatever its deadline says, and the branch above already wrote
+  // its one, cost-carrying SessionStopped. Only a session the provider still
+  // holds is genuinely finished-but-alive, which is what STOPPING means here.
+  const expiring = expired.find((e) => e.sessionId === record.sessionId);
+  if (expiring !== undefined) {
+    return {
+      state: 'STOPPING',
+      lastError: null,
+      clearFacts: false,
+      closeIntents,
+      events: [...events, { type: 'SessionExpired', sessionId: expiring.sessionId, detail: expiring.detail }],
       deadline: null,
     };
   }

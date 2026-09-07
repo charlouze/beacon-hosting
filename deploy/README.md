@@ -66,3 +66,11 @@ section I. Ce qui compte pour relire ces fichiers :
 
 L'image compagnon naît en tranche 3, avec la restauration des sauvegardes et
 l'agent qui rapporte.
+
+## `scaleway/`
+
+La politique du seau des fichiers de jeu et la règle de cycle de vie du seau des
+sauvegardes. Ce ne sont pas des fichiers que le dépôt exécute : ce sont l'énoncé
+de la frontière du §7 et la seule chose du système qui supprime quelque chose.
+Ils se posent à la main, et [leur README](scaleway/README.md) porte les
+commandes.

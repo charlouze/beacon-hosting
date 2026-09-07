@@ -134,6 +134,8 @@ flowchart TD
     T7["7 · Le compagnon sonde<br/>et rapporte"]
     T8["8 · Le compagnon pousse"]
     T9["9 · L'image et<br/>le test de fumée"]
+    T9B["9 bis · Le plan de contrôle<br/>attend la dernière save"]
+    T9T["9 ter · La fumée éprouve<br/>l'arrêt propre"]
     T10["10 · Publier l'image,<br/>relever le digest"]
     T11["11 · Le cloud-init :<br/>deux services et le canal"]
     T12["12 · Les gestes<br/>sur le compte réel"]
@@ -151,20 +153,39 @@ flowchart TD
     T6 --> T7
     T7 --> T8
     T8 --> T9
+    T9 --> T9T
+    T5 --> T9B
     T9 --> T10
     T5 --> T11
     T10 --> T11
+    T9T --> T13
     T11 --> T13
     T12 --> T13
     T13 --> T14
 
     classDef human fill:#fde8e8,stroke:#d8232a,stroke-width:2px
+    classDef late fill:#eef4ff,stroke:#2f5fb8,stroke-width:2px
     class T10,T12,T13 human
+    class T9B,T9T late
 ```
 
 Les tâches 10, 12 et 13 sont les seules que personne d'autre qu'un humain ne
 lance : elles publient une image, créent des ressources facturées, posent des
 règles qui suppriment des objets, et font jouer quelqu'un.
+
+**Les tâches 9 bis et 9 ter, en bleu, ont été ajoutées après coup** — par la
+revue de branche du 2026-09-07, qui a constaté que la sauvegarde `pre-shutdown`
+ne pouvait jamais avoir lieu. Elles ne dépendent ni de l'image ni du compte réel,
+et elles arrivent **avant** la tâche 13 pour une raison qui se chiffre : une
+soirée de jeu coûte plus cher que quatre-vingt-dix secondes de script.
+
+**Elles sont indépendantes l'une de l'autre, et c'est le point.** L'arrêt propre
+a deux moitiés : le plan de contrôle qui attend, et le compagnon qui pousse.
+La 9 bis ferme la première contre l'émulateur, la 9 ter la seconde contre un vrai
+conteneur. Aucune des deux ne peut fermer l'autre — la pile de fumée n'a pas de
+Function, et l'émulateur n'a pas de conteneur de jeu. **Rien ne les prouve
+ensemble avant la tâche 13**, et le plan préfère l'écrire que de laisser croire
+la chaîne close.
 
 **La tâche 11 attend la 10, et il faut le lire comme une contrainte et non comme
 une maladresse.** Le §10 veut que le `cloud-init` référence l'image par un digest
@@ -4637,6 +4658,246 @@ git commit -m "ci(companion): fait du test de fumee la barriere de publication d
 
 ---
 
+### Task 9 bis: Le plan de contrôle attend la dernière sauvegarde
+
+**Écrite après coup, et il faut lire pourquoi.** La revue de branche de la
+tranche 3 a constaté que la sauvegarde `pre-shutdown` ne pouvait jamais avoir
+lieu : les deux chemins d'arrêt détruisaient la machine avant que l'agent
+apprenne qu'on l'arrêtait. Le §6 nommait l'ordre sans dire ce qui déclenchait sa
+troisième étape ; aucune des quatorze tâches ne touchait `tearDown` ni la
+réclamation d'échéance. Le spec est corrigé — commits `17167ad` et `068c4ba` —
+et cette tâche construit ce qu'il décrit désormais.
+
+Sans elle, `stopAndPush`, `shutdownGraceMs`, le canal à un seul verbe, l'origine
+`pre-shutdown` et la règle de cycle de vie à 365 jours de la tâche 12 sont du
+code mort et une règle pour un préfixe que personne n'écrit — et l'étape 4 de la
+tâche 13 échouerait en brûlant une vraie session pour le dire.
+
+**Deux décisions, prises avec le commanditaire le 2026-09-07 :**
+
+1. **C'est le rapport `saved` qui déclenche la destruction**, et non une Function
+   qui attend. Une Function qui boucle jusqu'à voir le dépôt ferait d'un
+   mécanisme de livraison le gardien d'une règle du domaine, et facturerait dix
+   minutes de veille pour ne rien faire.
+2. **L'échéance cesse d'être une réclamation.** Une échéance finit une session ;
+   elle ne saisit pas ses ressources. Elle écrit `STOPPING` et laisse l'arrêt
+   propre suivre son cours. `stopping-timeout` reste la réclamation qui détruit
+   sans attendre, et redevient ce que le §6 en dit : le filet, pas le chemin.
+
+**Sur la forme de cette tâche.** Les neuf premières ont écrit leur code
+d'implémentation dans le plan, et l'exécution y a trouvé **onze contradictions
+entre ce code et les tests qui l'accompagnaient** — dont un `tar.create()` sur
+une liste vide, une fixture qui compressait sous le plancher, et un digest
+inventé. Le code du plan n'a jamais tourné ; les tests, eux, sont le contrat.
+Cette tâche fixe donc **les tests exactement, et la forme de l'implémentation par
+ses contraintes**, sans coller de code jamais exécuté.
+
+**Fichiers :**
+- Modifier : `libs/session/src/lib/watchdog/reclamations.ts`
+- Modifier : `libs/session/src/lib/watchdog/reclamations.spec.ts`
+- Modifier : `libs/session/src/lib/events.ts` si une décision d'arrêt réclame sa
+  variante
+- Modifier : `apps/functions/src/agent-report.ts`
+- Modifier : `apps/functions/src/agent-report.spec.ts`
+- Modifier : `apps/functions/src/provisioning.ts`
+- Modifier : `apps/functions/src/provisioning.spec.ts`
+- Modifier : `apps/functions/src/watchdog.ts` et sa suite, selon ce que la
+  bascule de l'échéance y déplace
+
+**Interfaces :**
+- Consomme : `AgentReport`, `parseReport` (tâche 3) ; `SessionState`,
+  `WatchdogView`, `Reclamation` (tranches 1 et 2).
+- Produit : une décision de watchdog qui demande un arrêt au lieu de le forcer,
+  et un `agentReport` qui détruit sur `saved`. La tâche 9 ter et la tâche 13 en
+  dépendent.
+
+- [ ] **Step 1: Écrire les tests du watchdog, et les voir échouer**
+
+Dans `reclamations.spec.ts`, l'échéance dépassée ne doit plus produire de
+réclamation. Trois cas à épingler, chacun capable d'échouer sur le code actuel :
+
+- une session `RUNNING` dont l'échéance est dépassée de plus de la grâce **ne
+  rend aucune réclamation** — c'est le test qui rougit aujourd'hui, puisque le
+  code rend `deadline-exceeded` ;
+- elle produit à la place une **demande d'arrêt** portant le `sessionId`, que le
+  watchdog applique en écrivant `STOPPING` ;
+- une session déjà en `STOPPING` depuis plus de `stoppingTimeoutMs` rend
+  **toujours** `stopping-timeout` : le filet ne bouge pas, et le test existant
+  qui le prouve ne doit pas être affaibli pour faire passer les deux premiers.
+
+Garder les bornes actuelles à la minute près : un test qui déplace une limite en
+même temps qu'il change une décision cache laquelle des deux a cassé.
+
+- [ ] **Step 2: Séparer les deux sortes de décision**
+
+`reclamations()` rend aujourd'hui une seule liste, et son nom dit ce qu'elle
+fait : ce qu'il faut **détruire**. Une demande d'arrêt n'est pas une
+destruction, et la faire voyager dans la même liste demanderait à l'appelant de
+lire un champ pour savoir s'il doit saisir ou demander — exactement le genre de
+drapeau que le §4 refuse.
+
+**Un seul parcours, un seul retour, deux listes nommées.** Pas deux fonctions :
+elles reliraient la même vue deux fois et pourraient en tirer des conclusions
+qui se contredisent, ce qui est un cas d'incohérence qu'aucun test n'irait
+chercher. L'appelant reçoit ce qu'il faut détruire et ce qu'il faut demander,
+sans avoir à interpréter quoi que ce soit.
+
+Le nom de la seconde liste se choisit dans le vocabulaire du §4, pas dans celui
+de l'infrastructure : ce qu'elle exprime est « cette session est finie », et
+l'écriture de `STOPPING` en est la conséquence, pas la définition.
+
+**`deadline-exceeded` doit être tranché, pas laissé en place.** C'est
+aujourd'hui une `ReclaimReason`, c'est-à-dire un motif de destruction. Après
+cette tâche, plus rien ne détruit pour cette raison. Soit la variante déménage
+dans le vocabulaire de la nouvelle décision, soit elle disparaît — une variante
+d'union que plus aucun chemin ne produit est du code mort qui se lit comme une
+capacité.
+
+Contraintes : la fonction reste **pure** — elle décide de ce que le fournisseur
+déclare et de ce que le plan de contrôle a enregistré, jamais d'un identifiant
+qu'elle aurait gardé. Et une session ne peut pas être dans les deux listes.
+
+- [ ] **Step 3: Lancer les tests du domaine**
+
+```bash
+npx nx test session && npx nx typecheck session && npx nx lint session
+```
+
+- [ ] **Step 4: Écrire les tests de la Function, et les voir échouer**
+
+Dans `agent-report.spec.ts` :
+
+- un rapport `saved` reçu alors que la session est en `STOPPING` **détruit
+  l'instance et l'IP**, puis repasse l'état à `IDLE` avec ses champs réservés
+  vides ;
+- le même rapport reçu en `RUNNING` **ne détruit rien** — c'est la poussée de
+  cadence, et la confondre avec la dernière tuerait la machine en pleine partie.
+  Ce test est le plus important de la tâche ;
+- un rapport `saved` dont le `sessionId` n'est pas celui de la session courante
+  ne détruit rien, comme tout autre rapport périmé ;
+- la sauvegarde est **enregistrée dans les deux cas** : la destruction est une
+  conséquence de plus, jamais un remplacement de l'enregistrement.
+
+Dans `provisioning.spec.ts` : `onServerStateChange` sur `STOPPING` **ne détruit
+plus**. Le test existant qui prouve le contraire est réécrit, et le corps du
+commit dit pourquoi — un test supprimé sans raison consignée est un constat de
+revue.
+
+- [ ] **Step 5: Déplacer le déclencheur**
+
+La destruction quitte `onServerStateChange` et rejoint le chemin du rapport.
+Contraintes :
+
+- **la destruction reste idempotente** : le filet du watchdog peut la lancer sur
+  la même session, et deux destructions ne doivent pas produire deux `IDLE`
+  contradictoires ;
+- **rien n'attend** dans une Function — pas de boucle, pas de sondage ;
+- ce qui journalise et ce qui détruit ne se dédoublent pas : la tranche 3 a déjà
+  eu à réparer un journal qui mentait sur l'état d'où venait une panne.
+
+**Dire ce que `STOPPING` déclenche désormais, et l'écrire.** Si la réponse est
+« rien », c'est une réponse — l'agent apprend l'arrêt à son rapport suivant, par
+le canal qu'il possède déjà, et il n'y a rien à pousser vers lui. Mais alors un
+déclencheur qui ne fait rien doit porter la phrase qui dit pourquoi il existe
+encore, sinon le prochain lecteur le supprimera ou lui rajoutera du travail.
+
+- [ ] **Step 6: Lancer la suite complète**
+
+```bash
+npx nx run-many -t test typecheck lint
+```
+
+- [ ] **Step 7: Commit**
+
+Deux sujets, donc deux commits — la décision du domaine, puis le déplacement du
+déclencheur.
+
+---
+
+### Task 9 ter: La barrière de fumée éprouve l'arrêt propre
+
+La barrière de la tâche 9 prouve qu'un monde revient. Elle ne prouve pas qu'il
+part une dernière fois. Elle a déjà tout ce qu'il faut pour le prouver : un faux
+plan de contrôle, un serveur bouchonné, un MinIO.
+
+**Ce qu'elle prouve, et ce qu'elle ne prouvera pas — à écrire ici parce que la
+tentation est de croire l'inverse.** Le défaut trouvé par la revue est du côté du
+**plan de contrôle** : la Function détruisait la machine trop tôt. Or la pile de
+fumée n'a pas de Function et ne détruit rien, donc **cette barrière ne peut pas
+reproduire ce défaut-là**. Ce qu'elle éprouve est l'autre moitié, que rien
+n'éprouve non plus aujourd'hui : que le compagnon, **à qui l'on dit `STOPPING`**,
+arrête bien le jeu par son canal à un seul verbe, pousse bien une archive
+`pre-shutdown`, et rapporte bien `saved` — dans cet ordre.
+
+Les deux moitiés se ferment donc séparément : celle-ci contre un vrai conteneur,
+celle de la tâche 9 bis contre l'émulateur. **Rien ne les prouve ensemble avant
+la tâche 13**, et c'est une limite à dire plutôt qu'à laisser croire fermée.
+
+**Le calcul reste favorable.** Quatre-vingt-dix secondes de script contre une
+soirée de jeu et un aller-retour de correction : la tâche 13 ne doit pas être le
+premier endroit où l'on découvre que le compagnon ne sait pas s'arrêter.
+
+**Fichiers :**
+- Modifier : `deploy/companion/smoke/run.sh`
+- Modifier : `deploy/companion/smoke/fake-endpoint.mjs`
+- Modifier : `deploy/companion/smoke/docker-compose.yml` si le canal d'arrêt
+  réclame un volume partagé
+
+**Interfaces :**
+- Consomme : les deux points d'entrée du compagnon (tâches 6 et 8), le faux
+  point d'entrée de la tâche 9.
+- Produit : une assertion d'arrêt propre dans `nx run companion:smoke`.
+
+- [ ] **Step 1: Faire répondre le faux plan de contrôle**
+
+Il enregistre déjà les phases reçues ; il doit maintenant **répondre** des
+instructions, comme le vrai. Lui donner de quoi passer la session à `STOPPING`
+au moment où le script le décide — un fichier que le script touche et que le
+point d'entrée relit, dans l'esprit du canal à un seul verbe.
+
+La tâche 9 avait retiré une branche d'arrêt morte parce que rien ne créait son
+déclencheur. C'est ici qu'elle reprend un sens : cette fois, le script le crée.
+
+- [ ] **Step 2: Écrire l'assertion, et la voir échouer**
+
+Après l'assertion du refus sous le plancher, le script :
+
+1. fait passer les instructions à `STOPPING` ;
+2. attend qu'un objet apparaisse sous `saves/enshrouded/pre-shutdown/`, borné
+   par un délai qui rougit plutôt que de pendre ;
+3. exige que l'agent ait rapporté la phase `saved` — le dépôt sans le rapport ne
+   déclenche rien côté plan de contrôle, donc constater le seul objet
+   prouverait la moitié de la chaîne ;
+4. exige que le conteneur du jeu se soit **arrêté**, ce qui prouve que le canal
+   à un seul verbe a fonctionné et non que l'agent a poussé sans rien arrêter.
+
+**Chaque assertion doit pouvoir échouer, et la revue le vérifiera.** Un `grep`
+sur un journal vide dans les deux cas, un compte d'objets qui passe à zéro, un
+contrôle de vie qui passe sur un conteneur déjà mort : ce sont les trois formes
+qu'a prises ce défaut dans cette tranche.
+
+**Comment obtenir un rouge honnête**, puisque le compagnon est censé déjà bien
+se comporter et que la barrière passerait donc du premier coup — ce qui ne
+prouverait rien. Avant d'écrire l'implémentation de l'étape 1, lancer les
+assertions de l'étape 2 seules : sans le faux plan de contrôle capable de dire
+`STOPPING`, aucun objet n'apparaît sous `pre-shutdown/` et l'assertion rougit
+pour la bonne raison. **Coller ce rouge au rapport** ; une barrière verte du
+premier coup, sans preuve qu'elle savait rougir, est une décoration.
+
+- [ ] **Step 3: Lancer la barrière**
+
+```bash
+npx nx run companion:smoke
+```
+
+Attendu : vert une fois la tâche 9 bis livrée. Coller la sortie entière au
+rapport ; cette suite ouvre des sockets et des conteneurs, et le bruit d'après
+fermeture ne se voit qu'ainsi.
+
+- [ ] **Step 4: Commit**
+
+---
+
 ### Task 10: **[humain]** Publier l'image, et relever son digest
 
 Le §10 range la pose d'un tag git parmi les deux chemins qui n'ont pas de revue,
@@ -4656,7 +4917,22 @@ npx nx run companion:smoke
 
 Attendu : vert. Le tag ne se pose pas sur un travail rouge.
 
-- [ ] **Step 2: Poser le tag**
+- [ ] **Step 2: Pousser la branche, sans quoi le tag ne porte sur rien**
+
+La branche n'a pas d'upstream tant que personne ne l'a poussée, et `main` ne
+connaît pas `companion.yml`. Le workflow n'a pas besoin d'être sur la branche par
+défaut — pour un événement `push`, Actions lit les workflows **du ref poussé** —
+mais il faut que le commit existe sur le distant.
+
+**Pousser la branche n'est pas une mise en production** : le `CLAUDE.md` réserve
+ce mot à la fusion dans `main`, qui reste interdite ici tant que la tâche 11
+n'est pas faite.
+
+```bash
+git push -u origin tranche-3-les-saves
+```
+
+- [ ] **Step 3: Poser le tag**
 
 À lancer par un humain, depuis la branche :
 
@@ -4665,13 +4941,25 @@ git tag companion-v1
 git push origin companion-v1
 ```
 
-- [ ] **Step 3: Relever le digest**
+Deux échecs ne se voient qu'au premier passage, et aucun des deux n'est un défaut
+du workflow :
+
+- **Le paquet `ghcr.io/charlouze/beacon-companion` n'existe pas encore.** Le
+  `GITHUB_TOKEN` peut le créer, mais un paquet neuf n'est pas automatiquement lié
+  au dépôt : un `403` à l'étape de poussée se règle dans les réglages du paquet,
+  pas dans le YAML.
+- **La barrière tourne avant la publication** (§10), soit quelques minutes de
+  conteneurs. Un rouge là ne dit rien de la publication elle-même.
+
+- [ ] **Step 4: Relever le digest**
 
 Le workflow l'écrit dans son résumé d'exécution. Le relire, ou le redemander au
-registre :
+registre — **le tag d'image n'est pas celui du tag git** : `companion-v1` dit
+quel artefact du dépôt est publié, l'image s'appelle déjà `beacon-companion`, et
+le workflow retire donc le préfixe.
 
 ```bash
-docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:companion-v1
+docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:1
 ```
 
 Noter la ligne `Digest: sha256:…`. C'est ce que la tâche 11 écrit dans le
@@ -4692,6 +4980,14 @@ systemd qui sait faire une chose et une seule.
 **Interfaces :**
 - Consomme : le digest de la tâche 10, les deux points d'entrée des tâches 6 et 8.
 - Produit : un `cloud-init` complet. La tâche 13 en dépend.
+
+**Un dernier pas, décidé le 2026-09-07 :** la barrière de fumée cesse d'éprouver
+un `docker-compose` écrit à la main et éprouve **celui que ce fichier rend**. La
+revue de branche a montré que le compose de fumée et le compose réel pouvaient
+diverger sans que rien ne le dise — c'est exactement la forme du défaut qui a
+fait que `RUNNING` était confié à un agent qu'aucun compose ne démarrait. Deux
+descriptions d'une même chose dont une seule est testée valent une seule
+description non testée. Voir l'étape 5.
 
 - [ ] **Step 1: Écrire les tests, et les voir échouer**
 
@@ -4870,7 +5166,27 @@ en entier** — c'est le seul artefact de cette tranche qu'aucun test ne peut
 juger dans son ensemble, et la tranche 2 y a trouvé trois défauts que seule une
 lecture montrait.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Faire éprouver ce compose par la barrière de fumée**
+
+`deploy/companion/smoke/docker-compose.yml` décrit à la main la pile que ce
+fichier rend. Deux descriptions d'une même chose dont une seule est testée
+valent une seule description non testée, et la revue de branche a montré ce que
+cela coûte.
+
+Faire extraire au `run.sh` le compose **rendu** — le service du jeu remplacé par
+le bouchon, les points de montage et l'ordre gardés tels quels — et le lancer.
+Ce qui doit rester du compose de fumée est ce qui n'existe que pour le test : le
+MinIO, le faux plan de contrôle, le bouchon. Ce qui doit venir du rendu est tout
+ce qui décrit la pile réelle : les images et leurs digests, les volumes,
+`depends_on` et sa condition, les variables passées au compagnon.
+
+Le critère se vérifie en une phrase : **ajouter un service au `cloud-init` sans
+toucher à la fumée doit changer ce que la fumée lance.** Si ce n'est pas le cas,
+les deux descriptions ont recommencé à diverger.
+
+Attendu : vert. Coller la sortie entière au rapport.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add deploy/cloud-init/src
@@ -5120,6 +5436,35 @@ production invalide se corrige **avant** que le plan suivant s'écrive.
 - Modifier : `docs/superpowers/specs/2026-09-02-game-hosting-design.md`
 - Modifier : `docs/superpowers/plans/2026-09-02-lotissement.md`
 - Modifier : `probe/RESULTS.md` si une mesure de la tâche 13 y appartient
+
+**Ce que l'exécution a déjà mis de côté pour cette tâche**, et qu'elle ne
+redécouvrira pas seule — le détail et le coût de chaque décision sont au ledger
+de la tranche, sous `.superpowers/sdd/` :
+
+- **Le §6 est déjà corrigé** (commits `17167ad` et `068c4ba`), et sa correction
+  reste **non observée** : la ligne ajoutée au §12 attend le verdict de la
+  tâche 13.
+- **Le format de clé d'objet vit en deux endroits**, dans l'adapter et dans les
+  Functions. Les trois autres emplacements sont fermés par le §4 et le §7 ; la
+  réponse permanente est un préfixe exporté d'un module sans SDK, et c'est une
+  décision de spec.
+- **Onze contradictions entre le code du plan et ses propres tests** ont été
+  trouvées à l'exécution — dont un `tar.create()` sur une liste vide, deux
+  fixtures qui compressaient sous le plancher, une boucle qui tournait à
+  l'infini sous horloge figée, et un digest inventé. Ce n'est pas une série
+  d'accidents mais un motif : **du code jamais exécuté, écrit dans un plan, se
+  périme entre son écriture et sa lecture.** La tâche 9 bis a commencé à écrire
+  autrement ; le lotissement doit dire si c'est la règle.
+- **Le graphe de cette tranche omettait l'arête 1 → 3** : `agent-protocol`
+  consomme `SAVE_ORIGINS` du domaine.
+- **Le §9 promet un test de fumée qui démarre le vrai serveur** ; il ne le fait
+  pas, et c'est délibéré.
+- **La leçon de méthode**, si une seule doit rester : neuf tâches de tests
+  unitaires contre des doubles ont prouvé la logique, et **rien ne prouvait que
+  l'artefact démarrait** — le test de fumée, écrit en dernier, a trouvé quatre
+  défauts qui rendaient l'image inutilisable. Puis la revue de branche a trouvé
+  l'ordre suivant du même défaut : la fumée prouvait que le conteneur démarre,
+  rien ne prouvait que le plan de contrôle et la machine s'accordent.
 
 - [ ] **Step 1: Écrire le relevé des deux sessions**
 

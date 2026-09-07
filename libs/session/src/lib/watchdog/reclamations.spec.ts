@@ -45,7 +45,9 @@ const runningSession = (sessionId: string, deadlineIso: string) =>
   });
 
 const reasons = (v: WatchdogView) =>
-  reclamations(v, DEFAULT_LIMITS).map((r) => `${r.sessionId}:${r.reason}`);
+  reclamations(v, DEFAULT_LIMITS).destroy.map((r) => `${r.sessionId}:${r.reason}`);
+
+const expired = (v: WatchdogView) => reclamations(v, DEFAULT_LIMITS).expired;
 
 describe('reclamations', () => {
   it('reclaims nothing when every hosted session has an open intent', () => {
@@ -68,7 +70,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(16)),
+      server: record('PROVISIONING', 's1', minutesAgo(26)),
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });
@@ -77,7 +79,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(14)),
+      server: record('PROVISIONING', 's1', minutesAgo(24)),
     });
     expect(reasons(v)).toEqual([]);
   });
@@ -112,8 +114,8 @@ describe('reclamations', () => {
   });
 
   it('says as much in the detail, rather than inventing provider wording', () => {
-    const v = view({ openSessions: ['s1'], server: record('PROVISIONING', 's1', minutesAgo(16)) });
-    const [first] = reclamations(v, DEFAULT_LIMITS);
+    const v = view({ openSessions: ['s1'], server: record('PROVISIONING', 's1', minutesAgo(26)) });
+    const [first] = reclamations(v, DEFAULT_LIMITS).destroy;
     expect(first.detail).toBe('the provider holds nothing for this session');
   });
 
@@ -132,7 +134,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: [],
-      server: record('PROVISIONING', 's1', minutesAgo(20)),
+      server: record('PROVISIONING', 's1', minutesAgo(26)),
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });
@@ -149,23 +151,33 @@ describe('reclamations', () => {
   });
 
   it('carries the provider wording into the reclamation', () => {
-    const [first] = reclamations(view({ hosted: [hosted('s1')] }), DEFAULT_LIMITS);
+    const [first] = reclamations(view({ hosted: [hosted('s1')] }), DEFAULT_LIMITS).destroy;
     expect(first.detail).toBe('server for s1');
   });
 
-  // §6: deadline exceeded by more than two minutes, still RUNNING → forced stop.
-  // The grace exists because a watchdog runs every five minutes and a deadline
-  // that just passed is not a system that failed.
-  it('reclaims a session whose deadline passed by more than the grace', () => {
+  // §6, and the load-bearing rule of task 9 bis: an elapsed deadline finishes a
+  // session, it does not seize its resources. Destroying here is exactly the
+  // bug the whole-branch review found — both stop paths tore the machine down
+  // before the agent ever learned it was stopping.
+  it('destroys nothing when a deadline passes the grace', () => {
     const v = view({
       server: record('RUNNING', 's1', null),
       session: runningSession('s1', '2026-09-07T00:00:00Z'),
       now: new Date('2026-09-07T00:02:01Z'),
     });
-    expect(reclamations(v, DEFAULT_LIMITS)[0]).toMatchObject({
-      sessionId: 's1',
-      reason: 'deadline-exceeded',
+    expect(reclamations(v, DEFAULT_LIMITS).destroy).toEqual([]);
+  });
+
+  // In its place: a request to stop, so the watchdog can write STOPPING and
+  // let the clean shutdown of §6 run — the agent stops the game, pushes the
+  // last save, and reports it; that report is what destroys, in agentReport.
+  it('asks a session to stop once its deadline passes the grace', () => {
+    const v = view({
+      server: record('RUNNING', 's1', null),
+      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      now: new Date('2026-09-07T00:02:01Z'),
     });
+    expect(expired(v)).toEqual([{ sessionId: 's1', detail: 'closing time was 00:00 UTC' }]);
   });
 
   it('leaves a session alone inside the grace', () => {
@@ -174,6 +186,22 @@ describe('reclamations', () => {
       session: runningSession('s1', '2026-09-07T00:00:00Z'),
       now: new Date('2026-09-07T00:01:59Z'),
     });
-    expect(reclamations(v, DEFAULT_LIMITS)).toEqual([]);
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual({ destroy: [], expired: [] });
+  });
+
+  // The filet, and it must not move: an expired deadline no longer destroys,
+  // so this is the only line left that ever does — a STOPPING session the
+  // agent never reported back for.
+  it('still destroys a session stuck in STOPPING past its own limit, deadline aside', () => {
+    const v = view({
+      hosted: [hosted('s1')],
+      openSessions: ['s1'],
+      server: record('STOPPING', 's1', minutesAgo(11)),
+    });
+    const decision = reclamations(v, DEFAULT_LIMITS);
+    expect(decision.destroy).toEqual([
+      { sessionId: 's1', reason: 'stopping-timeout', detail: 'server for s1' },
+    ]);
+    expect(decision.expired).toEqual([]);
   });
 });

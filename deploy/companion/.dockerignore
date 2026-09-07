@@ -1,0 +1,3 @@
+# Not shipped to the image; only wasted upload time to the docker daemon.
+node_modules
+out-tsc

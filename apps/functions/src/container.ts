@@ -7,6 +7,9 @@ import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
+import { agentTokens } from './agent-tokens.js';
+import { saveRecords } from './save-records.js';
+import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import type { ProvisionDeps } from './provisioning.js';
 import type { WatchdogDeps } from './watchdog.js';
@@ -25,14 +28,37 @@ export const SERVER_PASSWORD: ReturnType<typeof defineSecret> = defineSecret('SE
 export const DYNHOST_USER: ReturnType<typeof defineSecret> = defineSecret('DYNHOST_USER');
 export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
   defineSecret('DYNHOST_PASSWORD');
+export const AGENT_ENDPOINT: ReturnType<typeof defineString> = defineString('AGENT_ENDPOINT');
+export const S3_ENDPOINT: ReturnType<typeof defineString> = defineString('S3_ENDPOINT');
+export const S3_ACCESS_KEY: ReturnType<typeof defineString> = defineString('S3_ACCESS_KEY');
+export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_SECRET_KEY');
+export const SAVES_BUCKET: ReturnType<typeof defineString> = defineString('SAVES_BUCKET');
+export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES_BUCKET');
 
 /**
- * What `onServerStateChange` and the watchdog both need: one Scaleway client,
- * one Firestore handle. Built once here so neither Function recopies the
- * other's wiring.
+ * The Firestore half of `buildShared` — no Scaleway client, no zone to
+ * validate. What the watchdog needs on top of it, and nothing more.
+ */
+function buildFirestoreDeps() {
+  const db = getFirestore(defaultApp());
+  return {
+    clock: { now: () => new Date() },
+    state: serverStateStore(db),
+    ledger: provisioningLedger(db),
+    health: watchdogHealth(db),
+    settings: settingsStore(db),
+  };
+}
+
+/**
+ * What `onServerStateChange`, the watchdog, and — since task 9 bis —
+ * `agentReport` all need on top of the Firestore half: one Scaleway client.
+ * Built once here so no Function recopies another's wiring. `agentReport`
+ * joined this list the day the destruction moved into it (§6 étape 3): it
+ * now needs `ServerHost.close()` on every `saved` report that arrives while
+ * STOPPING, not only on a state-change trigger.
  */
 function buildShared() {
-  const db = getFirestore(defaultApp());
   const zone = SCW_ZONE.value();
 
   // The region is derived from the zone, and an empty or malformed one derives
@@ -43,24 +69,25 @@ function buildShared() {
     throw new Error(`SCW_ZONE must be a Scaleway zone such as fr-par-1, got "${zone}"`);
   }
 
+  const region = zone.slice(0, zone.lastIndexOf('-'));
   const client = createClient({
     accessKey: SCW_ACCESS_KEY.value(),
     secretKey: SCW_SECRET_KEY.value(),
     defaultProjectId: SCW_PROJECT_ID.value(),
     defaultZone: zone,
-    defaultRegion: zone.slice(0, zone.lastIndexOf('-')),
+    defaultRegion: region,
   });
 
   return {
-    clock: { now: () => new Date() },
+    ...buildFirestoreDeps(),
+    // The zone's region, already validated above — the bucket's saveKeys reuse
+    // it below rather than re-deriving it, so a malformed zone fails loudly
+    // right here instead of handing the restore a region sliced from nothing.
+    region,
     host: new ScalewayServerHost(
       fromSdk(new Instancev1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
     ),
-    state: serverStateStore(db),
-    ledger: provisioningLedger(db),
-    health: watchdogHealth(db),
-    settings: settingsStore(db),
   };
 }
 
@@ -73,13 +100,40 @@ export function buildProvisionDeps(): ProvisionDeps {
   return {
     clock: shared.clock,
     host: shared.host,
-    dns: dynHostUpdater({
-      user: DYNHOST_USER.value(),
-      password: DYNHOST_PASSWORD.value(),
-    }),
     state: shared.state,
     settings: shared.settings,
     ledger: shared.ledger,
     serverPassword: () => SERVER_PASSWORD.value(),
+    tokens: agentTokens(getFirestore(defaultApp())),
+    agentEndpoint: AGENT_ENDPOINT.value(),
+    saveKeys: () => ({
+      endpoint: S3_ENDPOINT.value(),
+      // The bucket's region, the same one `shared.host` was built against —
+      // §2 makes them the same region on purpose, and an intra-region
+      // transfer is what the restore depends on.
+      region: shared.region,
+      savesBucket: SAVES_BUCKET.value(),
+      gamesBucket: GAMES_BUCKET.value(),
+      accessKey: S3_ACCESS_KEY.value(),
+      secretKey: S3_SECRET_KEY.value(),
+    }),
+  };
+}
+
+export function buildAgentReportDeps(): AgentReportDeps {
+  const shared = buildShared();
+  const db = getFirestore(defaultApp());
+  return {
+    clock: shared.clock,
+    tokens: agentTokens(db),
+    state: shared.state,
+    settings: shared.settings,
+    ledger: shared.ledger,
+    saves: saveRecords(db),
+    dns: dynHostUpdater({
+      user: DYNHOST_USER.value(),
+      password: DYNHOST_PASSWORD.value(),
+    }),
+    host: shared.host,
   };
 }

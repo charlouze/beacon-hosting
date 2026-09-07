@@ -1,0 +1,57 @@
+name: companion
+
+# A git tag, and nothing else. §10: publishing an image is one of the two paths
+# that has no review, so it is deliberately a gesture and never a side effect of
+# a merge.
+on:
+  push:
+    tags: ['companion-v*']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx nx build companion
+
+      # The barrier (§10). The image does not leave the runner if the round trip
+      # or the refusal of an empty archive does not hold.
+      - run: npx nx run companion:smoke
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `companion-v1` names the git tag, where the prefix says which artefact
+      # of the repository is being published. The image is already called
+      # beacon-companion, so carrying the prefix over would read
+      # `beacon-companion:companion-v1`. The trigger above only ever fires on
+      # `companion-v*`, so stripping it is total and needs no fallback.
+      - id: version
+        run: echo "value=${GITHUB_REF_NAME#companion-v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        id: push
+        with:
+          context: deploy/companion
+          push: true
+          tags: ghcr.io/charlouze/beacon-companion:${{ steps.version.outputs.value }}
+
+      # The digest is what the cloud-init references, never the tag. Printed
+      # here because a human copies it into the catalogue by hand, in a commit.
+      - run: echo "digest ${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

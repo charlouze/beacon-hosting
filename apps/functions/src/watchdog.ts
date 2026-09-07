@@ -67,8 +67,10 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     alreadyAnnounced: previous.stranded,
   };
 
+  const decision = reclamations(view, deps.limits);
+
   const outcomes: ReclaimOutcome[] = [];
-  for (const reclamation of reclamations(view, deps.limits)) {
+  for (const reclamation of decision.destroy) {
     try {
       await deps.host.close(reclamation.sessionId);
       outcomes.push({ reclamation, closed: true });
@@ -94,7 +96,11 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     sweep = { destroyed: [], stranded: [], errors: [String(error)] };
   }
 
-  const correction = reconcile(view, outcomes, sweep);
+  // decision.expired folds into this same correction (review finding 2):
+  // a session marked expired can, in this very pass, also be one the
+  // grounding above already sent to IDLE, and reconcile is the one function
+  // that gets to decide between the two.
+  const correction = reconcile(view, outcomes, sweep, decision.expired);
   await deps.state.apply(correction, now);
   for (const sessionId of correction.closeIntents) {
     await deps.ledger.close(sessionId, now);

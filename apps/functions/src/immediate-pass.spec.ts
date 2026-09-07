@@ -4,6 +4,7 @@ import { getFirestore, type DocumentSnapshot, type Firestore } from 'firebase-ad
 import { FakeInstanceApi, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { DEFAULT_LIMITS, type ServerHost, type Session } from '@beacon/session';
 import { serverStateStore, settingsStore, sessionFrom, SERVER_DOC } from '@beacon/session-record';
+import { agentTokens } from './agent-tokens.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import { runStateChange, type ProvisionDeps } from './provisioning.js';
 import { runWatchdog, type WatchdogDeps } from './watchdog.js';
@@ -30,6 +31,7 @@ describe('a pass fired right after a provisioning', () => {
     const db = getFirestore();
     await db.recursiveDelete(db.collection('provisioning'));
     await db.recursiveDelete(db.collection('events'));
+    await db.recursiveDelete(db.collection('agentTokens'));
     await db.doc(SERVER_DOC).delete();
     await db.doc('health/watchdog').delete();
     await db.doc(SERVER_DOC).set(openingDocument());
@@ -47,19 +49,32 @@ describe('a pass fired right after a provisioning', () => {
 
     expect(api.servers).toHaveLength(1);
     expect(api.ips).toHaveLength(1);
-    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('RUNNING');
+    // §6: RUNNING is now the agent's report, not this pass's — an immediate
+    // watchdog pass must leave a session it just created alone, in
+    // PROVISIONING, rather than reclaim or advance it.
+    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('PROVISIONING');
   });
 
-  it('destroys nothing more after a stop, and closes the intent', async () => {
+  // Task 9 bis: STOPPING no longer destroys here, or on the immediate pass
+  // that follows it — the machine survives until the agent reports `saved`
+  // (agent-report.ts), or until the watchdog's own ten-minute net, neither of
+  // which this test fires. Proving the opposite was the bug the whole-branch
+  // review found: the machine was gone before the agent ever learned it was
+  // stopping.
+  it('leaves the machine alone right after a stop request', async () => {
     const db = getFirestore();
     await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
-    await db.doc(SERVER_DOC).set({ state: 'STOPPING' }, { merge: true });
-    await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
+    await db.doc(SERVER_DOC).set({ state: 'STOPPING', stateSince: new Date() }, { merge: true });
+    const acted = await runStateChange(
+      provisionDeps(db, host),
+      sessionOf(await db.doc(SERVER_DOC).get()),
+    );
+    expect(acted).toBe(false);
 
     await runWatchdog(watchdogDeps(db, host));
 
-    expect(api.servers).toHaveLength(0);
-    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('IDLE');
+    expect(api.servers).toHaveLength(1);
+    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('STOPPING');
   });
 });
 
@@ -83,11 +98,20 @@ const sessionOf = (snapshot: DocumentSnapshot): Session => {
 const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
   clock: { now: () => new Date() },
   host,
-  dns: { point: async () => undefined },
   state: serverStateStore(db),
   settings: settingsStore(db),
   ledger: provisioningLedger(db),
   serverPassword: () => 'probe',
+  tokens: agentTokens(db),
+  agentEndpoint: 'https://example.invalid/agentReport',
+  saveKeys: () => ({
+    endpoint: 'https://s3.fr-par.scw.cloud',
+    region: 'fr-par',
+    savesBucket: 'beacon-saves',
+    gamesBucket: 'beacon-games',
+    accessKey: 'SCWXXXXXXXXXXXXXXXXX',
+    secretKey: 'probe',
+  }),
 });
 
 const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({

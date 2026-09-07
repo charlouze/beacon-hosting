@@ -1,10 +1,32 @@
 import type { Game, JoinInfo } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 
+/** The s3 side of what a machine is told, and the only credential it holds. */
+export interface SaveAccess {
+  readonly endpoint: string;
+  readonly region: string;
+  /** Written by the machine. */
+  readonly savesBucket: string;
+  /** Read by the machine, never written — §5 keeps them in a bucket of their own. */
+  readonly gamesBucket: string;
+  readonly accessKey: string;
+  readonly secretKey: string;
+}
+
 export interface BootRequest {
   readonly serverName: string;
   readonly serverPassword: string;
   readonly slotCount: number;
+  readonly sessionId: string;
+  /**
+   * Thirty-two bytes that die with the session (§7). It rides here because
+   * first-boot data is the only channel to a machine that holds nothing yet,
+   * and it is the reason this whole payload is treated as a secret.
+   */
+  readonly agentToken: string;
+  /** Where the companion reports. Deployed value, never compiled in. */
+  readonly endpoint: string;
+  readonly saves: SaveAccess;
 }
 
 /**
@@ -38,7 +60,25 @@ export function catalogFor(game: Game): GameCatalogEntry {
   return entry;
 }
 
-export const renderCloudInit = (game: Game, request: BootRequest): string =>
-  catalogFor(game).render(request);
+/**
+ * The only place `endpoint` enters the system. It comes from `AGENT_ENDPOINT`,
+ * filled by a human, and it is the url the machine sends its token to — in an
+ * `authorization` header, once a minute, for the whole session. Over plain http
+ * that token crosses the internet in clear, and **nothing downstream notices**:
+ * the reports succeed, the session runs, and the leak leaves no trace.
+ *
+ * So it is refused here, at the frontier, and not on the machine. The companion
+ * stays permissive on purpose — the smoke harness answers on http over a docker
+ * bridge, where no wire leaves the developer's laptop, and a rule there would
+ * refuse the barrier while buying nothing this one does not already buy.
+ */
+export const renderCloudInit = (game: Game, request: BootRequest): string => {
+  if (!request.endpoint.startsWith('https://')) {
+    throw new Error(
+      `refusing to write a cloud-init whose endpoint is not https: the agent token travels in its headers`,
+    );
+  }
+  return catalogFor(game).render(request);
+};
 
 export const renderCompose = (game: Game): string => catalogFor(game).compose();

@@ -1,0 +1,20 @@
+{
+  "Version": "2023-04-17",
+  "Id": "beacon-games-lecture-seule-pour-la-machine",
+  "Statement": [
+    {
+      "Sid": "LeProprietaireGardeLaMain",
+      "Effect": "Allow",
+      "Principal": { "SCW": "user_id:3cf5ab66-fa26-44f2-92a4-0983e420bfe3" },
+      "Action": ["s3:*"],
+      "Resource": ["beacon-games", "beacon-games/*"]
+    },
+    {
+      "Sid": "LaMachineLitEtNEcritPas",
+      "Effect": "Allow",
+      "Principal": { "SCW": "application_id:3463d48b-f0d2-491c-b9c4-8bcb24b3e2c5" },
+      "Action": ["s3:ListBucket", "s3:GetObject"],
+      "Resource": ["beacon-games", "beacon-games/*"]
+    }
+  ]
+}
