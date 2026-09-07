@@ -8,6 +8,7 @@
     "tags": [
       "scope:app"
     ],
+    "implicitDependencies": ["cloud-init"],
     "targets": {
       "build": {
         "executor": "@nx/esbuild:esbuild",

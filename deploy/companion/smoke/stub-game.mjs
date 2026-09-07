@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const dir = process.env.SAVE_DIR ?? '/opt/enshrouded/savegame';
+const dir = process.env.SAVE_DIR ?? '/opt/enshrouded/server/savegame';
 mkdirSync(dir, { recursive: true });
 
 // Twenty kilobytes of random bytes, so the archive lands well above the floor
