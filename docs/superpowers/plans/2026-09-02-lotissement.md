@@ -1,7 +1,7 @@
 # Lotissement de l'implémentation
 
 Date : 2026-09-02
-Statut : **proposé**, non validé par le commanditaire
+Statut : **validé** par le commanditaire le 2026-09-08
 
 Ce document dit dans quel ordre le spec
 [`2026-09-02-game-hosting-design.md`](../specs/2026-09-02-game-hosting-design.md)
