@@ -75,11 +75,20 @@ export const onServerStateChange = onDocumentWritten(
  * caller has no Google identity and never will — what authorises it is the
  * session token, and nothing else. This wrapper holds no decision: everything
  * it does is tested next door, without a network.
+ *
+ * Called roughly once a minute by every live session's companion, and one of
+ * the calls it can trigger, on a `saved` report with origin `pre-shutdown`
+ * while STOPPING, is the instance's destruction (§6 étape 3) — moved here from
+ * `onServerStateChange` so the machine gets a chance to push its final save
+ * before it is gone.
  */
 export const agentReport = onRequest(
   {
     region: 'europe-west1',
-    secrets: [DYNHOST_USER, DYNHOST_PASSWORD],
+    // SCW_SECRET_KEY joined this list with task 9 bis: agentReport now builds
+    // a ServerHost to destroy on a `saved` report while STOPPING (§6 étape 3),
+    // which the state-change trigger used to do alone.
+    secrets: [DYNHOST_USER, DYNHOST_PASSWORD, SCW_SECRET_KEY],
     // Without this, gen2 requires a Google identity on every call and the
     // machine — which holds none, by §7 — would get 403 forever.
     invoker: 'public',

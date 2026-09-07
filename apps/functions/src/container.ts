@@ -37,11 +37,7 @@ export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES
 
 /**
  * The Firestore half of `buildShared` — no Scaleway client, no zone to
- * validate. `buildAgentReportDeps` needs exactly this and nothing more: the
- * endpoint it wires touches no Scaleway config, and building the provider
- * client for it read `SCW_SECRET_KEY` on every report of every session
- * forever (a secret `main.ts` deliberately does not declare for that
- * function), and threw on a malformed zone this endpoint never uses.
+ * validate. What the watchdog needs on top of it, and nothing more.
  */
 function buildFirestoreDeps() {
   const db = getFirestore(defaultApp());
@@ -55,9 +51,12 @@ function buildFirestoreDeps() {
 }
 
 /**
- * What `onServerStateChange` and the watchdog both need on top of the
- * Firestore half: one Scaleway client. Built once here so neither Function
- * recopies the other's wiring.
+ * What `onServerStateChange`, the watchdog, and — since task 9 bis —
+ * `agentReport` all need on top of the Firestore half: one Scaleway client.
+ * Built once here so no Function recopies another's wiring. `agentReport`
+ * joined this list the day the destruction moved into it (§6 étape 3): it
+ * now needs `ServerHost.close()` on every `saved` report that arrives while
+ * STOPPING, not only on a state-change trigger.
  */
 function buildShared() {
   const zone = SCW_ZONE.value();
@@ -122,7 +121,7 @@ export function buildProvisionDeps(): ProvisionDeps {
 }
 
 export function buildAgentReportDeps(): AgentReportDeps {
-  const shared = buildFirestoreDeps();
+  const shared = buildShared();
   const db = getFirestore(defaultApp());
   return {
     clock: shared.clock,
@@ -135,5 +134,6 @@ export function buildAgentReportDeps(): AgentReportDeps {
       user: DYNHOST_USER.value(),
       password: DYNHOST_PASSWORD.value(),
     }),
+    host: shared.host,
   };
 }

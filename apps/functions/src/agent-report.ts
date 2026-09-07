@@ -7,12 +7,14 @@ import {
   type DomainEvent,
   type Game,
   type SaveOrigin,
+  type ServerHost,
   type Session,
   type SessionId,
 } from '@beacon/session';
 import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
+import { sanitizeLastError } from './sanitize-last-error.js';
 import type { SaveRecords } from './save-records.js';
 
 export interface AgentReportDeps {
@@ -23,6 +25,13 @@ export interface AgentReportDeps {
   readonly ledger: ProvisioningLedger;
   readonly saves: SaveRecords;
   readonly dns: DnsUpdater;
+  /**
+   * §6 étape 3. Task 9 bis moved the destruction here from
+   * `onServerStateChange`: that trigger fired the instant STOPPING was
+   * written, before the agent had a chance to learn it was stopping — the
+   * machine was gone before `pre-shutdown` could ever mean anything.
+   */
+  readonly host: ServerHost;
 }
 
 /** Nothing to do, and nothing to keep doing. What a stale machine is told. */
@@ -180,7 +189,94 @@ async function recordSave(
     return;
   }
 
+  // The destruction is one more consequence of the deposit, never a
+  // replacement for it: the save is recorded whether or not the session is
+  // the one about to be destroyed.
   await deps.saves.record(save);
+
+  // §6 étape 3, and the reason this task exists: `session` is read from
+  // `server/current`, never from anything the report claims, so a `saved`
+  // report cannot destroy anything by itself — only the control plane's own
+  // STOPPING can. Without this guard, the cadence push that reports `saved`
+  // every ten minutes of ordinary play would kill the machine mid-game.
+  //
+  // STOPPING alone is not enough (spec fix ed130a8): the agent loop is
+  // sequential, so a cadence push can be mid-flight — archived and uploaded —
+  // the instant a stop is requested, and it reports `saved` with origin
+  // `auto` right after STOPPING is written. Destroying on that report would
+  // skip §6 étape 2 entirely: the game never stopped, the final save never
+  // pushed, `pre-shutdown` naming nothing. The origin is the guard that tells
+  // the final save from one merely arriving during the wait; a final save
+  // that never comes is still covered, by the stopping-timeout net.
+  if (session.state === 'STOPPING' && report.save.origin === 'pre-shutdown') {
+    await destroy(deps, session, now);
+  }
+}
+
+/**
+ * §6 étape 3-4. Idempotent through `ServerHost.close()`: the watchdog's
+ * `stopping-timeout` net can still fire on the same session, and the two
+ * destructions must not disagree about what `server/current` becomes — both
+ * compute the same target, IDLE with the facts cleared.
+ *
+ * That covers the *state*, not the *audit*. Each destroyer also files its own
+ * `SessionStopped` carrying `costEuros`, and §11 sums that field — two of them
+ * for one stop is a wrong month, not just a harmless repeat. The window is
+ * seconds wide (an agent has to be minutes late reporting `pre-shutdown` for
+ * the net to have already fired), but real, so the re-read below is the
+ * no-op: if the net got here first, `server/current` is no longer STOPPING
+ * for this session by the time this call is ready to write, and there is
+ * nothing left for it to record — the net's own apply and `ledger.close`
+ * already did it.
+ */
+async function destroy(deps: AgentReportDeps, session: Session, now: Date): Promise<void> {
+  const sessionId = session.sessionId;
+  if (sessionId === null) return;
+  const settings = await deps.settings.read();
+
+  try {
+    await deps.host.close(sessionId);
+  } catch (error) {
+    await deps.state.apply(
+      {
+        state: 'FAILED',
+        lastError: sanitizeLastError(String(error)),
+        clearFacts: false,
+        deadline: null,
+        closeIntents: [],
+        events: [{ type: 'CleanupFailed', sessionId, detail: String(error) }],
+      },
+      now,
+    );
+    return;
+  }
+
+  const current = await deps.state.readSession();
+  if (current === null || current.sessionId !== sessionId || current.state !== 'STOPPING') {
+    return;
+  }
+
+  const stopped: DomainEvent = {
+    type: 'SessionStopped',
+    sessionId,
+    detail: 'stopped after the final save',
+    // §11: the started hour is due. Computed here and not at the deadline,
+    // because what is billed is what the machine actually lived.
+    costEuros: session.estimatedCost(deps.clock, settings),
+  };
+
+  await deps.state.apply(
+    {
+      state: 'IDLE',
+      lastError: null,
+      clearFacts: true,
+      deadline: null,
+      closeIntents: [],
+      events: [stopped],
+    },
+    now,
+  );
+  await deps.ledger.close(sessionId, now);
 }
 
 /**

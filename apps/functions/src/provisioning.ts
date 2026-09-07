@@ -1,15 +1,11 @@
 import { renderCloudInit, type SaveAccess } from '@beacon/cloud-init';
 import { newAgentToken } from '@beacon/agent-protocol';
-import type {
-  Clock,
-  DomainEvent,
-  ServerHost,
-  Session,
-} from '@beacon/session';
+import type { Clock, ServerHost, Session } from '@beacon/session';
 import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
 import { sessionTag } from '@beacon/scaleway-compute';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
+import { sanitizeLastError } from './sanitize-last-error.js';
 
 export interface ProvisionDeps {
   readonly clock: Clock;
@@ -27,20 +23,20 @@ export interface ProvisionDeps {
 }
 
 /**
- * The only frontier to the secrets (§6). Two states do something; every other
- * one is a write this function has no business reacting to — including the
- * RUNNING that `agentReport` writes, which would otherwise re-enter here.
+ * The only frontier to the secrets (§6). One state does something; every
+ * other one is a write this function has no business reacting to — including
+ * the RUNNING that `agentReport` writes, which would otherwise re-enter here.
  *
- * It answers whether a pass has something to do right away, not whether this
- * function acted: a successful teardown already destroyed everything it could
- * find, by tag, and would have thrown otherwise — there is nothing left for a
- * pass to sweep, and asking for one anyway races the provider's still
- * in-flight destruction. Every failure path leaves a resource whose fate a
- * pass still has to settle, so those keep asking.
+ * **STOPPING triggers nothing here (task 9 bis).** It used to destroy on
+ * sight — the instant the browser or the watchdog wrote STOPPING, before the
+ * agent had a chance to learn it was stopping at all. §6 now makes the
+ * agent's `saved` report the one trigger of the destruction: it runs from
+ * `agentReport` (agent-report.ts), once the game has stopped and the last
+ * save is pushed. This branch stays absent on purpose — adding it back
+ * un-fixes the bug this task exists for.
  */
 export async function runStateChange(deps: ProvisionDeps, session: Session): Promise<boolean> {
   if (session.state === 'PROVISIONING') return provision(deps, session);
-  if (session.state === 'STOPPING') return tearDown(deps, session);
   return false;
 }
 
@@ -137,73 +133,4 @@ async function failed(
     now,
   );
   await deps.ledger.close(sessionId, now);
-}
-
-const MAX_LAST_ERROR_LENGTH = 500;
-
-/**
- * `server/current.lastError` is read by every member's browser, live. The
- * failure it summarises can carry the cloud-init in its text — nothing
- * proves the provider's SDK keeps the agent token or the S3 secret key out of
- * an error message — so this is the one gate between an internal failure and
- * a client-readable field. `events` above keeps the full, un-sanitised
- * `detail`: only this field is bounded and scrubbed.
- */
-function sanitizeLastError(detail: string): string {
-  const scrubbed = detail.replace(/[A-Za-z0-9+/_=-]{20,}/g, '[redacted]');
-  return scrubbed.length > MAX_LAST_ERROR_LENGTH
-    ? `${scrubbed.slice(0, MAX_LAST_ERROR_LENGTH)}…`
-    : scrubbed;
-}
-
-async function tearDown(deps: ProvisionDeps, session: Session): Promise<boolean> {
-  const sessionId = session.sessionId;
-  if (sessionId === null) return false;
-  const now = deps.clock.now();
-  const settings = await deps.settings.read();
-
-  try {
-    await deps.host.close(sessionId);
-  } catch (error) {
-    await deps.state.apply(
-      {
-        state: 'FAILED',
-        lastError: sanitizeLastError(String(error)),
-        clearFacts: false,
-        deadline: null,
-        closeIntents: [],
-        events: [{ type: 'CleanupFailed', sessionId, detail: String(error) }],
-      },
-      now,
-    );
-    return true;
-  }
-
-  const stopped: DomainEvent = {
-    type: 'SessionStopped',
-    sessionId,
-    detail: 'stopped on request',
-    // §11: the started hour is due. Computed here and not at the deadline,
-    // because what is billed is what the machine actually lived.
-    costEuros: session.estimatedCost(deps.clock, settings),
-  };
-
-  await deps.state.apply(
-    {
-      state: 'IDLE',
-      lastError: null,
-      clearFacts: true,
-      deadline: null,
-      closeIntents: [],
-      events: [stopped],
-    },
-    now,
-  );
-  await deps.ledger.close(sessionId, now);
-  // Not true: the destruction just succeeded, by tag, and threw if it could
-  // not — there is nothing left for an immediate pass to find. Tonight's
-  // first real session asked for one anyway and it raced `terminate`, still
-  // in flight, into a CleanupFailed that lied about a teardown that had
-  // already worked.
-  return false;
 }

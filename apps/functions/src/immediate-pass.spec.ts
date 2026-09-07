@@ -55,16 +55,26 @@ describe('a pass fired right after a provisioning', () => {
     expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('PROVISIONING');
   });
 
-  it('destroys nothing more after a stop, and closes the intent', async () => {
+  // Task 9 bis: STOPPING no longer destroys here, or on the immediate pass
+  // that follows it — the machine survives until the agent reports `saved`
+  // (agent-report.ts), or until the watchdog's own ten-minute net, neither of
+  // which this test fires. Proving the opposite was the bug the whole-branch
+  // review found: the machine was gone before the agent ever learned it was
+  // stopping.
+  it('leaves the machine alone right after a stop request', async () => {
     const db = getFirestore();
     await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
-    await db.doc(SERVER_DOC).set({ state: 'STOPPING' }, { merge: true });
-    await runStateChange(provisionDeps(db, host), sessionOf(await db.doc(SERVER_DOC).get()));
+    await db.doc(SERVER_DOC).set({ state: 'STOPPING', stateSince: new Date() }, { merge: true });
+    const acted = await runStateChange(
+      provisionDeps(db, host),
+      sessionOf(await db.doc(SERVER_DOC).get()),
+    );
+    expect(acted).toBe(false);
 
     await runWatchdog(watchdogDeps(db, host));
 
-    expect(api.servers).toHaveLength(0);
-    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('IDLE');
+    expect(api.servers).toHaveLength(1);
+    expect((await db.doc(SERVER_DOC).get()).get('state')).toBe('STOPPING');
   });
 });
 
