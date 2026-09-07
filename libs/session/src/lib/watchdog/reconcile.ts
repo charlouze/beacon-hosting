@@ -53,7 +53,7 @@ interface ClosedMeaning {
 /**
  * What each reason means once its destruction succeeded. A table and not a
  * switch with a default: a reason added tomorrow must not compile until it has
- * an answer here. With a default, a deadline-exceeded reclamation would file
+ * an answer here. With a default, a stopping-timeout reclamation would file
  * itself as SessionReclaimed and lose the session cost §11 hangs on it, and
  * nothing at all would say so.
  */
@@ -69,15 +69,6 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
   'provisioning-timeout': {
     event: ({ sessionId, detail }) => ({ type: 'ProvisioningFailed', sessionId, detail }),
     idleReason: 'provisioning did not finish in time',
-  },
-  'deadline-exceeded': {
-    event: ({ sessionId, detail }, costEuros) => ({
-      type: 'SessionStopped',
-      sessionId,
-      detail,
-      costEuros,
-    }),
-    idleReason: null,
   },
   'stopping-timeout': {
     event: ({ sessionId, detail }, costEuros) => ({

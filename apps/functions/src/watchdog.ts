@@ -67,8 +67,10 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     alreadyAnnounced: previous.stranded,
   };
 
+  const decision = reclamations(view, deps.limits);
+
   const outcomes: ReclaimOutcome[] = [];
-  for (const reclamation of reclamations(view, deps.limits)) {
+  for (const reclamation of decision.destroy) {
     try {
       await deps.host.close(reclamation.sessionId);
       outcomes.push({ reclamation, closed: true });
