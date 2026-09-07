@@ -6,6 +6,12 @@ python = "3.14.7"
 # machine de jeu. Épinglé parce que c'est l'outil qui touche la seule donnée
 # irremplaçable du système.
 rclone = "1.75.1"
+# Les gestes sur le compte, que le CLAUDE.md réserve à un humain. Il est ici
+# pour que ces gestes se lisent et se rejouent — une politique de seau relevée
+# en ligne de commande se colle dans un relevé, ce qu'un clic de console ne
+# fait pas. Épinglé pour la même raison que rclone : ce qu'il interroge décide
+# de ce qui est facturé.
+scaleway = "2.62.0"
 
 # Les gestes du developpement qui ont besoin d'un environnement, et que chaque
 # shell ecrit differemment — `VAR=x cmd` n'existe pas en PowerShell. Les poser

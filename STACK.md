@@ -58,6 +58,16 @@ lecture du plan de contrôle en dépendent.
 Le sens de l'alignement compte : c'est le poste qui se cale sur la CI et la
 prod, jamais l'inverse.
 
+Deux outils s'y ajoutent, et pour la même raison l'un que l'autre : ils touchent
+au compte réel. **`rclone`** déplace les objets, y compris la seule donnée que
+le système ne sait pas reconstruire. **Le CLI Scaleway** porte les gestes que le
+`CLAUDE.md` réserve à un humain — créer un seau, poser une politique, lire ce
+que le compte détient. Il est pin pour que ces gestes soient *rejouables et
+citables* : une politique de seau relevée en ligne de commande se colle dans un
+relevé et se compare six mois plus tard, ce qu'un clic de console ne fait pas.
+Aucun des deux n'est utilisé par la CI ni par la production ; ils existent pour
+que ce qui se fait à la main laisse une trace.
+
 ## Tests
 
 **Vitest** pour tout l'unitaire. Le gros de l'effort porte sur `libs/session`,
