@@ -313,7 +313,7 @@ describe('reconcile', () => {
       now: new Date('2026-09-07T00:03:00Z'),
     });
     const outcomes: ReclaimOutcome[] = [
-      { reclamation: { sessionId: 's1', reason: 'deadline-exceeded', detail: 'server x' }, closed: true },
+      { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
     ];
     const stopped = reconcile(v, outcomes, quiet).events.find(
       (e) => e.type === 'SessionStopped',

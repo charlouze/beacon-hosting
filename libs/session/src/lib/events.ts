@@ -6,9 +6,7 @@ export type ReclaimReason =
   | 'provisioning-timeout'
   | 'stopping-timeout'
   /** The record already says FAILED: try the destruction again. */
-  | 'failed-retry'
-  /** The closing time passed and nobody extended (§6). */
-  | 'deadline-exceeded';
+  | 'failed-retry';
 
 export type DomainEvent =
   /**
@@ -25,6 +23,14 @@ export type DomainEvent =
    * session would be the one anonymous gesture of the system (§4).
    */
   | { type: 'SessionStopRequested'; sessionId: SessionId; detail: string }
+  /**
+   * The closing time passed and nobody extended (§6). Written when the
+   * watchdog moves a RUNNING session to STOPPING on its own — the human
+   * variant of the same passage is `SessionStopRequested` above, written by
+   * the browser. Destruction never follows directly: it waits for the
+   * agent's `saved` report, or the `stopping-timeout` net if it never comes.
+   */
+  | { type: 'SessionExpired'; sessionId: SessionId; detail: string }
   /**
    * A deadline was forged past the bound and brought back (§6). It is audited
    * and never shown: the interface already clamps on read, so the countdown
