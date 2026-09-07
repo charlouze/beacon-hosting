@@ -409,7 +409,7 @@ vie du bucket, jamais du code.
 **Les événements sont des faits au passé** — `SessionStarted`,
 `SessionExtended`, `SessionStopRequested`, `SessionStopped`, `DeadlineClamped`,
 `ProvisioningFailed`, `DnsUpdateFailed`, `AgentContradicted`, `SaveRefused`,
-`CleanupFailed`, `SessionReclaimed`, `ResourceStranded`.
+`CleanupFailed`, `SessionReclaimed`, `SessionExpired`, `ResourceStranded`.
 
 **Trois d'entre eux disent qu'un pas a raté sans que la soirée soit perdue**, et
 c'est la distinction qui leur vaut d'exister séparément. `DnsUpdateFailed` :
@@ -1236,9 +1236,18 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
    ordre — arrêter avant de pousser — mais elle ne promet rien de plus que ce
    que le disque contient déjà. Le `pre-shutdown` du §5 n'a, pour ce jeu, pas
    d'autre sens que « la dernière que le jeu a bien voulu écrire ».
-3. **C'est le rapport `saved` qui déclenche la destruction.** `agentReport` reçoit
-   la phase, constate que la session est en `STOPPING`, et détruit l'instance
-   **et l'IP**.
+3. **C'est le rapport de la sauvegarde finale qui déclenche la destruction.**
+   `agentReport` reçoit la phase `saved`, constate que la session est en
+   `STOPPING` **et que l'origine rapportée est `pre-shutdown`**, et détruit
+   l'instance **et l'IP**.
+
+   **L'origine n'est pas un détail de rangement, ici : c'est la garde.** Une
+   poussée de cadence peut être en vol au moment où l'arrêt est demandé — l'agent
+   archive et téléverse avant de reprendre son cycle — et elle rapporte `saved`
+   comme les autres. Détruire sur ce rapport-là sauterait l'étape 2 tout entière :
+   le jeu ne serait jamais arrêté, la sauvegarde finale jamais poussée, et
+   `pre-shutdown` ne désignerait rien. C'est le même défaut que ci-dessous,
+   rétréci à la durée d'un téléversement.
 
    **Rien n'attend.** L'autre écriture possible — une Function qui boucle
    jusqu'à voir le dépôt — ferait d'un mécanisme de livraison le gardien d'une
