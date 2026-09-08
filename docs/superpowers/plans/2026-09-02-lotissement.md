@@ -75,6 +75,8 @@ un jeu par tranche.
 | 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | à venir |
 | 4 | La sécurité | Le système peut être exposé | à venir |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
+| 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
+| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **proposée** |
 
 ### 0 · Sonder
 
@@ -259,6 +261,91 @@ Le monde visuel retenu — The Departure Board, voir
 — les cinq états sur un seul écran, le décompte, l'affichage du coût, et la
 libération pendant les quatre minutes de démarrage.
 
+### 6 · L'infra en code
+
+Les ressources du compte qui vivent longtemps cessent de n'exister que dans une
+console : les deux seaux avec leur versionnement, leur politique et leur règle
+d'élagage, la clé IAM, l'alerte de budget Scaleway, l'alerte Cloud Monitoring et
+son canal, et l'enregistrement A **en existence seulement**. Sept ressources, pas
+une de plus.
+
+**Elle passe en dernier parce qu'elle ne débloque rien.** Aucun joueur ne la
+voit, aucun gate n'en dépend, et elle est la seule tranche du découpage dont
+l'absence ne coûte que de la vigilance. Ce qu'elle rapporte n'est pas de
+l'automatisation — sans identifiant d'hébergeur dans la CI (`STACK.md`), c'est
+un humain qui lancera `apply` depuis son poste — mais **un énoncé relisible en
+revue et une dérive détectable par un `plan`**, qui ne touche rien.
+
+C'est très exactement le défaut qui a mordu en tranche 3 : `beacon-saves` était
+versionné sans que personne l'ait décidé, une règle d'expiration n'y supprimait
+donc rien, et seule une relecture depuis le seau l'a montré.
+
+**Sondée en avance de phase le 2026-09-08**, section F de
+[`probe/RESULTS.md`](../../../probe/RESULTS.md). Trois de ses réponses valent
+d'être connues avant d'écrire le plan :
+
+- **Le DNS sort du périmètre.** Terraform y déclarerait l'IP que la Function
+  réécrit à chaque session : dérive permanente, et un `apply` qui repointe le
+  sous-domaine vers une session morte pendant qu'une autre tourne. Seule
+  l'*existence* de l'enregistrement se déclare — c'est elle qui manquait le jour
+  du `http 404` —, et le login DynHost ne s'importe pas du tout.
+- **On ne réimporte rien : tout se détruit et se recrée.** Décidé le 2026-09-08 —
+  rien dans les seaux ne vaut d'être gardé, le monde du 2026-09-07 était un monde
+  d'épreuve. Ça règle le seul trou de la sonde, le login DynHost ne s'important
+  pas, et ça supprime le critère délicat : sur un compte vide, l'`apply` produit
+  ce que le fichier dit. En échange, **l'état porte désormais la clé S3 et le mot
+  de passe DynHost** — son seau se verrouille, et reste hors Terraform faute de
+  pouvoir se contenir lui-même.
+- **Le seau porte sa règle d'expiration en bloc interne**, faute de ressource
+  séparée : adopter `beacon-saves` met dans le dépôt, pour la première fois, un
+  outil capable d'effacer une sauvegarde, là où le §8 dit que rien ici n'en est
+  capable. `prevent_destroy` ne protège rien le jour du nuke, et redevient
+  obligatoire dès qu'un monde auquel on tient entre dans le seau.
+
+**Cette tranche a une date de péremption**, et c'est ce qui la lie à la 7. Le
+nuke n'est gratuit que tant que les seaux ne portent rien. Si le vrai monde
+arrive avant elle, `beacon-saves` repasse en import — lui seul, avec son critère
+de `plan` vide et tout ce que la sonde en dit.
+
+**La frontière avec la CLI, et pourquoi elle est là.**
+`google_firebase_hosting_version` ne supporte pas les fichiers statiques :
+`apps/web` ne se déploie pas en Terraform. La CLI reste donc, et tant qu'elle
+reste, autant qu'elle garde tout ce qu'elle sait déjà faire — règles, index,
+Functions, et le job Scheduler qui vient avec. **La CLI livre l'app, Terraform
+déclare le compte.** Ce qui rend la seconde moitié nécessaire est l'alerte Cloud
+Monitoring du watchdog : la CLI ne la pose pas, elle est née d'un clic de console
+en tranche 1, et le §6 en fait le seul garde-fou du composant le plus critique
+pour le budget.
+
+**Ce que cette tranche ne revendique jamais** : l'instance et l'IP flottante,
+qui appartiennent au watchdog et se réconcilient par tag ; les règles, les
+index, les Functions, le Hosting et le job Scheduler, que `firebase deploy`
+déploie. Deux outils sur le même objet est une guerre d'états.
+
+### 7 · Les mondes vont et viennent
+
+**Proposée le 2026-09-08, pas encore acceptée.** Un administrateur dépose dans le
+système un monde qui vient d'ailleurs, et récupère celui qui y est. Le système
+sait aujourd'hui faire naître un monde et le faire survivre à ses sessions ; il
+ne sait ni en adopter un, ni en rendre un.
+
+`tools/game-depot` donne la forme : un geste d'administrateur, depuis sa machine,
+vers un seau — pas une surface d'interface, pas un rôle de plus dans les règles.
+Ce qui change est la nature de ce qu'on dépose. Les fichiers d'un jeu se
+retéléchargent ; un monde, non.
+
+**Et c'est la seule opération du système qui écrase.** Le §8 pose que rien dans
+le dépôt n'efface une sauvegarde, et le port `SaveStore` n'expose ni suppression
+ni élagage. Déposer un monde par-dessus un autre contourne cette propriété sans
+la contredire : personne n'efface, mais la clé précédente cesse d'être celle
+qu'on restaure. Ce que le §8 devient alors se décide dans le spec, pas dans un
+plan — c'est la première chose à faire si cette tranche est acceptée.
+
+**Elle suit la 6, et ce n'est pas une préférence.** La tranche 6 repose sur un
+nuke, gratuit tant que les seaux ne portent rien ; cette tranche-ci est
+exactement l'événement qui y met fin. Dans l'autre ordre, la 6 perd son
+hypothèse et repasse en import.
+
 ## La livraison ne fait pas de tranche
 
 Le §10 du spec (livraison, CI, semis, tags d'images) ne s'implémente pas d'un
@@ -298,13 +385,18 @@ ce paragraphe croirait le contraire.
   **avant** d'écrire le plan de la tranche suivante. Écrite pour la tranche 0,
   la règle vaut pour toute sonde : la tranche 1 bis en est la deuxième
   démonstration, et elle s'est intercalée exactement pour ça.
-- **Les ressources qui ne sont pas dans le dépôt.** Le seau et ses règles de
-  cycle de vie, la clé S3 et sa politique, le job Scheduler, l'alerte de budget,
-  l'alerte Cloud Monitoring, l'enregistrement A et son identifiant DynHost : tout
-  cela naît d'un geste de console, tranche après tranche, et rien ne dit ce qui
-  existe. **À terme, ces ressources se décrivent en code** — Scaleway et GCP
-  ont chacun leur fournisseur —, et la question n'est pas de savoir si c'est
-  souhaitable mais quand ça vaut le détour.
+- **Les ressources qui ne sont pas dans le dépôt** — *cette question est close
+  depuis le 2026-09-08 : c'est la tranche 6, et ce qui suit est l'histoire qui
+  l'a produite.* Le seau et ses règles de cycle de vie, la clé S3 et sa
+  politique, l'alerte de budget, l'alerte Cloud Monitoring, l'enregistrement A et
+  son identifiant DynHost : tout cela naît d'un geste de console, tranche après
+  tranche, et rien ne dit ce qui existe. **À terme, ces ressources se décrivent
+  en code** — Scaleway et GCP ont chacun leur fournisseur —, et la question n'est
+  pas de savoir si c'est souhaitable mais quand ça vaut le détour.
+
+  Cette liste portait aussi **le job Scheduler**, et c'était faux :
+  `apps/functions/src/main.ts` le déclare en `onSchedule`, donc `firebase deploy`
+  le crée. Il n'a jamais été un geste de console.
 
   Deux choses le rendent moins urgent qu'il n'y paraît : il n'y a qu'un seul
   environnement, donc rien à reproduire, et le watchdog rend déjà la seule
@@ -325,3 +417,37 @@ ce paragraphe croirait le contraire.
   qui les posent et les relisent. Ce ne sont pas des ressources gérées en code —
   rien ne les applique —, mais elles se relisent en revue au lieu de se
   redécouvrir dans une console.
+
+  **Le détour a été chiffré le 2026-09-08**, sans toucher au compte : section F
+  de [`probe/RESULTS.md`](../../../probe/RESULTS.md). Il vaut moins large qu'on
+  ne le croyait — le DNS dynamique en sort, parce que sa valeur est réécrite à
+  chaque session — et il coûte une garde qui n'existait pas : un `prevent_destroy`
+  sur le seau des sauvegardes, obligatoire dès qu'un monde auquel on tient y
+  entre, sa règle d'élagage étant un bloc interne du seau.
+
+- **L'alerte du watchdog devient payante, et c'est la propriété qui est touchée,
+  pas le budget.** Google facturera l'alerting le **1er septembre 2027 au plus
+  tôt**, 0,35 $ par mois et par référence de métrique, avec un préavis annoncé à
+  90 puis 30 jours. Pour l'alerte du watchdog, une trentaine de centimes par
+  mois : négligeable en argent.
+
+  **Ce qui ne l'est pas, c'est que ce coût soit fixe.** Tout le produit tient sur
+  « on ne paie que quand on joue », et le §11 pose la ligne du plan de contrôle à
+  0 €. Un mois sans partie cesserait de coûter zéro. C'est le seul endroit du
+  système où une facture courrait sans qu'on ait joué.
+
+  **La sortie est écrite dans le même document** : les alertes fondées sur une
+  métrique de disponibilité ne sont pas facturées, jamais. Le §6 ne demande qu'une
+  chose — savoir que le watchdog tourne encore — et `health/watchdog` sait déjà
+  dire depuis quand il ne tourne plus. Un contrôle de disponibilité qui lirait cet
+  état rendrait la surveillance gratuite. C'est une piste, pas une mesure : le
+  coût propre des contrôles reste à vérifier, et la tranche 1 a déjà appris qu'une
+  métrique documentée peut ne pas exister. Le détail est en section F de
+  [`probe/RESULTS.md`](../../../probe/RESULTS.md), avec ce que les alertes sur les
+  logs laissent d'ambigu.
+
+  Rien à décider avant que le préavis arrive.
+
+  Deux endroits mentent déjà par anticipation et devront bouger : la **section D**
+  de [`probe/RESULTS.md`](../../../probe/RESULTS.md), qui donne l'alerting gratuit
+  sans réserve, et le **§11** du spec. La mesure, elle, est en section F.

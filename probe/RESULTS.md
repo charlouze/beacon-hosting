@@ -1,8 +1,10 @@
 # Rapport de sonde — tranche 0
 
 Chaque section répond à une question du §12 du spec — sauf la section J, qui
-mesure un second jeu que le §12 mettait précisément hors périmètre. Une réponse
-sans la commande ou l'observation qui la fonde n'est pas une réponse.
+mesure un second jeu que le §12 mettait précisément hors périmètre, et la
+section F, qui sonde en avance de phase une tranche dont le plan n'est pas
+écrit. Une réponse sans la commande ou l'observation qui la fonde n'est pas une
+réponse.
 
 > **L'hébergeur a changé le 2026-09-03, en cours de tranche.** Les sections T et
 > D portent des mesures faites sur OVH, et des « conséquences pour le spec »
@@ -1564,3 +1566,221 @@ pour l'humain qui doit choisir laquelle restaurer.
   premier, qui a réussi. `-publicip`, `-publicport` et `-port` restent donc
   *inutiles* et non *inopérants* — on sait qu'on n'en a pas besoin, pas ce qu'ils
   feraient.
+
+## F · L'infra en code
+
+Sondée le 2026-09-08, **avant** que la tranche 6 existe autrement que comme une
+intention. Le lotissement pose depuis le 2026-09-02 que « la question n'est pas
+de savoir si c'est souhaitable mais quand ça vaut le détour » ; cette section
+répond à ce que cette question suppose acquis, et qui ne l'était pas.
+
+Elle n'a rien touché : aucun identifiant, aucun appel à un compte. **C'est une
+sonde documentaire**, de la même famille que la section D — et la section D a
+déjà montré une fois ce que ça vaut, la métrique
+`cloudscheduler.googleapis.com/job/attempt_count` étant documentée et
+inexistante. Les documentations ont été lues **dans les dépôts des providers** et
+non sur le registre, dont les pages se rendent côté client et ne se récupèrent
+pas.
+
+| Question | Réponse | Source |
+|---|---|---|
+| Les ressources visées s'importent-elles, ou faut-il détruire pour recréer ? | **Presque toutes.** Le seau et sa politique par `fr-par/<nom>`, la clé d'API et l'alerte de budget par leur identifiant, l'enregistrement de zone par `id.zone`, l'alerte et le canal Monitoring par leur nom. **Deux exceptions, et ce sont les deux du DynHost.** | [object_bucket](https://github.com/scaleway/terraform-provider-scaleway/blob/master/docs/resources/object_bucket.md), [object_bucket_policy](https://github.com/scaleway/terraform-provider-scaleway/blob/master/docs/resources/object_bucket_policy.md), [iam_api_key](https://github.com/scaleway/terraform-provider-scaleway/blob/master/docs/resources/iam_api_key.md), [domain_zone_record](https://github.com/ovh/terraform-provider-ovh/blob/master/docs/resources/domain_zone_record.md), [monitoring_alert_policy](https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/r/monitoring_alert_policy.html.markdown) |
+| Le provider OVH porte-t-il le DynHost ? | **Oui**, `ovh_domain_zone_dynhost_login` et `ovh_domain_zone_dynhost_record`, ajoutés par la PR #1001. **Mais ni l'un ni l'autre ne documente d'import** : Terraform sait les créer, pas les adopter. | [CHANGELOG](https://github.com/ovh/terraform-provider-ovh/blob/master/CHANGELOG.md), [dynhost_login](https://github.com/ovh/terraform-provider-ovh/blob/master/docs/resources/domain_zone_dynhost_login.md), [dynhost_record](https://github.com/ovh/terraform-provider-ovh/blob/master/docs/resources/domain_zone_dynhost_record.md) |
+| Le versionnement suspendu s'écrit-il ? | **À moitié.** `versioning { enabled }` est un booléen là où S3 a trois états — jamais versionné, activé, suspendu. `enabled = false` sur un seau activé le suspend, ce qui est l'état voulu ; mais l'HCL ne distingue pas « suspendu » de « jamais versionné », et c'est précisément la nuance qui a mordu. Ce qu'on gagne n'est donc pas la précision de l'énoncé, c'est **qu'il y ait un énoncé** — et qu'un `plan` crie si quelqu'un réactive. | [object_bucket](https://github.com/scaleway/terraform-provider-scaleway/blob/master/docs/resources/object_bucket.md) |
+| La règle de cycle de vie a-t-elle sa ressource ? | **Non, et c'est structurant.** Il n'existe pas de `scaleway_object_bucket_lifecycle_configuration` — la liste des ressources `object_*` du provider ne porte que `acl`, `lock_configuration`, `policy`, `server_side_encryption_configuration` et `website_configuration`. `lifecycle_rule` est un **bloc du seau**. | [docs/resources](https://github.com/scaleway/terraform-provider-scaleway/tree/master/docs/resources) |
+| L'alerte de consommation Scaleway est-elle descriptible ? | **Oui** — `scaleway_billing_budget`, `_budget_alert` et `_budget_alert_notification`, importables par identifiant. Le garde-fou de dernier recours du §7 entre en code. | [billing_budget_alert](https://github.com/scaleway/terraform-provider-scaleway/blob/master/docs/resources/billing_budget_alert.md) |
+| Où vit l'état, qui contient des secrets ? | Backend `s3` sur Object Storage, avec `skip_credentials_validation`, `skip_region_validation`, `skip_requesting_account_id` et un `endpoints.s3` régional — Scaleway n'implémente pas STS. **Le seau qui porte l'état reste hors Terraform** par construction. | [backend s3](https://developer.hashicorp.com/terraform/language/backend/s3), [Scaleway](https://www.scaleway.com/en/docs/tutorials/terraform-quickstart/) |
+
+### Le DNS n'est pas une ressource qui vit longtemps
+
+C'est la trouvaille de cette sonde, et elle **rétrécit** le périmètre au lieu de
+l'élargir.
+
+`ovh_domain_zone_dynhost_record` déclare **l'IP** du record. Or c'est la Function
+qui la réécrit à chaque session, par le protocole DynHost (§4). Terraform verrait
+donc une dérive à chaque lecture et la corrigerait à chaque `apply` — c'est-à-dire
+qu'il repointerait le sous-domaine vers l'IP d'une session morte pendant qu'une
+autre tourne. `ovh_domain_zone_record` a le même défaut pour la même raison.
+
+Ce que Terraform peut utilement déclarer ici est **l'existence** de
+l'enregistrement, jamais sa valeur — un `lifecycle { ignore_changes = [target] }`.
+Et l'existence est exactement ce qui manquait : le §12 a payé un `http 404` à la
+première vraie session pour apprendre que DynHost *met à jour* et ne *crée* pas.
+La seule ligne d'infra en code qui aurait évité une panne réelle sur ce projet
+est celle-là.
+
+### Trois pièges qui ne se devinent pas
+
+**Le login DynHost ne s'importe pas.** Il existe, son couple vit dans Secret
+Manager, et `libs/ovh-dns` s'en sert. L'adopter demanderait de le détruire et de
+le recréer, donc d'en changer le mot de passe et de mettre le secret à jour — et
+une session en cours perdrait sa mise à jour DNS au passage. Il reste dehors, et
+c'est le README qui le dit.
+
+**La clé d'API s'importe sans son secret.** La documentation le pose en toutes
+lettres : *« its `secret_key` is a secret that is not exposed. An imported API
+key will have `null` as its secret key. »* Ce n'est pas un défaut — `STACK.md`
+interdit de toute façon au secret d'entrer dans le dépôt — mais Terraform ne
+décrit alors cette clé qu'à moitié, et ne sait pas la reconstituer sans la faire
+tourner.
+
+**Le seau et sa règle d'expiration sont le même objet Terraform.** Modifier la
+règle est une mise à jour en place, sans danger. Mais tout ce qui **remplace** le
+seau — un changement de nom, de région — emporte la règle, le seau, et les mondes
+dedans. Le §8 pose qu'aucun code du dépôt n'efface une sauvegarde ; adopter
+`beacon-saves` fait entrer dans le dépôt, pour la première fois, un outil qui en
+est capable. `prevent_destroy` n'est pas une précaution à ajouter plus tard,
+c'est la condition d'entrée.
+
+### Ce que Terraform ne doit pas revendiquer
+
+- **L'instance et l'IP flottante.** Le watchdog les possède et les réconcilie par
+  tag (§6). Un état qui croirait les détenir se battrait avec lui — et le
+  faucheur gagnerait, après avoir fait échouer des `apply`.
+- **Les règles, les index, les Functions, le Hosting.** Le CLI Firebase les
+  déploie. Deux outils sur le même objet est une guerre d'états.
+- **Le job Cloud Scheduler.** Et ici le lotissement se trompe : il le range parmi
+  les gestes de console (`docs/superpowers/plans/2026-09-02-lotissement.md:302`),
+  alors que `apps/functions/src/main.ts:25` le déclare en `onSchedule` — c'est
+  `firebase deploy` qui le crée, comme le reste.
+
+### Ce qui reste, et c'est peu
+
+Le seau `beacon-saves` avec son versionnement et sa règle d'élagage, le seau
+`beacon-games` avec sa politique de lecture seule, la clé IAM à moitié, l'alerte
+de budget Scaleway, l'alerte Cloud Monitoring et son canal, et l'enregistrement A
+**en existence seulement**.
+
+Ce n'est pas décevant : c'est ce que le lotissement annonçait — « ce qui reste à
+la main est ce qui vit longtemps et change rarement ». La sonde confirme le
+diagnostic, et en retire le DNS dynamique qu'on croyait dedans.
+
+### Ce que cette sonde ne peut pas dire
+
+Si un `terraform plan` rend **vide** après import sur le compte réel. C'est le
+seul verdict qui compte, et il demande les identifiants et une main humaine :
+
+```bash
+terraform init
+terraform import scaleway_object_bucket.saves fr-par/beacon-saves
+terraform plan
+```
+
+**Aucun `apply` avant qu'un `plan` soit vide sur toutes les ressources.** Un
+`plan` non vide après un import ne dit pas « il reste des choses à faire », il
+dit « Terraform et le compte ne sont pas d'accord sur ce qui existe » — et
+l'`apply`, lui, tranche en faveur du fichier.
+
+Reste ouvert, et c'est au plan de la tranche de le trancher : **Terraform ou
+OpenTofu.** Terraform est sous BSL depuis la 1.6, et les trois providers dont ce
+projet dépend sont publiés sur les deux registres. Le choix n'engage rien
+techniquement, et se fait donc sur autre chose que la technique.
+
+### La CLI Firebase ne peut pas partir
+
+Question posée après coup, le 2026-09-08 : tout faire passer par Terraform, y
+compris ce que `firebase deploy` fait aujourd'hui.
+
+**Non, et une ligne de documentation suffit à le dire.**
+`google_firebase_hosting_version` : *« Static files are not supported at the
+moment. »* La ressource déclare des redirections, des en-têtes et des
+réécritures ; elle n'envoie pas les fichiers de l'app. `apps/web` ne se déploie
+pas en Terraform.
+
+Deux autres portes gardent la CLI dans la boucle, indépendamment de celle-là :
+
+- `firebase emulators:exec` fait tourner trois cibles `test` du dépôt (§9,
+  `STACK.md`). Terraform ne la remplace en rien.
+- Une Function gen2 en Terraform veut **un zip construit et déposé à la main dans
+  un seau GCS**, plus le job Scheduler, le compte de service et ses liaisons IAM
+  — tout ce que `onSchedule` câble aujourd'hui sans qu'on l'écrive.
+
+La frontière n'est donc pas « Terraform contre la CLI » mais **la CLI livre
+l'app, Terraform déclare le compte**. Et une ressource montre pourquoi il faut
+les deux : **l'alerte Cloud Monitoring du watchdog, la CLI ne la pose pas.** Elle
+est née d'un geste de console en tranche 1, rien dans le dépôt ne dit qu'elle
+existe, et le §6 en fait le seul garde-fou du composant le plus critique pour le
+budget. C'est la ressource qui justifie le mieux la tranche.
+
+| Source | |
+|---|---|
+| [`google_firebase_hosting_version`](https://github.com/hashicorp/terraform-provider-google-beta/blob/main/website/docs/r/firebase_hosting_version.html.markdown) | « Static files are not supported at the moment. » |
+| [`google_cloudfunctions2_function`](https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/r/cloudfunctions2_function.html.markdown) | l'exemple canonique passe par `google_storage_bucket_object` sur un zip local |
+
+### Le coût de cette alerte n'est plus nul pour toujours
+
+La section D la donnait gratuite, et elle l'est encore aujourd'hui. Google
+facturera l'alerting **le 1er septembre 2027 au plus tôt**, avec un préavis
+annoncé à 90 puis 30 jours. Le modèle a deux termes :
+
+- **0,35 $ par mois et par référence de métrique** — une référence étant *« a
+  single mention of a metric name within an alerting policy condition »*. Une
+  politique à seuil ou à absence combine jusqu'à six conditions, et chacune
+  compte pour une référence.
+- **0,50 $ par million de points** rendus par la requête d'une condition. La
+  période d'exécution est de 30 s et ne se règle pas pour la plupart des types de
+  condition : une condition interroge donc le datastore ~86 400 fois par mois.
+
+Pour l'alerte du watchdog — une condition, une métrique, une série — cela fait
+**0,35 $ par mois, et des centièmes pour les points**. Le fixe est tout le coût,
+et c'est lui qui pose problème : il court les mois où personne ne joue.
+
+**Le même document donne la sortie**, et c'est la trouvaille : *« Metric alerting
+policies that use Billing, Quota, or Uptime metrics are not charged. »* Une
+alerte fondée sur une métrique de **disponibilité** n'est jamais facturée. Or le
+§6 ne demande qu'une chose — savoir que le watchdog tourne encore — et
+`health/watchdog` sait déjà dire depuis quand il ne tourne plus. Un contrôle de
+disponibilité qui lirait cet état, et une alerte sur sa métrique, rendraient la
+surveillance gratuite. **C'est une piste, pas une mesure** : le coût propre des
+contrôles de disponibilité n'est pas vérifié ici, et la tranche 1 a déjà appris
+qu'une métrique documentée peut ne pas exister.
+
+**Les alertes fondées sur les logs sont ambiguës, et le document ne tranche
+pas.** Leurs conditions ne rendent aucun point, donc le terme à 0,50 $ tombe ;
+mais la définition parle de « mention d'un nom de métrique dans une condition »
+et range le log-match parmi les types à condition unique, sans dire s'il vaut
+zéro référence ou une. À mesurer, pas à déduire.
+
+Ne s'applique pas ici, et vaut d'être su : le report accordé aux contrats
+d'engagement en cours au 31 mai 2026 ne concerne pas un compte à la
+consommation.
+
+Conséquence pour le §11 : la ligne Firebase du tableau des coûts, posée à 0 €,
+cessera de l'être — de l'ordre de 0,30 €/mois pour une politique à une seule
+métrique. Négligeable en argent, notable en principe : c'est la première ligne
+non nulle du plan de contrôle, et elle tombe sur le garde-fou du watchdog.
+
+Source : [tarification Google Cloud Observability](https://cloud.google.com/products/observability/pricing).
+
+### Ce que la décision du 2026-09-08 change : on ne réimporte rien
+
+Le commanditaire a tranché. Rien dans les seaux ne vaut d'être gardé — le monde
+du 2026-09-07 était un monde d'épreuve, le monde auquel il tient est ailleurs —
+donc **tout se détruit et se recrée**. Cinq conséquences, et la première annule
+la difficulté principale de cette sonde.
+
+- **Le critère de sortie disparaît.** Plus de « le `plan` doit rendre vide » : sur
+  un compte vide, l'`apply` produit ce que le fichier dit, et aucun désaccord
+  n'est possible entre l'état et l'existant. Le paragraphe *Ce que cette sonde ne
+  peut pas dire*, ci-dessus, portait sur un import qui n'aura pas lieu.
+- **Le login DynHost devient déclarable.** C'était le seul trou sans réponse : il
+  ne s'importe pas. En repartant de zéro, il se crée comme le reste.
+- **L'état devient un fichier à secrets.** En créant la clé S3 et le mot de passe
+  DynHost, Terraform les connaît, donc ils entrent dans l'état — à l'import ils
+  étaient `null` et l'état était sans intérêt. Le seau qui le porte doit être
+  verrouillé, et il reste hors Terraform faute de pouvoir se contenir lui-même.
+  En contrepartie, Terraform peut écrire ces valeurs dans Secret Manager et
+  fermer une boucle aujourd'hui manuelle.
+- **`beacon-games` se re-remplit** : 2,3 Go et 247 objets par `tools/game-depot`.
+  Pas une perte, une étape.
+- **`prevent_destroy` change de rôle.** Condition d'entrée tant qu'on adoptait un
+  seau habité, il ne protège rien le jour du nuke — et il redevient obligatoire
+  **avant** qu'un monde auquel on tient entre dans le seau.
+
+**Et c'est la seule chose qui périme cette décision.** Le nuke est gratuit parce
+que les seaux ne portent rien. Il cesse de l'être le jour où le vrai monde
+arrive : si ce jour précède la tranche 6, `beacon-saves` repasse en import, et
+lui seul.
+
+Reste à vérifier avant d'écrire le plan, et pas pendant : **un nom de seau
+détruit se réutilise-t-il immédiatement chez Scaleway ?**
