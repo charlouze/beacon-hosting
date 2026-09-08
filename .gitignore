@@ -5,6 +5,12 @@
 # Réglages locaux de l'agent
 .claude/settings.local.json
 
+# Worktrees imbriqués dans l'espace de travail. Un worktree est une copie
+# complète, donc chacun de ses projets entre en collision avec celui dont il est
+# issu : sans cette ligne, Nx échoue sur MultipleProjectsWithSameNameError et
+# plus aucune cible ne se lance — y compris dans l'arbre principal.
+/.claude/worktrees/
+
 # IDE
 .idea/
 
