@@ -81,4 +81,44 @@ describe('parseReport', () => {
   it('refuses a detail longer than the bound', () => {
     expect(parseReport({ sessionId: 's1', phase: 'failed', detail: 'x'.repeat(1025) })).toBeNull();
   });
+
+  // §6 étape 7. A game whose join point is an identifier: what the player copies
+  // is a value only the vm discovers, and which exists neither in the provider's
+  // api nor on a port anything could query.
+  it('reads the readiness of a game whose join point is an identifier', () => {
+    expect(
+      parseReport({
+        sessionId: 's1',
+        phase: 'ready',
+        serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638',
+      }),
+    ).toEqual({
+      sessionId: 's1',
+      phase: 'ready',
+      serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638',
+    });
+  });
+
+  // The game that publishes an address sends none, and the parser invents
+  // nothing: an absent field stays absent.
+  it('leaves the identifier out when the machine sent none', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7' })).toEqual({
+      sessionId: 's1',
+      phase: 'ready',
+      ip: '51.15.42.7',
+    });
+  });
+
+  // Bounded, like every string a client writes (§5). An unbounded detail on a
+  // public endpoint is a way to make somebody else's bill grow.
+  it('refuses an identifier longer than the bound', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: 'x'.repeat(1025) })).toBeNull();
+  });
+
+  // Empty or of another type: refused, never repaired. §4 makes this an
+  // anti-corruption layer, and §7 makes the machine the least trusted element.
+  it('refuses an identifier that is not a string, and an empty one', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: '' })).toBeNull();
+    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: 42 })).toBeNull();
+  });
 });

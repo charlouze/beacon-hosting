@@ -28,6 +28,17 @@ export interface AgentReport {
     readonly sizeBytes: number;
     readonly origin: SaveOrigin;
   };
+  /**
+   * On `ready`, for a game whose join point is not an address: the identifier
+   * the server announces once it accepts players. Unlike `ip`, this one *is*
+   * followed — and the rule "never follow what the agent declares" cannot apply
+   * here, because there is nothing else to compare it against: the value exists
+   * only on the vm, it changes at every boot, and no provider api or port
+   * carries it. What replaces corroboration is the shape `<world guid>~<boot
+   * instant>`: the catalogue knows the guid it booted the world with, and
+   * refuses an identifier that does not name it.
+   */
+  readonly serverId?: string;
   /** On `failed`: why. Bounded, like every string a client writes (§5). */
   readonly detail?: string;
 }
@@ -77,6 +88,7 @@ export function parseReport(body: unknown): AgentReport | null {
     sessionId: string;
     phase: AgentPhase;
     ip?: string;
+    serverId?: string;
     save?: { objectKey: string; sizeBytes: number; origin: SaveOrigin };
     detail?: string;
   } = { sessionId: raw['sessionId'], phase: raw['phase'] as AgentPhase };
@@ -84,6 +96,11 @@ export function parseReport(body: unknown): AgentReport | null {
   if (raw['ip'] !== undefined) {
     if (!isBoundedString(raw['ip'])) return null;
     report.ip = raw['ip'];
+  }
+
+  if (raw['serverId'] !== undefined) {
+    if (!isBoundedString(raw['serverId'])) return null;
+    report.serverId = raw['serverId'];
   }
 
   if (raw['detail'] !== undefined) {
