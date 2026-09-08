@@ -1037,6 +1037,38 @@ describe('the order, which is the whole point of the command', () => {
   });
 });
 
+/**
+ * A precondition checked after acting is the exact class of fault this command
+ * exists to prevent, so its own preconditions are checked before it acts.
+ */
+describe('what it settles before it starts anything', () => {
+  it('refuses without opening a tunnel when the env file cannot be read', async () => {
+    const { ports, log } = fakePorts({
+      readText: (path) => {
+        if (path.endsWith('.env')) throw new Error("ENOENT: no such file or directory, open 'apps/functions/.env'");
+        return FIREBASE_CONFIG;
+      },
+    });
+    expect(await runDevSession(ports)).toBe('refused');
+    expect(log.calls).not.toContain('spawn:tunnel');
+    expect(log.said.join('\n')).toContain('nothing has been started yet');
+  });
+
+  // The rewrite is rehearsed in step 1, so a file that is not the one this
+  // command expects is refused before cloudflared is ever launched.
+  it('refuses without opening a tunnel when the env file carries no AGENT_ENDPOINT', async () => {
+    const { ports, log } = fakePorts({
+      readText: (path) => (path.endsWith('.env') ? `SCW_SECRET_KEY=${SECRET}\n` : FIREBASE_CONFIG),
+    });
+    expect(await runDevSession(ports)).toBe('refused');
+    expect(log.calls).not.toContain('spawn:tunnel');
+    expect(log.said.join('\n')).toContain('AGENT_ENDPOINT');
+    // The refusal prints what the rewrite threw, so this is the path where a
+    // leak would happen if the rewrite ever named a value it read.
+    expect(log.said.join('\n')).not.toContain(SECRET);
+  });
+});
+
 describe('what happens when a step gives up', () => {
   it('tears down the two it had started when the seed fails', async () => {
     const { ports, log } = fakePorts({
@@ -1151,6 +1183,13 @@ export const FIREBASE_CONFIG = 'firebase.dev.json';
 /** Angular's default. Announced only — see step 7 for why that is enough. */
 export const PILOT_URL = 'http://localhost:4200';
 
+/**
+ * Stands in for the real endpoint while step 1 rehearses the rewrite. It is
+ * never written anywhere: the rehearsal exists to make a bad `.env` throw
+ * before a tunnel is opened, and its result is discarded.
+ */
+const REHEARSAL_ENDPOINT = 'https://rehearsal.invalid/never-written';
+
 /** A long-running child this command is responsible for killing. */
 export interface Started {
   readonly name: string;
@@ -1231,6 +1270,25 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
 
     const emulator: EmulatorPorts = emulatorPortsFrom(ports.readText(FIREBASE_CONFIG));
 
+    // Both files are read before anything is started, and the rewrite is
+    // rehearsed against a url that will never be written. A file this command
+    // cannot use costs nothing to find out about here; found out after the
+    // next step, it costs an open tunnel and the operator's attention.
+    let envText: string;
+    try {
+      envText = ports.readText(FUNCTIONS_ENV);
+      withAgentEndpoint(envText, REHEARSAL_ENDPOINT);
+    } catch (error) {
+      say(`  STOP  ${FUNCTIONS_ENV} is not usable, and nothing has been started yet.`);
+      // Safe to print: the read failure names a path, and the rewrite is
+      // written never to carry a value out of that file.
+      say(`        ${error instanceof Error ? error.message : String(error)}`);
+      say('        That file is git-ignored and holds real credentials, so a fresh worktree');
+      say('        has none: run this from the main checkout, or copy the file into yours.');
+      return 'refused';
+    }
+    say(`  ok    ${FUNCTIONS_ENV} is readable and carries AGENT_ENDPOINT`);
+
     say('');
     say('2. The tunnel');
     const tunnel = ports.spawn('tunnel', 'cloudflared', [
@@ -1256,7 +1314,7 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
     say('');
     say('3. AGENT_ENDPOINT');
     const endpoint = agentEndpointFor(tunnelUrl);
-    const rewrite = withAgentEndpoint(ports.readText(FUNCTIONS_ENV), endpoint);
+    const rewrite = withAgentEndpoint(envText, endpoint);
     ports.writeText(FUNCTIONS_ENV, rewrite.text);
     say(`  ok    ${FUNCTIONS_ENV}, one line rewritten, ${rewrite.assignments - 1} other values untouched`);
     say('  ok    no value out of that file is printed by this command, here or below');
