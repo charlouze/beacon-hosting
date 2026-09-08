@@ -1,6 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Deadline, DEFAULT_SETTINGS, Session } from '@beacon/session';
+import { Deadline, DEFAULT_SETTINGS, Session, type Game } from '@beacon/session';
 import { runAgentReport, type AgentReportDeps } from './agent-report.js';
+
+/**
+ * The catalogue is imported and not injected: game knowledge lives there and
+ * nowhere else (§4). All this function does with a refusal is *notice* it, so
+ * the refusing entry is doubled here rather than borrowed from a real game —
+ * what makes a real entry refuse is a world guid, and pinning that guid twice
+ * is how two places end up disagreeing about the same value. The entry that
+ * actually decides is tested in `cloud-init`.
+ */
+vi.mock('@beacon/cloud-init', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@beacon/cloud-init')>();
+  const refusesEverything = {
+    game: 'sunkenland',
+    hostname: null,
+    compose: () => '',
+    render: () => '',
+    joinInfo: () => null,
+  };
+  return {
+    ...actual,
+    catalogFor: (game: Game) =>
+      game === 'sunkenland' ? refusesEverything : actual.catalogFor(game),
+  };
+});
 
 const NOW = new Date('2026-09-06T20:10:00Z');
 const TOKEN = 'a'.repeat(64);
@@ -126,6 +150,39 @@ describe('agentReport', () => {
     const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.events[0].type).toBe('AgentContradicted');
+  });
+
+  // §6 étape 7: RUNNING means "the join point is published". When the catalogue
+  // cannot build one there is nothing to publish — and the session dies of the
+  // provisioning delay, which already exists and covers exactly this case. A
+  // second path to death would buy nothing.
+  it('publishes nothing when the catalogue refuses what the machine declared', async () => {
+    deps.state.readSession = vi.fn(async () =>
+      Session.from({ ...fieldsOf(sessionIn('PROVISIONING')), game: 'sunkenland' }),
+    );
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'ready',
+      serverId: 'forged',
+    });
+    expect(deps.state.publish).not.toHaveBeenCalled();
+    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(correction.events[0].type).toBe('AgentContradicted');
+    // The audit line, and nothing else: `stateSince` stays where it is, so the
+    // provisioning delay keeps counting from the boot and not from this report.
+    expect(correction.state).toBeNull();
+  });
+
+  // The path that already existed, unchanged: an entry that yields a join point
+  // publishes RUNNING as before.
+  it('still publishes for a game whose join point comes from the address', async () => {
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'ready',
+      ip: '51.15.42.7',
+    });
+    expect(deps.state.publish).toHaveBeenCalled();
   });
 
   // A ready that arrives after the world moved on. Publishing here would put a
@@ -471,7 +528,7 @@ function fieldsOf(session: Session) {
   return {
     state: session.state,
     sessionId: session.sessionId as string,
-    game: session.game as 'enshrouded',
+    game: session.game as Game,
     startedBy: session.startedBy,
     startedAt: new Date('2026-09-06T20:00:00Z'),
     deadline: session.deadline,

@@ -1,5 +1,5 @@
 import type { JoinInfo } from '@beacon/session';
-import type { BootRequest, GameCatalogEntry } from './catalog.js';
+import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 
 // §10: pinned by digest, never a moving tag — the one component that writes
 // to the bucket, so a tag that moved under a session nobody watched would be
@@ -199,11 +199,13 @@ export const enshrouded: GameCatalogEntry = {
     return fill(rendered, '__GAMES_BUCKET__', request.saves.gamesBucket);
   },
 
-  joinInfo(address: string): JoinInfo {
+  // This game's join point comes from the address alone, so it never refuses —
+  // and it never reads `serverId`, which it has no use for.
+  joinInfo(facts: JoinFacts): JoinInfo {
     return {
       game: 'enshrouded',
       hostname: this.hostname as string,
-      address,
+      address: facts.address,
       port: 15637,
     };
   },

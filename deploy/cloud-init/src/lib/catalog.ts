@@ -30,6 +30,20 @@ export interface BootRequest {
 }
 
 /**
+ * Everything a join point could be built from, gathered in one place because
+ * the two games do not build theirs from the same thing: one from the address
+ * the function reserved, the other from an identifier only the vm discovers.
+ * An entry takes what it needs and ignores the rest — the alternative was two
+ * signatures, and a caller that has to know which game it is holding.
+ */
+export interface JoinFacts {
+  /** What the function reserved. Always known by the time a join point is built. */
+  readonly address: string;
+  /** What the machine declared (§7). Present only for a game that announces one. */
+  readonly serverId?: string;
+}
+
+/**
  * Everything the repository knows about one game, and the only place it knows
  * it. A port number has no business in a model that talks about sessions and
  * deadlines (§4).
@@ -44,7 +58,20 @@ export interface GameCatalogEntry {
   readonly hostname: string | null;
   compose(): string;
   render(request: BootRequest): string;
-  joinInfo(address: string): JoinInfo;
+  /**
+   * Null is a refusal, not an error to report: §6 wants the control plane to
+   * reject an identifier whose prefix does not name the world it booted, and
+   * the world guid is game knowledge that §4 keeps out of everything else. So
+   * the entry decides, and the one caller merely notices that nothing came
+   * back — a session with no join point dies of the provisioning delay, which
+   * already exists and covers exactly this.
+   *
+   * What this still lets through, and it is worth naming: a compromised vm can
+   * send players to another server *carrying the same world*. What it can no
+   * longer do is send them anywhere at all. That is damage reduction, not
+   * proof, and it is the most a value that exists only on the machine allows.
+   */
+  joinInfo(facts: JoinFacts): JoinInfo | null;
 }
 
 const CATALOG: Partial<Record<Game, GameCatalogEntry>> = { enshrouded };

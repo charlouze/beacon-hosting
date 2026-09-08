@@ -93,6 +93,12 @@ async function instructionsFor(
  * §6 étape 7. `RUNNING` means the join point is published, and this is the one
  * place that publishes it — the address comes from what the function reserved,
  * never from what the machine declares (§7).
+ *
+ * Whether anything the machine declares survives into that join point is the
+ * catalogue's call, not this function's: the game that needs a `serverId`
+ * knows the world guid it must start with, and this function does not, nor
+ * should it (§4). A `null` back means only that nothing checked out — never
+ * why — and the one thing done with it is noticing.
  */
 async function becomeRunning(
   deps: AgentReportDeps,
@@ -120,7 +126,20 @@ async function becomeRunning(
   }
 
   const entry = catalogFor(session.game);
-  const joinInfo = entry.joinInfo(facts.ip);
+  const joinInfo = entry.joinInfo({ address: facts.ip, serverId: report.serverId });
+  // The catalogue refused: whatever the machine declared does not name the
+  // world this session booted. Checked before the dns pointing below — a
+  // hostname pointed for a session that will not publish a join point is work
+  // with no reader, and the session dies of the provisioning delay exactly as
+  // it would if the ledger had never recorded anything (§6, task brief).
+  if (joinInfo === null) {
+    await fileEvent(deps, now, {
+      type: 'AgentContradicted',
+      sessionId,
+      detail: `declared server id ${boundedServerId(report.serverId)}, refused by the catalogue`,
+    });
+    return;
+  }
 
   if (entry.hostname !== null) {
     try {
@@ -146,6 +165,22 @@ async function becomeRunning(
     },
     now,
   );
+}
+
+const MAX_SERVER_ID_IN_DETAIL = 64;
+
+/**
+ * `events/{id}.detail` is read by every member (§5): what reaches it is
+ * bounded, the same guarantee `sanitizeLastError` gives `lastError`. This one
+ * needs no redaction — `serverId` is an identifier the machine names, never a
+ * provider's error text — but `parseReport` alone lets one run to 1024
+ * characters, and a forged report is exactly where that ceiling gets used.
+ */
+function boundedServerId(serverId: string | undefined): string {
+  if (serverId === undefined) return 'none';
+  return serverId.length > MAX_SERVER_ID_IN_DETAIL
+    ? `${serverId.slice(0, MAX_SERVER_ID_IN_DETAIL)}…`
+    : serverId;
 }
 
 /**

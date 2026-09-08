@@ -116,8 +116,24 @@ describe('the enshrouded catalogue entry', () => {
     expect(rendered.startsWith('#cloud-config\n')).toBe(true);
   });
 
-  it('yields the join point a player copies, from the address alone', () => {
-    expect(catalogFor('enshrouded').joinInfo('51.15.42.7')).toEqual({
+  // This game publishes an address, and nothing the machine declares enters
+  // what a player copies: the address comes from what the function reserved.
+  it('yields the join point a player copies, from the reserved address', () => {
+    expect(catalogFor('enshrouded').joinInfo({ address: '51.15.42.7' })).toEqual({
+      game: 'enshrouded',
+      hostname: 'enshrouded.beacon.charlouze.com',
+      address: '51.15.42.7',
+      port: 15637,
+    });
+  });
+
+  // And an identifier that arrived anyway changes nothing: this game has no use
+  // for one, and a catalogue entry reading a field it does not use would be a
+  // frontier that leaks.
+  it('ignores an identifier this game has no use for', () => {
+    expect(
+      catalogFor('enshrouded').joinInfo({ address: '51.15.42.7', serverId: 'whatever' }),
+    ).toEqual({
       game: 'enshrouded',
       hostname: 'enshrouded.beacon.charlouze.com',
       address: '51.15.42.7',
