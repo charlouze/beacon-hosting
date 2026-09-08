@@ -17,6 +17,12 @@
     "name": "game-depot",
     "tags": ["scope:tool"],
     "targets": {
+      "update": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx tools/game-depot/src/update.ts"
+        }
+      },
       "push": {
         "executor": "nx:run-commands",
         "options": {
