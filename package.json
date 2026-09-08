@@ -51,7 +51,8 @@
   "workspaces": [
     "apps/*",
     "libs/*",
-    "deploy/*"
+    "deploy/*",
+    "tools/*"
   ],
   "dependencies": {
     "@angular/common": "~22.1.0",

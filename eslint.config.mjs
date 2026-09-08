@@ -38,6 +38,14 @@ export default [
               sourceTag: 'scope:catalog',
               onlyDependOnLibsWithTags: ['scope:domain'],
             },
+            // The administrator's own tool. It pushes archives through the
+            // storage port and names one with the domain's `Game` — nothing
+            // from the catalogue (a provider's word) or the record (a
+            // session's shape), neither of which this deposit needs.
+            {
+              sourceTag: 'scope:tool',
+              onlyDependOnLibsWithTags: ['scope:adapter', 'scope:domain'],
+            },
             // The wire format between the machine and the control plane. It
             // needs the domain to name a session and a state, and nothing else
             // — an adapter it could reach would let a provider's word travel on
