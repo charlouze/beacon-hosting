@@ -4,8 +4,9 @@ import type { BootRequest } from './catalog.js';
  * The boot request both catalogue suites render from. Shared rather than
  * copied: two entries asserting against two drifting fixtures is the failure
  * where one suite proves something the other no longer tests, and nothing says
- * so. Its `$&` in the s3 secret is deliberate — it is capture-group syntax to
- * String.replace, and it corrupted a credential once.
+ * so. No value here holds a `$`, and that is not an oversight: the frontier
+ * refuses one in everything that reaches a machine, so a fixture carrying one
+ * would render nothing and prove nothing but the refusal.
  */
 export const REQUEST: BootRequest = {
   serverName: 'Beacon',
@@ -20,7 +21,7 @@ export const REQUEST: BootRequest = {
     savesBucket: 'beacon-saves',
     gamesBucket: 'beacon-games',
     accessKey: 'SCWXXXXXXXXXXXXXXXXX',
-    secretKey: 'a-secret-with-a$&-in-it',
+    secretKey: 'a-secret-with-no-dollar-in-it',
   },
 };
 

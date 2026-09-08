@@ -87,6 +87,36 @@ export function catalogFor(game: Game): GameCatalogEntry {
 }
 
 /**
+ * Every value of a request that lands in a file `docker compose` reads: the
+ * `.env` it interpolates the compose from, and the `companion.env` an
+ * `env_file:` loads. Measured in `probe/RESULTS.md` (« Un `$` dans le mot de
+ * passe ne survit pas à `docker compose` ») — compose reads `$bc` as an empty
+ * variable, so `a$bc` reaches the container as `a`, with a warning about an
+ * unknown variable and none about the value it just amputated. `env_file`
+ * changes nothing: the same interpolation applies there.
+ *
+ * `slotCount` is the one field of a request missing here, and its type is the
+ * whole reason: a number has no `$` to lose.
+ */
+const exposedValues = (request: BootRequest): readonly (readonly [string, string])[] => [
+  ['serverName', request.serverName],
+  ['serverPassword', request.serverPassword],
+  ['sessionId', request.sessionId],
+  ['agentToken', request.agentToken],
+  ['endpoint', request.endpoint],
+  ['saves.endpoint', request.saves.endpoint],
+  ['saves.region', request.saves.region],
+  ['saves.accessKey', request.saves.accessKey],
+  ['saves.secretKey', request.saves.secretKey],
+  ['saves.savesBucket', request.saves.savesBucket],
+  ['saves.gamesBucket', request.saves.gamesBucket],
+];
+
+/**
+ * The one gate every boot passes, whichever game it is for, and the last place
+ * a value can be refused while nothing is billed yet. Two refusals live here,
+ * and they share their reason: what they catch leaves no trace downstream.
+ *
  * The only place `endpoint` enters the system. It comes from `AGENT_ENDPOINT`,
  * filled by a human, and it is the url the machine sends its token to — in an
  * `authorization` header, once a minute, for the whole session. Over plain http
@@ -97,12 +127,27 @@ export function catalogFor(game: Game): GameCatalogEntry {
  * stays permissive on purpose — the smoke harness answers on http over a docker
  * bridge, where no wire leaves the developer's laptop, and a rule there would
  * refuse the barrier while buying nothing this one does not already buy.
+ *
+ * The `$` is refused for the same shape of reason, and here rather than in an
+ * entry because the two games share one password secret: a rule held by one of
+ * them lets the other boot on an amputated password, on a server that looks
+ * healthy. It names the field and never the value — what it holds is a secret,
+ * and this error travels: `provisioning` writes a summary of it to a field
+ * every member's browser reads live, through a sanitiser that is length-based,
+ * so a short human-chosen password crosses it untouched.
  */
 export const renderCloudInit = (game: Game, request: BootRequest): string => {
   if (!request.endpoint.startsWith('https://')) {
     throw new Error(
       `refusing to write a cloud-init whose endpoint is not https: the agent token travels in its headers`,
     );
+  }
+  for (const [field, value] of exposedValues(request)) {
+    if (value.includes('$')) {
+      throw new Error(
+        `refusing to write a cloud-init whose ${field} contains a "$": docker compose would swallow it silently, and no log can tell you it did`,
+      );
+    }
   }
   return catalogFor(game).render(request);
 };

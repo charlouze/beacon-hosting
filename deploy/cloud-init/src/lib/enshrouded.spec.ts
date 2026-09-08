@@ -47,16 +47,6 @@ describe('the enshrouded catalogue entry', () => {
     expect(rendered).toMatch(/path: \/opt\/beacon\/\.env\n {4}permissions: "0600"/);
   });
 
-  // A `$&` or a `$'` in a password is capture-group syntax to String.replace.
-  // It corrupted a password once, silently, on a server that then looked fine.
-  it('carries a password full of replacement syntax through untouched', () => {
-    const rendered = renderCloudInit('enshrouded', {
-      ...REQUEST,
-      serverPassword: "a$&b$'c$`d",
-    });
-    expect(rendered).toContain("SERVER_PASSWORD=a$&b$'c$`d");
-  });
-
   // The compose travels as a block scalar, so its depth is its syntax: a line
   // landing short of the six spaces closes the block, and everything after it
   // becomes cloud-init keys nobody wrote. Nothing else catches that — the
@@ -119,13 +109,13 @@ describe('the enshrouded catalogue entry', () => {
     );
   });
 
-  // Every value that reaches the machine goes through the same replacement, and
-  // a `$&` in an s3 secret is capture-group syntax to String.replace exactly as
-  // it is in a password. A silently corrupted key restores nothing, on a
-  // machine that looks healthy.
-  it('carries an s3 secret full of replacement syntax through untouched', () => {
+  // The credential every restore and every push depends on, byte for byte: a
+  // key that arrives altered restores nothing, on a machine that looks healthy.
+  // Its `$&` moved to `template.spec.ts` — the frontier refuses a `$` in
+  // everything a request carries now, so no request can reach that trap.
+  it('carries the s3 secret to the machine byte for byte', () => {
     expect(renderCloudInit('enshrouded', REQUEST)).toContain(
-      'BEACON_S3_SECRET_KEY=a-secret-with-a$&-in-it',
+      'BEACON_S3_SECRET_KEY=a-secret-with-no-dollar-in-it',
     );
   });
 

@@ -223,17 +223,11 @@ describe('the sunkenland catalogue entry', () => {
     expect(renderCloudInit('sunkenland', REQUEST)).toContain('-adminSteamIDs 76561197965918116');
   });
 
-  // Measured, and the costliest trap of this entry: compose reads `$bc` as an
-  // empty variable, and `a$bc` reaches the server as `a`. Nobody can read that
-  // password back from the log. Refused before a billed machine exists.
-  it('refuses a password docker compose would silently swallow', () => {
-    expect(() => renderCloudInit('sunkenland', { ...REQUEST, serverPassword: 'a$bc' })).toThrow(
-      /\$/,
-    );
-  });
-
-  // Second defense, because neither covers both paths: the length at launch is
-  // the only thing that can be read back when the password itself cannot.
+  // The `$` compose swallows is refused at the frontier and no longer here —
+  // `catalog.spec.ts` holds it, for both games and every value that reaches a
+  // machine. What stays here is the second defense, because neither covers both
+  // paths: the length at launch is the only thing that can be read back when
+  // the password itself cannot.
   it('prints the password length at launch, and never the password', () => {
     const rendered = renderCloudInit('sunkenland', REQUEST);
     expect(rendered).toContain('beacon: password length');

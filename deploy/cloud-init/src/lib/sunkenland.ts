@@ -449,17 +449,6 @@ export const sunkenland: GameCatalogEntry = {
   compose: () => COMPOSE,
 
   render(request: BootRequest): string {
-    // Before anything, and before a billed machine exists: compose reads `$bc`
-    // as an empty variable, so `a$bc` reaches the server as `a` — a warning
-    // about an unknown variable, none about the password. Nothing downstream
-    // can catch it either, because this game's log is no way to read a
-    // password back and a player typing it wrong looks exactly the same.
-    if (request.serverPassword.includes('$')) {
-      throw new Error(
-        'refusing a password containing "$": docker compose would swallow it silently, and no log can tell you it did',
-      );
-    }
-
     let rendered = fill(CLOUD_INIT, '__START_SH__', indent(START_SH));
     rendered = fill(rendered, '__SERVERID_FILTER__', indent(SERVERID_FILTER));
     rendered = fill(rendered, '__DOCKER_COMPOSE__', indent(COMPOSE));
