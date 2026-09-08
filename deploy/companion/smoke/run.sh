@@ -165,7 +165,15 @@ fi
 exec 3>&-
 
 docker build -t beacon-companion:smoke -f ../Dockerfile ..
-docker compose up -d bucket
+# `--wait`, not a bare `-d`: `up -d` returns as soon as the container is
+# *started*, never when the server inside it answers. The service already
+# declares the healthcheck that says so (`mc ready local`), and nothing was
+# reading it — `restore` gets it through `condition: service_healthy`, but the
+# `mc` calls just below run in this shell and had no such gate. Measured on a
+# CI runner the 2026-09-08: MinIO reported Started, and `mc alias set` was
+# refused a connection **154 ms later**. A workstation loses that race rarely
+# enough to look green for good, which is the only reason it lived this long.
+docker compose up -d --wait bucket
 docker compose exec -T bucket mc alias set local http://localhost:9000 smoke smokesmoke
 docker compose exec -T bucket mc mb local/beacon-saves
 
