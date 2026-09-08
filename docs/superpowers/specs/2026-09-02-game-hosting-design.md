@@ -287,8 +287,9 @@ libs/
     saves/             module support : Save, plancher de taille
   session-record/      ACL Firestore du contexte session : server/current,
                        config/settings, events. Deux faces, client et admin
-  membership-record/   ACL Firestore de members/. Ni libs/session ni apps/web
-                       ne voient Firestore : tout passe par un module *-record
+  membership-record/   ACL de members/ ET de la connexion Google. Ni libs/session
+                       ni apps/web ne voient Firestore : tout passe par un
+                       module *-record
   agent-protocol/      format de fil entre la VM et le plan de contrôle —
                        une ACL, pas du métier. Importée aux deux bouts, par
                        agentReport et par le compagnon
@@ -664,8 +665,25 @@ joueur copie. Les deux ne se contredisent pas — c'est la même asymétrie que
 **`members` n'appartient pas au contexte `session`.** C'est le registre des
 personnes autorisées, et le navigateur y accède. Cet accès a sa propre ACL,
 `libs/membership-record`, sœur de la précédente et de même facture — pas une
-Function, le §5 dit pourquoi. Sa liste fermée : lire son propre rôle, lister les
-membres (admin), ajouter, changer le rôle, retirer.
+Function, le §5 dit pourquoi. Sa liste fermée : se connecter, se déconnecter,
+rendre le **membre connecté** — `uid`, nom affiché et rôle, ou rien pour un
+visiteur —, lister les membres (admin), ajouter, changer le rôle, retirer.
+
+**La connexion est dans ce module et non dans `apps/web`**, décidé le
+2026-09-09. Deux raisons, et la seconde tient le §4 debout. L'`Actor` que porte
+chaque événement — `uid` et nom affiché — vient du profil Google : sans ce
+module, `apps/web` importerait le SDK Auth pour le construire, et c'est
+exactement ce fichier-là que la tranche 5 réécrit. Et « qui je suis » et « ce
+que j'ai le droit de faire » se lisent toujours ensemble : les composer chez
+l'appelant y dupliquerait le test « est-ce un membre », qui n'a le droit
+d'exister qu'une fois.
+
+Le module traverse donc deux systèmes extérieurs — Auth et Firestore — pour
+rendre une seule valeur. Son suffixe `-record` dit « ACL d'une collection » et
+sous-décrit ce qu'il fait ; il reste juste, parce que c'est bien une couche
+d'anti-corruption, et l'authentification est un sous-domaine emprunté dont rien
+ne doit fuir plus loin. `Role` en particulier ne monte pas dans `libs/session` :
+c'est de l'autorisation, pas du métier de session.
 
 **Retirer, c'est supprimer le document** — pas poser un rôle « inactif ». Un
 registre où l'appartenance se lit par la présence n'a qu'un seul état à tester,
@@ -941,6 +959,21 @@ seconde — durées, fenêtres, gabarit par défaut — donc elles n'y touchent 
 `config/settings` (§10). `members` n'étant écrit que par un admin, il n'y aurait
 sinon aucun moyen d'en obtenir un premier. Le rôle vivant en base, ce semis est
 une écriture Firestore ordinaire et non plus un geste hors bande.
+
+**Les suivants entrent par la console**, et il faut le dire parce que rien
+d'autre ne le dirait. Un `uid` Google n'existe qu'après une première connexion :
+l'admin ne peut pas créer le document avant que la personne se soit présentée.
+La séquence est donc toujours la même — le visiteur se connecte, ne lit rien, et
+son `uid` apparaît à côté de son e-mail dans l'onglet Auth de la console, d'où
+l'admin crée `members/{uid}`. Décidé le 2026-09-09. Ce n'est pas une exception
+taillée dans les règles : une écriture de console passe par l'Admin SDK, donc
+au-dessus d'elles par construction, et rien n'est desserré pour la permettre. Ce
+geste cesse le jour où l'écran d'administration existe, avec la face écriture de
+`libs/membership-record`.
+
+Ce qui reste vrai entre-temps, et que le §7 assume : **un visiteur non autorisé
+peut se connecter**. Il obtient un compte, aucune lecture, aucune écriture, et
+un écran qui doit le lui dire — `PRODUCT.md` en fait une exigence.
 
 **Toute chaîne écrite par un client est bornée en taille**, et `events` porte un
 TTL Firestore de 400 jours. Sans borne ni TTL, la collection la plus ouverte du
