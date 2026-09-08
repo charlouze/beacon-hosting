@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ObjectApi } from '@beacon/scaleway-storage';
 import type { Clock, Save, SaveStore } from '@beacon/session';
 import { clearDirectory, unpackInto } from './archive.js';
 import type { CompanionConfig } from './config.js';
@@ -12,6 +13,17 @@ export interface RestoreDeps {
   readonly log: (message: string) => void;
   readonly config: Pick<CompanionConfig, 'game' | 'saveDir' | 'saveOwner' | 'workDir'>;
   readonly clock: Clock;
+  /**
+   * Only the game whose files SteamCMD cannot fetch sets this. Undefined,
+   * `runRestore` moves the world alone. It owns the same seam as `store` —
+   * `get` and never `put`, because §7 gives this machine a key that reads the
+   * games bucket and writes only the saves one.
+   */
+  readonly gameFiles?: {
+    readonly api: ObjectApi;
+    readonly directory: string;
+    readonly objectKey: string;
+  };
 }
 
 /**
@@ -33,6 +45,14 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
   } catch (error) {
     await tell(deps, `restore refused: could not prepare the work directory — ${String(error)}`);
     throw error;
+  }
+
+  // The bigger transfer first, and not merely in this function's own order:
+  // §6 étape 6 makes this run before the game container even exists, so a
+  // failure here throws before the world's much smaller download has spent
+  // any time at all.
+  if (deps.gameFiles !== undefined) {
+    await restoreGameFiles(deps, deps.gameFiles);
   }
 
   let newest: Save | undefined;
@@ -97,6 +117,38 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
     throw error;
   }
   deps.log(`restored ${newest.objectKey} (${newest.sizeBytes} bytes)`);
+}
+
+/**
+ * The second case the spec's §6 étape 6 names: for the game that cannot run
+ * SteamCMD, the catalogue writes a save *and* a game archive, and this is the
+ * same `ObjectApi.get` the world above uses, aimed at the other bucket. "The
+ * second case adds no code path" — only a second call, from the same shape of
+ * dependency, is what makes that sentence hold.
+ */
+async function restoreGameFiles(
+  deps: RestoreDeps,
+  gameFiles: NonNullable<RestoreDeps['gameFiles']>,
+): Promise<void> {
+  // `.tar` and not `.tar.gz` like the world's: `pushGameFiles` deliberately
+  // builds this one without gzip, because an install's files are already
+  // compressed. node-tar sniffs either way, so the suffix costs nothing at
+  // runtime and would only teach a reader the opposite of the decision.
+  const archive = join(deps.config.workDir, 'game-files.tar');
+  try {
+    mkdirSync(gameFiles.directory, { recursive: true });
+    await gameFiles.api.get(gameFiles.objectKey, archive);
+    await unpackInto(archive, gameFiles.directory);
+    // Same reprise as the world's own chown, and for the same reason measured
+    // 2026-09-05: the server reads this folder as an unprivileged uid, the
+    // unpack ran as root, and an archive mode that did not leave the server
+    // read access would fail exactly as silently as the world folder did.
+    await deps.takeOwnership(gameFiles.directory, deps.config.saveOwner);
+  } catch (error) {
+    await tell(deps, `restore refused: ${gameFiles.objectKey} — ${String(error)}`);
+    throw error;
+  }
+  deps.log(`unpacked game files from ${gameFiles.objectKey}`);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { takeOwnership } from './lib/archive.js';
 import { readConfig } from './lib/config.js';
-import { buildSaveStore } from './lib/container.js';
+import { buildGameFiles, buildSaveStore } from './lib/container.js';
 import { httpReporter } from './lib/reporter.js';
 import { runRestore } from './lib/restore.js';
 
@@ -13,6 +13,7 @@ try {
   const config = readConfig(process.env);
   await runRestore({
     store: buildSaveStore(config),
+    gameFiles: buildGameFiles(config),
     report: httpReporter(config).send,
     takeOwnership,
     log: (message: string) => console.log(`beacon: ${message}`),

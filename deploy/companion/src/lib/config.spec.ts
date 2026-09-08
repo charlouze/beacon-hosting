@@ -48,4 +48,30 @@ describe('readConfig', () => {
       /BEACON_PUSH_INTERVAL_MS/,
     );
   });
+
+  // Two variables or none. The half that is missing is the one that decides
+  // where 2.3 GB of game files land.
+  it('reads the game files a machine must restore before its server starts', () => {
+    const config = readConfig({
+      ...ENV,
+      BEACON_GAME_FILES_KEY: 'sunkenland/game.tar',
+      BEACON_GAME_DIR: '/sunkenland/game',
+    });
+    expect(config.gameFiles).toEqual({ objectKey: 'sunkenland/game.tar', directory: '/sunkenland/game' });
+  });
+
+  // The game that downloads its own files writes neither variable, and the
+  // absence is what decides that — never a branch keyed on `BEACON_GAME`.
+  it('leaves the game files out when the catalogue wrote none', () => {
+    expect(readConfig(ENV).gameFiles).toBeUndefined();
+  });
+
+  it('refuses a half-written game files configuration', () => {
+    expect(() =>
+      readConfig({ ...ENV, BEACON_GAME_FILES_KEY: 'sunkenland/game.tar' }),
+    ).toThrow(/BEACON_GAME_DIR/);
+    expect(() => readConfig({ ...ENV, BEACON_GAME_DIR: '/sunkenland/game' })).toThrow(
+      /BEACON_GAME_FILES_KEY/,
+    );
+  });
 });

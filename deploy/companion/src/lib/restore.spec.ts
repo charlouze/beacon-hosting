@@ -1,8 +1,17 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Save, type SaveStore } from '@beacon/session';
+import { fakeObjectApi, type FakeObjectApi } from '@beacon/scaleway-storage';
 import { packDirectory } from './archive.js';
 import { runRestore, type RestoreDeps } from './restore.js';
 
@@ -186,5 +195,84 @@ describe('runRestore', () => {
     expect(deps.report).toHaveBeenCalledWith(
       expect.objectContaining({ phase: 'failed', detail: expect.stringContaining('chown refused') }),
     );
+  });
+
+  // The game that downloads its own files leaves `gameFiles` undefined, and
+  // the existing path above must not move a byte for it.
+  it('restores the world alone when no game files are configured', async () => {
+    await runRestore(deps);
+    expect(deps.store.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runRestore with game files', () => {
+  let gameDir: string;
+  let games: FakeObjectApi;
+  let gamePacked: string;
+
+  beforeEach(async () => {
+    gameDir = join(root, 'game');
+    const source = join(root, 'game-source');
+    mkdirSync(source);
+    writeFileSync(join(source, 'Sunkenland-DedicatedServer.exe'), Buffer.alloc(1_000, 7));
+    gamePacked = join(root, 'game.tar.gz');
+    await packDirectory(source, gamePacked);
+
+    games = fakeObjectApi();
+    games.stored.set('sunkenland/game.tar', readFileSync(gamePacked));
+
+    deps = {
+      ...deps,
+      gameFiles: { api: games, directory: gameDir, objectKey: 'sunkenland/game.tar' },
+    };
+  });
+
+  // The same transfer a save already makes, to another folder, from the other
+  // bucket. Not a second code path: a second call.
+  it('unpacks the game files before the game container may start', async () => {
+    await runRestore(deps);
+    expect(readdirSync(gameDir)).toContain('Sunkenland-DedicatedServer.exe');
+  });
+
+  // §8, first defense: as long as this exits non-zero there is no game
+  // container at all. A game whose files are missing must not start some other
+  // way, on a half-written install.
+  it('refuses when the game files cannot be fetched', async () => {
+    games.breakWith(new Error('connect ETIMEDOUT'));
+    await expect(runRestore(deps)).rejects.toThrow();
+    expect(deps.report).toHaveBeenCalledWith(expect.objectContaining({ phase: 'failed' }));
+  });
+
+  // Measured 2026-09-05 on the world folder: the server runs as an unprivileged
+  // uid, the unpack runs as root, and the oblivion is silent. Same line, for
+  // the folder the server reads its files from.
+  it('gives the game folder to the uid the server runs as', async () => {
+    await runRestore(deps);
+    expect(deps.takeOwnership).toHaveBeenCalledWith(gameDir, deps.config.saveOwner);
+  });
+
+  // §7: the key this machine holds reads this bucket and never writes to it.
+  // Asserted explicitly rather than "nothing threw" — a test whose only check
+  // is the absence of an exception passes on the day it stops testing anything.
+  it('never writes to the bucket it reads', async () => {
+    const putSpy = vi.spyOn(games, 'put');
+    await runRestore(deps);
+    expect(putSpy).not.toHaveBeenCalled();
+  });
+
+  // The bigger transfer first: a failure then wastes less work already done.
+  it('fetches the game files before the world', async () => {
+    const order: string[] = [];
+    const originalGet = games.get.bind(games);
+    games.get = vi.fn(async (key, toFile) => {
+      order.push('game');
+      await originalGet(key, toFile);
+    });
+    deps.store.fetch = vi.fn(async (_save, toFile) => {
+      order.push('world');
+      writeFileSync(toFile, readFileSync(deposited));
+    });
+    await runRestore(deps);
+    expect(order).toEqual(['game', 'world']);
   });
 });
