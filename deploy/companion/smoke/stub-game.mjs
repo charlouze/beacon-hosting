@@ -6,7 +6,10 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const dir = process.env.SAVE_DIR ?? '/opt/enshrouded/server/savegame';
+// No default: a silent fallback to one game's save directory would let a
+// second game's harness pass while writing that first game's world instead
+// of its own.
+const dir = process.env.SAVE_DIR;
 mkdirSync(dir, { recursive: true });
 
 // Twenty kilobytes of random bytes, so the archive lands well above the floor

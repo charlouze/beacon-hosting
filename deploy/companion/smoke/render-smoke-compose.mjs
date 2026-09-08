@@ -32,9 +32,15 @@ lines.forEach((line, index) => {
   if (match) headers.push({ name: match[1], index });
 });
 
-const gameHeader = headers.find((header) => header.name === 'enshrouded');
+// The same GAME this script's caller (run.sh) passes to `cloud-init:render-compose`
+// itself: whichever service that render produced is the one this stub replaces.
+const game = process.env.GAME ?? 'enshrouded';
+// Where the stub writes its world — must land on the same mount the real
+// game's volumesBlock (copied through below) declares for that game.
+const saveDir = process.env.SAVE_DIR ?? '/opt/enshrouded/server/savegame';
+const gameHeader = headers.find((header) => header.name === game);
 if (!gameHeader) {
-  throw new Error('rendered compose has no "enshrouded" service — cloud-init changed shape');
+  throw new Error(`rendered compose has no "${game}" service — cloud-init changed shape`);
 }
 const gameEnd = (headers.find((header) => header.index > gameHeader.index) ?? { index: lines.length }).index;
 
@@ -56,7 +62,7 @@ function findLine(pattern) {
   for (let index = gameHeader.index; index < gameEnd; index += 1) {
     if (lines[index] === pattern) return index;
   }
-  throw new Error(`rendered "enshrouded" service has no "${pattern}" line`);
+  throw new Error(`rendered "${game}" service has no "${pattern}" line`);
 }
 
 // Kept, not retyped: task 11 golden rule holds only if the stub waits on the
@@ -65,16 +71,22 @@ const dependsOnBlock = collectBlock(findLine('    depends_on:'));
 const volumesBlock = collectBlock(findLine('    volumes:'));
 
 const stubBlock = [
-  '  enshrouded:',
+  `  ${game}:`,
   '    # The stub (task 13 covers booting the real image): answers A2S, writes a',
   "    # world, and dies on SIGTERM — same digest as this image's own Dockerfile,",
   '    # so nothing here hand-duplicates a second copy of that pin.',
   '    image: node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32',
-  '    container_name: enshrouded',
+  // run.sh targets this container by name (`docker compose exec -T`, `docker
+  // inspect`), which is only stable across a game switch if it matches what
+  // cloud-init itself renders — kept equal to the service name for that reason.
+  `    container_name: ${game}`,
   '    command: ["node", "/opt/stub-game.mjs"]',
   ...dependsOnBlock,
+  // Must equal the container-side path in volumesBlock below — run.sh reads
+  // this same value out of `<game>.env` (BEACON_SAVE_DIR) and passes it here
+  // rather than this script guessing it from the mount it just copied through.
   '    environment:',
-  '      SAVE_DIR: /opt/enshrouded/server/savegame',
+  `      SAVE_DIR: ${saveDir}`,
   ...volumesBlock,
   '      - ../stub-game.mjs:/opt/stub-game.mjs:ro',
   '',
@@ -100,12 +112,15 @@ function mustReplaceAll(text, pattern, replacement, what) {
 output = mustReplaceAll(output, COMPANION_DIGEST_RE, 'beacon-companion:smoke', "the companion's own image reference");
 
 // The companion reads its BEACON_* variables from one env_file; this harness
-// gives it a different file with the same shape (smoke.env), never inline keys.
-output = mustReplaceAll(output, '/opt/beacon/companion.env', '../smoke.env', "the companion's env_file target");
+// gives it a different file with the same shape (`<game>.env`), never inline
+// keys — one such file per game, since BEACON_GAME and BEACON_SAVE_DIR differ
+// between them.
+const envFile = `../${game}.env`;
+output = mustReplaceAll(output, '/opt/beacon/companion.env', envFile, "the companion's env_file target");
 output = mustReplaceAll(
   output,
-  '    env_file:\n      - ../smoke.env\n',
-  '    env_file:\n      - ../smoke.env\n' +
+  `    env_file:\n      - ${envFile}\n`,
+  `    env_file:\n      - ${envFile}\n` +
     '    # Only this harness needs to reach the fake endpoint on the host; nothing\n' +
     '    # in production resolves this name.\n' +
     '    extra_hosts:\n' +
