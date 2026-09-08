@@ -44,6 +44,9 @@
     },
     {
       "path": "./tools/rules-stamp"
+    },
+    {
+      "path": "./libs/membership-record"
     }
   ],
   "compilerOptions": {}
