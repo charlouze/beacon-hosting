@@ -72,7 +72,7 @@ un jeu par tranche.
 | 1 bis | Sonder le second jeu | Ce qu'une machine seule pouvait dire de Sunkenland | livrée |
 | 2 | Le cycle | Une session naît, se prolonge et meurt — sans interface | livrée |
 | 3 | Les saves | Le monde survit aux sessions | **livrée le 2026-09-07** |
-| 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | à venir |
+| 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | **livrée le 2026-09-08** |
 | 4 | La sécurité | Le système peut être exposé | à venir |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
 
@@ -179,8 +179,8 @@ de ses pièces ne serve deux fois.
 
 **Gate ferme : aucun monde auquel on tient ne migre avant que cette tranche
 soit finie et ses tests verts.** Il se lève jeu par jeu — à la fin de celle-ci
-pour Enshrouded, à la fin de la 3 bis pour Sunkenland, dont le monde reste dans
-le seau jusque-là.
+pour Enshrouded, à la fin de la 3 bis pour Sunkenland. **Les deux sont levés**,
+le 2026-09-07 et le 2026-09-08.
 
 **Livrée le 2026-09-07, et le gate est levé pour Enshrouded.** Deux sessions
 consécutives sur une vraie machine : la seconde restaure la clé que la première
@@ -209,39 +209,58 @@ contraintes, sans code d'implémentation, et c'est la forme à reprendre.
 L'entrée Sunkenland du catalogue, l'adoption du script de démarrage que la
 sonde du 2026-09-05 a écrit — avec l'`uid 7000` et le `trap` que l'image impose
 —, la restauration des 2,3 Go de fichiers de jeu depuis leur seau, le ServerID
-lu dans la sortie du conteneur et vérifié par son préfixe de GUID,
-`SunkenlandJoinInfo` et son affichage, et `tools/game-depot`.
+extrait par le point d'entrée monté et vérifié par son préfixe de GUID,
+`SunkenlandJoinInfo`, et `tools/game-depot`.
 
 Elle n'ajoute rien au modèle : le §4 a écrit `JoinInfo` à deux formes et le port
 `ServerHost` à un jeu libre précisément pour que ce jeu-ci ne coûte qu'une
-entrée de catalogue. C'est ce que cette tranche vérifie.
+entrée de catalogue. **C'est vérifié** : hors du catalogue, le second jeu n'a
+coûté qu'un champ optionnel au protocole, une branche sur un *refus* dans la
+Function, et des valeurs — jamais un `if` sur un nom de jeu.
 
-**Ce que la tranche 3 lui laisse nommément**, au-delà de son propre périmètre :
+**Livrée le 2026-09-08, et le gate est levé pour Sunkenland.** Deux sessions
+consécutives : la seconde restaure la `pre-shutdown` de la première, et les onze
+fichiers qui font foi sont identiques à l'octet près. Un joueur est entré **par
+la liste**, sans qu'aucune adresse ait jamais été annoncée. Coût réel **0,10 €**
+pour les deux, sous le budget de 0,30 €. Le relevé est dans
+[`2026-09-09-tranche-3-bis-session.md`](2026-09-09-tranche-3-bis-session.md) et
+les mesures sont versées au §12 du spec. Formellement le gate se lève à la
+fusion, la production étant `main`.
 
-- **La sonde de disponibilité ne connaît que `a2s://`.** `probeFor` refuse tout
-  le reste en nommant ce qu'elle a reçu ; la 3 bis ajoute la forme qui lit le
-  ServerID dans la sortie du conteneur, et le §6 dit déjà pourquoi ce n'est pas
-  un pis-aller.
-- **`catalogFor('sunkenland')` lève toujours**, et son message nomme encore la
-  tranche 3 : il devra désigner celle qui l'implémente.
-- **Le compagnon ne restaure pas de fichiers de jeu.** `beacon-games` existe, sa
-  politique de lecture seule est posée et mesurée, et le compagnon lit déjà le
-  nom du seau ; rien d'autre n'est écrit — ni clé d'objet, ni chemin de
-  restauration.
-- **La règle de cycle de vie de ce jeu n'est pas posée**, sur
-  `saves/sunkenland/auto/` et rien d'autre : les sauvegardes de fin de session
-  n'expirent jamais (§5, §8). Le préfixe est littéral, donc aucun test ne
-  réclamera cette ligne et personne ne verra qu'elle manque — les poussées
-  automatiques d'un second jeu s'accumuleraient sans fin. Le fichier à modifier
-  est [`deploy/scaleway/beacon-saves-lifecycle.json`](../../../deploy/scaleway/beacon-saves-lifecycle.json).
-- **L'egress objet intra-région**, ouvert depuis la tranche 0, se mesure enfin
-  ici : c'est la première tranche dont la restauration tire 2,3 Go plutôt que
-  72 Ko.
-- **`beacon-stop.path` après avoir tiré.** L'unité est vue armée et vue
-  fonctionner ; l'état qu'elle laisse une fois déclenchée n'a pas été observé,
-  la machine ayant été détruite avant. À interroger **entre** l'arrêt du jeu et
-  la destruction, une fenêtre de quelques dizaines de secondes qu'il faut viser
-  exprès.
+**Une phrase de cette section était fausse et l'est restée jusqu'ici** : elle
+annonçait « `SunkenlandJoinInfo` **et son affichage** ». L'affichage n'est pas
+ici — le domaine ne transporte vers le navigateur qu'un `hasJoinInfo` booléen,
+le champ lui-même est réservé, et le lire demanderait à `libs/session-record` un
+travail qui est celui de l'écran. Décision du 2026-09-08 : la forme est produite
+en 3 bis, elle s'affiche en tranche 5, et c'est là que « ajouter un jeu ajoute
+une forme » se paiera pour de bon.
+
+**Ce que la tranche 3 lui laissait, et qui est fait :** la sonde connaît une
+seconde forme, `catalogFor` ne lève plus, le compagnon restaure deux sources, la
+règle de cycle de vie est posée sur `saves/sunkenland/auto/`, et
+**`beacon-stop.path` a enfin été observé après avoir tiré** — le drapeau vit
+exactement 2 s, l'unité n'est jamais `failed`, et le jeu s'arrête en 1 s, ce qui
+valide le `trap` amont.
+
+**Ce qu'elle laisse à son tour :**
+
+- **L'egress objet intra-région reste ouvert.** La restauration a bien tiré
+  2,3 Go, mais la facture n'a pas encore été lue.
+- **`-adminSteamIDs` est nourri par une constante du catalogue.** La tranche 4
+  apporte `members` et son `steamId`, et reprendra cette valeur. Mesuré au
+  passage : un admin **peut** déclencher une sauvegarde depuis la console, ce qui
+  est le seul moyen d'en provoquer une sur ce jeu.
+- **La fermeture d'une soirée coûte trois minutes de machine de plus** que sur
+  l'autre jeu, mesuré deux fois : la sonde qui lit un fichier ne redevient jamais
+  fausse, donc la fenêtre de grâce est épuisée en entier.
+- **L'import/export de monde n'a pas de domicile.** Le geste d'amorçage vit dans
+  `deploy/scaleway/bootstrap-world.ps1` ; il ne peut pas rejoindre `game-depot`,
+  que le §4 tient délibérément aveugle au préfixe des sauvegardes. La tranche 5,
+  qui apporte l'écran, en est le domicile naturel.
+- **La charge à plusieurs joueurs n'est toujours pas mesurée**, et le décalage de
+  version Photon reste une déduction — qui se combine mal avec une mise à jour
+  manuelle : une archive non rafraîchie produit une panne que rien ne
+  diagnostique.
 
 ### 4 · La sécurité
 
