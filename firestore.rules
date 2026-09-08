@@ -104,6 +104,112 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // §5: the fields of `server/current` have two owners. The client writes
+    // intentions, the functions write findings, and the boundary between them is
+    // this list — the one the rules demand, declared once and named so that
+    // `libs/session-record` can read it as text. Nothing else in the repository
+    // can compare it with its two TypeScript counterparts: rules are not
+    // TypeScript, and a divergence breaks nothing until an opening is refused
+    // every evening, or a reserved fact goes through.
+    function demandedFields() {
+      return ['state', 'stateSince', 'sessionId', 'startedBy', 'startedAt',
+        'deadline', 'game', 'instanceSize'];
+    }
+
+    // `instanceSize` is demanded but is not everyone's: §5 makes the template an
+    // admin's choice, and a member who writes none inherits the default the
+    // function applies from `config/settings`.
+    //
+    // The order of the last two terms is not indifferent: `isAdmin()` costs a
+    // `get()`, and no write but the admin's own needs to pay for it.
+    function ownsEveryTouchedField(affected) {
+      return affected.hasOnly(demandedFields())
+        && (!affected.hasAny(['instanceSize']) || isAdmin());
+    }
+
+    // §7: the four fields that say *which* session is open, and in whose name.
+    // They move together, with an opening, or they do not move at all.
+    function sessionIdentityFields() {
+      return ['sessionId', 'game', 'startedBy', 'startedAt'];
+    }
+
+    // Every constraint here is conditional, and `stateSince` is the trap: an
+    // extension writes `deadline` alone — it does not change the state, so it
+    // has no reason to restate when the state began. Demanded unconditionally,
+    // `stateSince == request.time` would refuse every extension the product has.
+    //
+    // No transition table and no arithmetic: which state may follow which is
+    // business, it lives in `libs/session`, and the watchdog is what catches a
+    // forged order (§4). What the rules hold is that `RUNNING`, `IDLE` and
+    // `FAILED` assert a fact only a function can have observed.
+    function hasValidValues(affected) {
+      let data = request.resource.data;
+      // An opening is a write that *moves* the state to PROVISIONING. A state
+      // rewritten to the one it already holds does not move, so it opens
+      // nothing — which is what keeps a session's identity out of reach for as
+      // long as the session lasts.
+      let opening = affected.hasAny(['state']) && data.state == 'PROVISIONING';
+      return (!affected.hasAny(['state']) || data.state in ['PROVISIONING', 'STOPPING'])
+        // `stateSince` is the instant `state` began, so neither is written
+        // without the other — and `affectedKeys` only reports what changes,
+        // which makes this the check that catches a state rewritten to the one
+        // it already holds. One way round it is an attack: a member pushing
+        // `stateSince` alone to `request.time`, over and over, holds a stuck
+        // provisioning past every timeout the watchdog measures from it. The
+        // other way it is a lie left in the document — a new state dated from
+        // the previous one.
+        && affected.hasAny(['state']) == affected.hasAny(['stateSince'])
+        && (!affected.hasAny(['stateSince']) || data.stateSince == request.time)
+        // An opening declares all four, and no other write may touch them.
+        //
+        // Read off the resulting document and never off the affected keys, and
+        // that is the same lesson as `state` just above: `clearFacts` clears
+        // the reserved facts and nothing else, so a document back to IDLE still
+        // carries the name of whoever opened the last session. An opening that
+        // simply omits `startedBy` changes it not at all — the key is never
+        // affected, no check that watches for movement ever runs, and the
+        // session is filed under the previous player. §7 names that refusal.
+        //
+        // For the same reason this cannot be `affectedKeys().hasAll(...)`:
+        // opening a second session of the same game, or a second session by the
+        // same player, moves neither field, and every one of those would be
+        // refused.
+        //
+        // `hasAll` comes first so the three tests that follow read keys that
+        // exist — an absent one is an evaluation error, which refuses by
+        // crashing rather than by deciding.
+        && (opening
+              ? data.keys().hasAll(sessionIdentityFields())
+                && data.startedBy == request.auth.uid
+                && data.startedAt == request.time
+                && bounded(data.sessionId)
+                && bounded(data.game)
+              : !affected.hasAny(sessionIdentityFields()))
+        // A timestamp and not a bounded string, because this field is the only
+        // one a client writes that is not one: left untyped it would take a
+        // megabyte like any other.
+        && (!affected.hasAny(['deadline']) || data.deadline is timestamp)
+        && (!affected.hasAny(['instanceSize']) || bounded(data.instanceSize));
+    }
+
+    function isValidServerUpdate() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return ownsEveryTouchedField(affected) && hasValidValues(affected);
+    }
+
+    match /server/current {
+      // The document is named, never `server/{id}`: any other document of the
+      // collection falls through to the refusal below.
+      allow read: if isMember();
+
+      // Neither created nor deleted by a client, and that is what holds
+      // everything above: `resource` is null on a create, so a document a client
+      // could create would be born past every field-by-field check at once —
+      // `RUNNING`, with an ip of its own choosing. §5 seeds it at deployment,
+      // and it stays.
+      allow update: if isMember() && isValidServerUpdate();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
