@@ -424,3 +424,30 @@ ce paragraphe croirait le contraire.
   chaque session — et il coûte une garde qui n'existait pas : un `prevent_destroy`
   sur le seau des sauvegardes, obligatoire dès qu'un monde auquel on tient y
   entre, sa règle d'élagage étant un bloc interne du seau.
+
+- **L'alerte du watchdog devient payante, et c'est la propriété qui est touchée,
+  pas le budget.** Google facturera l'alerting le **1er septembre 2027 au plus
+  tôt**, 0,35 $ par mois et par référence de métrique, avec un préavis annoncé à
+  90 puis 30 jours. Pour l'alerte du watchdog, une trentaine de centimes par
+  mois : négligeable en argent.
+
+  **Ce qui ne l'est pas, c'est que ce coût soit fixe.** Tout le produit tient sur
+  « on ne paie que quand on joue », et le §11 pose la ligne du plan de contrôle à
+  0 €. Un mois sans partie cesserait de coûter zéro. C'est le seul endroit du
+  système où une facture courrait sans qu'on ait joué.
+
+  **La sortie est écrite dans le même document** : les alertes fondées sur une
+  métrique de disponibilité ne sont pas facturées, jamais. Le §6 ne demande qu'une
+  chose — savoir que le watchdog tourne encore — et `health/watchdog` sait déjà
+  dire depuis quand il ne tourne plus. Un contrôle de disponibilité qui lirait cet
+  état rendrait la surveillance gratuite. C'est une piste, pas une mesure : le
+  coût propre des contrôles reste à vérifier, et la tranche 1 a déjà appris qu'une
+  métrique documentée peut ne pas exister. Le détail est en section F de
+  [`probe/RESULTS.md`](../../../probe/RESULTS.md), avec ce que les alertes sur les
+  logs laissent d'ambigu.
+
+  Rien à décider avant que le préavis arrive.
+
+  Deux endroits mentent déjà par anticipation et devront bouger : la **section D**
+  de [`probe/RESULTS.md`](../../../probe/RESULTS.md), qui donne l'alerting gratuit
+  sans réserve, et le **§11** du spec. La mesure, elle, est en section F.
