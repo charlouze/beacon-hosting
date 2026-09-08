@@ -56,6 +56,17 @@ run = "npx firebase emulators:start --config firebase.dev.json --project demo-be
 description = "Sert le pilote, qui ne parle qu'a l'emulateur"
 run = "npx nx serve web"
 
+# Les sept gestes d'une soiree d'essai, dans le seul ordre qui marche. L'ordre
+# n'est pas un confort : `apps/functions/dist/.env` est une copie que le build
+# repose, et l'emulateur ne la lit qu'au demarrage. Reecrire apres avoir
+# construit, ou construire apres avoir demarre l'emulateur, fait provisionner
+# une machine facturee qui rapporte a une url morte — c'est arrive le
+# 2026-09-08. La commande tient la fenetre ; Ctrl-C arrete les trois processus
+# en ordre inverse, et verifie qu'ils sont morts.
+[tasks.session]
+description = "Monte le tunnel, l'emulateur, le semis et le pilote, et verifie le 401"
+run = "npx nx run dev-session:session"
+
 [tasks.inventory]
 description = "Liste ce que le compte Scaleway detient — lecture seule, ne cree rien"
 run = "npm --prefix probe run scw:inventory"

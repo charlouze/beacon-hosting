@@ -38,6 +38,9 @@
     },
     {
       "path": "./tools/game-depot"
+    },
+    {
+      "path": "./tools/dev-session"
     }
   ],
   "compilerOptions": {}

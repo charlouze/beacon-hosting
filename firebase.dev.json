@@ -11,7 +11,9 @@
   ],
   "emulators": {
     "firestore": { "port": 8080 },
-    "ui": { "enabled": false },
+    "functions": { "port": 5001 },
+    "hub": { "port": 4400 },
+    "ui": { "enabled": true, "port": 4000 },
     "singleProjectMode": true
   }
 }
