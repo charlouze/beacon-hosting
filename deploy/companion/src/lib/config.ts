@@ -24,7 +24,12 @@ export interface CompanionConfig {
   readonly saveDir: string;
   /** `uid:gid`, because the game server does not run as root and the restore does. */
   readonly saveOwner: string;
-  /** How readiness is observed for this game. `a2s://host:port` for now. */
+  /**
+   * How readiness is observed for this game, as a url naming the mechanism:
+   * `a2s://host:port` for a game that answers a query, `serverid://path` for
+   * one whose join point only the machine discovers. `readiness.ts` holds the
+   * list; a form it cannot read is a catalogue entry to fix.
+   */
   readonly readyProbe: string;
   readonly stopFlag: string;
   /**

@@ -66,7 +66,7 @@ beforeEach(() => {
   deps = {
     store,
     report: vi.fn(async () => ({ state: 'RUNNING' as const, deadlineIso: null })),
-    probeReady: vi.fn(async () => false),
+    probeReady: vi.fn(async () => ({ ready: false })),
     touch: vi.fn(async () => undefined),
     sleep: vi.fn(async () => undefined),
     log: vi.fn(),
@@ -222,7 +222,7 @@ describe('stopAndPush', () => {
 
   it('waits for the server to stop answering before it archives', async () => {
     let turns = 0;
-    deps = { ...deps, probeReady: vi.fn(async () => ++turns < 3) };
+    deps = { ...deps, probeReady: vi.fn(async () => ({ ready: ++turns < 3 })) };
     await stopAndPush(deps);
     expect(deps.probeReady).toHaveBeenCalledTimes(3);
     expect(deps.store.deposit).toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('stopAndPush', () => {
   it('pushes anyway when the server never goes quiet', async () => {
     deps = {
       ...deps,
-      probeReady: vi.fn(async () => true),
+      probeReady: vi.fn(async () => ({ ready: true })),
       sleep: vi.fn(async () => undefined),
     };
     await stopAndPush(deps);

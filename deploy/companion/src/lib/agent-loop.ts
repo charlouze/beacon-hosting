@@ -1,9 +1,10 @@
 import type { AgentInstructions, AgentReport } from '@beacon/agent-protocol';
 import type { Clock } from '@beacon/session';
+import type { Readiness } from './readiness.js';
 
 export interface AgentLoopDeps {
-  /** Whether the game server answers a player's own question. */
-  readonly probeReady: () => Promise<boolean>;
+  /** Whether the server is ready to be joined, and by what — see `Readiness`. */
+  readonly probeReady: () => Promise<Readiness>;
   readonly report: (report: Omit<AgentReport, 'sessionId'>) => Promise<AgentInstructions>;
   /** Stop the game and push the last save. Written in task 8. */
   readonly onStopping: () => Promise<void>;
@@ -33,16 +34,20 @@ export async function runAgentLoop(deps: AgentLoopDeps): Promise<void> {
   let lastPush = deps.clock.now().getTime();
 
   while (!until()) {
-    const ready = await probe(deps);
+    const readiness = await probe(deps);
 
     let instructions: AgentInstructions;
     try {
       instructions = await deps.report(
         // `ready` once and only once. A second one would rewrite `stateSince`,
-        // and the delays of §6 are measured on it.
-        !announced && ready ? { phase: 'ready' } : { phase: 'alive' },
+        // and the delays of §6 are measured on it. `serverId` rides along only
+        // when the probe found one — the game that publishes an address has
+        // none, and the report must not invent one.
+        !announced && readiness.ready
+          ? { phase: 'ready', ...(readiness.serverId !== undefined ? { serverId: readiness.serverId } : {}) }
+          : { phase: 'alive' },
       );
-      if (!announced && ready) announced = true;
+      if (!announced && readiness.ready) announced = true;
     } catch (error) {
       // The endpoint is across a network and the session is not over because
       // one call failed. A loop that died here would stop pushing saves — which
@@ -74,12 +79,12 @@ export async function runAgentLoop(deps: AgentLoopDeps): Promise<void> {
   }
 }
 
-/** False on any failure: for the first minutes nothing is listening, and that is normal. */
-async function probe(deps: AgentLoopDeps): Promise<boolean> {
+/** Not ready on any failure: for the first minutes nothing is listening, and that is normal. */
+async function probe(deps: AgentLoopDeps): Promise<Readiness> {
   try {
     return await deps.probeReady();
   } catch (error) {
     deps.log(`probe failed: ${String(error)}`);
-    return false;
+    return { ready: false };
   }
 }
