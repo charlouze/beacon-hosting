@@ -1870,8 +1870,48 @@ Conduite sur l'émulateur seul, sans tunnel et sans machine, avec un
 - **L'arrêt ne laisse rien** : après l'arrêt de l'émulateur, aucun port en
   écoute, aucun `java`, aucun `cloudflared`.
 
-Reste non mesuré, et c'est la tâche 8 : le tunnel lui-même, le 401 à travers
-lui, le pilote, et le Ctrl-C sur les trois processus à la fois.
+## La vraie session, conduite le 2026-09-09
+
+`mise run session` de bout en bout depuis le worktree, avec le `.env` copié.
+**Le 401 est passé à travers le tunnel.**
+
+| Étape | Durée |
+|---|---|
+| Lancement → URL du tunnel imprimée | **7 s** |
+| Construction des Functions | 124 ms — coup au cache |
+| Ouverture → pilote joignable | **48 s** |
+| `agentReport`, première invocation, à froid | 0,9 s |
+
+Quarante-huit secondes pour ce qui prenait plusieurs minutes à la main et
+portait trois pannes possibles. Les sept étapes se sont annoncées dans l'ordre
+écrit.
+
+**Le Ctrl-C ne laisse rien.** Vérifié après coup : aucun port en écoute — ni
+5001, 8080, 4400, 4000, 4200, ni le 20241 des métriques de `cloudflared` —,
+aucun processus `cloudflared`, aucune JVM. Le tunnel répond **530** depuis
+l'extérieur : Cloudflare ne trouve plus son origine. C'est le code que
+`verdictFor` traduit par « le tunnel porte, mais rien n'écoute derrière », et le
+voir ici confirme la traduction.
+
+### Deux choses que seule une vraie session apprend
+
+**Le cache Nx est global, dans `~/.nx`, partagé entre la copie principale et
+tous les worktrees.** Conséquence visible : `prune-lockfile` réimprime le
+`stdout` capturé lors de la course d'origine, donc il annonce `Pruned deploy
+output written to C:\…\game-hosting\apps\functions\dist` — **le chemin de la
+copie principale**, lu depuis un worktree. C'est cosmétique, et ça fait peur
+pour rien : la clé de cache est le hash du contenu, donc un coup au cache
+*prouve* que les sources sont identiques à celles qui ont produit l'artefact. La
+promesse tient — le build n'est pas sauté, il est rejoué parce que les entrées
+sont les mêmes. Mais quiconque lit cette ligne depuis un worktree perdra dix
+minutes à la vérifier, comme ça a été le cas ici.
+
+**Le prix de la fenêtre unique est plus élevé qu'estimé.** `cloudflared` écrit
+une quarantaine de lignes entre l'en-tête de l'étape 2 et son `ok` : bannière de
+conditions d'utilisation, version, protocole, et un tableau complet de
+pré-vérifications de connectivité. Le tableau de bord y disparaît. Une fois
+l'URL capturée, plus rien de ce que `cloudflared` dit n'est utile à l'écran —
+seul l'accumulateur qui alimente `output()` a besoin de continuer.
 
 ## Ce que ce plan ne fait pas
 
