@@ -17,7 +17,15 @@
     "name": "dev-session",
     "tags": [
       "scope:tool"
-    ]
+    ],
+    "targets": {
+      "session": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx tools/dev-session/src/session.ts"
+        }
+      }
+    }
   },
   "dependencies": {}
 }
