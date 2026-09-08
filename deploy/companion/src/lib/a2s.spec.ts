@@ -1,6 +1,6 @@
 import { createSocket, type Socket } from 'node:dgram';
 import { afterEach, describe, expect, it } from 'vitest';
-import { a2sInfo, probeFor } from './a2s.js';
+import { a2sInfo } from './a2s.js';
 
 let server: Socket | null = null;
 
@@ -49,19 +49,6 @@ describe('a2sInfo', () => {
 
   it('is false rather than throwing when the host does not resolve', async () => {
     expect(await a2sInfo('nothing.invalid', 15637, 200)).toBe(false);
-  });
-
-  it('reads the probe the catalogue wrote', () => {
-    expect(probeFor('a2s://enshrouded:15637')).toEqual({
-      host: 'enshrouded',
-      port: 15637,
-    });
-  });
-
-  // §4: the companion knows no game, so it does not guess. A probe it cannot
-  // read is a catalogue entry that is wrong, and it says so at launch.
-  it('refuses a probe it cannot read', () => {
-    expect(() => probeFor('log://stdout')).toThrow(/log:\/\/stdout/);
   });
 
   // The socket is unconnected until it is bound to the one peer queried, and

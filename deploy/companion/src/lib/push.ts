@@ -11,11 +11,12 @@ import {
 } from '@beacon/session';
 import { packDirectory } from './archive.js';
 import type { CompanionConfig } from './config.js';
+import type { Readiness } from './readiness.js';
 
 export interface PushDeps {
   readonly store: SaveStore;
   readonly report: (report: Omit<AgentReport, 'sessionId'>) => Promise<AgentInstructions>;
-  readonly probeReady: () => Promise<boolean>;
+  readonly probeReady: () => Promise<Readiness>;
   /** Create the file the host's one-verb unit watches. */
   readonly touch: (path: string) => Promise<void>;
   readonly sleep: (ms: number) => Promise<void>;
@@ -138,10 +139,16 @@ export async function stopAndPush(deps: PushDeps): Promise<void> {
     deps.log(`could not ask the host to stop the game server: ${String(error)}`);
   }
 
+  // For the game whose readiness comes from a file rather than a query, this
+  // probe never turns false again once the identifier has been read: the
+  // file stays on disk. This loop still runs out its grace period below and
+  // archives anyway — deliberately, and accepted by §8 for that game: a torn
+  // archive is a risk, an absent one is a loss, and nothing here can ask that
+  // server for a save on demand.
   const deadline = deps.clock.now().getTime() + deps.shutdownGraceMs;
   let quiet = false;
   while (deps.clock.now().getTime() < deadline) {
-    if (!(await deps.probeReady())) {
+    if (!(await deps.probeReady()).ready) {
       quiet = true;
       break;
     }

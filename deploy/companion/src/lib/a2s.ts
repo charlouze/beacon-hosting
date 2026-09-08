@@ -9,24 +9,6 @@ const A2S_INFO = Buffer.concat([
 const CHALLENGE = 0x41;
 const INFO = 0x49;
 
-export interface Probe {
-  readonly host: string;
-  readonly port: number;
-}
-
-/**
- * `a2s://host:port`, as the catalogue writes it. §4 keeps every game detail in
- * `deploy/cloud-init/games/`, so this reads a value and never guesses one — and
- * a form it cannot read is a catalogue entry to fix, said at launch.
- */
-export function probeFor(url: string): Probe {
-  const match = /^a2s:\/\/([^:/]+):(\d+)$/.exec(url);
-  if (match === null) {
-    throw new Error(`BEACON_READY_PROBE is not a probe this companion can run: ${url}`);
-  }
-  return { host: match[1], port: Number(match[2]) };
-}
-
 /**
  * Whether the game server answers a player's own question. §6 chose this over
  * the presence of a process or an open port on purpose: those are proxies, and

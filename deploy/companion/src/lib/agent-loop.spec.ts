@@ -10,7 +10,7 @@ beforeEach(() => {
   // repository and would prove nothing more.
   let tick = 0;
   deps = {
-    probeReady: vi.fn(async () => true),
+    probeReady: vi.fn(async () => ({ ready: true })),
     report: vi.fn(async () => ({ state: 'RUNNING' as const, deadlineIso: null })),
     onStopping: vi.fn(async () => undefined),
     onPushDue: vi.fn(async () => undefined),
@@ -27,7 +27,7 @@ describe('runAgentLoop', () => {
   // answers, and that write is what RUNNING means.
   it('reports ready the first time the server answers, and only once', async () => {
     let turns = 0;
-    const probeReady = vi.fn(async () => ++turns > 1);
+    const probeReady = vi.fn(async () => ({ ready: ++turns > 1 }));
     await runAgentLoop({ ...deps, probeReady, until: () => turns >= 4 });
 
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].phase);
@@ -46,7 +46,7 @@ describe('runAgentLoop', () => {
     let turns = 0;
     const probeReady = vi.fn(async () => {
       turns++;
-      return false;
+      return { ready: false };
     });
     await runAgentLoop({ ...deps, probeReady, until: () => turns >= 3 });
     expect(deps.report).toHaveBeenCalledTimes(3);
@@ -89,7 +89,7 @@ describe('runAgentLoop', () => {
     let turns = 0;
     const probeReady = vi.fn(async () => {
       turns++;
-      return true;
+      return { ready: true };
     });
     await runAgentLoop({
       ...deps,
@@ -111,7 +111,7 @@ describe('runAgentLoop', () => {
     let turns = 0;
     const probeReady = vi.fn(async () => {
       turns++;
-      return turns >= 3; // silent for the first two turns, then answers
+      return { ready: turns >= 3 }; // silent for the first two turns, then answers
     });
     await runAgentLoop({
       ...deps,
@@ -120,5 +120,45 @@ describe('runAgentLoop', () => {
       until: () => turns >= 3,
     });
     expect(deps.onPushDue).toHaveBeenCalledTimes(1);
+  });
+
+  // §6: RUNNING means "the join point is published". For this game, the only
+  // source of that join point is what the probe read from the file.
+  it('carries the identifier in the report that announces readiness', async () => {
+    let turns = 0;
+    await runAgentLoop({
+      ...deps,
+      probeReady: async () => ({ ready: true, serverId: 'w~1' }),
+      until: () => ++turns >= 2,
+    });
+    const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(phases[0]).toEqual({ phase: 'ready', serverId: 'w~1' });
+  });
+
+  // `ready` once and only once: a second would rewrite `stateSince`, and the
+  // §6 delays are measured against it. The rule does not change because the
+  // report now carries one more value.
+  it('announces readiness once, identifier included', async () => {
+    let turns = 0;
+    await runAgentLoop({
+      ...deps,
+      probeReady: async () => ({ ready: true, serverId: 'w~1' }),
+      until: () => ++turns >= 3,
+    });
+    const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].phase);
+    expect(phases.filter((phase: string) => phase === 'ready')).toHaveLength(1);
+  });
+
+  // The game that publishes an address has no identifier, and the report must
+  // not invent one.
+  it('reports readiness without an identifier when the probe found none', async () => {
+    let turns = 0;
+    await runAgentLoop({
+      ...deps,
+      probeReady: async () => ({ ready: true }),
+      until: () => ++turns >= 2,
+    });
+    const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(phases[0]).toEqual({ phase: 'ready' });
   });
 });

@@ -8,7 +8,10 @@
 // along on the same line: `BEACON_PUSH_INTERVAL_MS` is only checked once per
 // report cycle, so a routine push has already run by the time this test
 // asks for STOPPING — the bare phase would not say which one was the
-// pre-shutdown archive.
+// pre-shutdown archive. A `ready` report's identifier rides along the same
+// way, and for the reason that is the whole point of the second game: it is
+// the join point, only the machine discovers it, and a bare phase would say
+// the server is up without saying what nobody can play without.
 import { createServer } from 'node:http';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 
@@ -29,8 +32,12 @@ createServer((request, response) => {
   request.on('data', (chunk) => chunks.push(chunk));
   request.on('end', () => {
     try {
-      const { phase, save } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      appendFileSync(PHASES_LOG, save ? `${phase} ${save.origin}\n` : `${phase}\n`);
+      const { phase, save, serverId } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      // Whichever of the two the report carries, appended raw: this file is
+      // read back with `grep -qx`, so a value the companion mangled on the way
+      // cannot match a value the stub wrote. Neither field is ever both.
+      const carried = save ? ` ${save.origin}` : serverId ? ` ${serverId}` : '';
+      appendFileSync(PHASES_LOG, `${phase}${carried}\n`);
     } catch {
       // A body this cannot parse still gets answered below: the round trip
       // does not hinge on this test harness reading it back.

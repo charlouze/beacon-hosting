@@ -1517,17 +1517,36 @@ git push -u origin tranche-3-bis-le-second-jeu
 
 - [ ] **Step 3: Poser le tag**
 
-Le tag de la tranche 3 était `companion-v1` ; celui-ci est le suivant. Le tag
-d'image n'est pas celui du tag git — le workflow retire le préfixe, l'image
-s'appelant déjà `beacon-companion`.
+Le tag de la tranche 3 était `companion-v0.1` — relevé au distant, ce plan
+annonçait `companion-v1` et se trompait. Le `0.` tient jusqu'à ce que le
+système soit fini.
+
+Le tag d'image n'est pas celui du tag git : le workflow le dérive par
+`${GITHUB_REF_NAME#companion-v}`, l'image s'appelant déjà `beacon-companion`.
+`companion-v0.3` publie donc `beacon-companion:0.3`, sans rien changer au
+workflow — son déclencheur est `companion-v*`.
 
 ```bash
-git tag companion-v2
-git push origin companion-v2
+git tag companion-v0.3
+git push origin companion-v0.3
 ```
 
-La barrière tourne avant la publication (§10), soit quelques minutes de
-conteneurs ; un rouge là ne dit rien de la publication elle-même.
+**`companion-v0.2` est brûlé, et pourquoi il l'est vaut d'être su.** Sa barrière
+a échoué sur un runner : `run.sh` faisait `docker compose up -d bucket` puis
+appelait `mc` aussitôt, or `up -d` rend la main au démarrage du conteneur et non
+quand le serveur répond — MinIO annonçait `Started`, et la connexion était
+refusée **154 ms plus tard**. La course vivait sur `main` depuis l'origine du
+harnais ; un poste la perd assez rarement pour paraître vert. Corrigée par
+`--wait`, qui lit enfin le `healthcheck` que le service déclarait déjà.
+
+**Un tag ne se déplace pas, il se succède.** Rien n'ayant été publié sous `0.2`,
+le déplacer aurait été tentant — mais c'est un réflexe qui se paie le jour où
+quelque chose l'aura consommé, et un numéro ne coûte rien.
+
+La barrière tourne **avant** la publication (§10), soit quelques minutes de
+conteneurs. Un rouge là ne dit rien de la qualité de l'image : il dit qu'**elle
+n'existe pas**, l'étape de poussée étant sautée. Le tag est alors consommé pour
+rien, et le suivant se pose sur le correctif.
 
 - [ ] **Step 4: Relever le digest publié**
 
@@ -1535,7 +1554,7 @@ Le workflow l'écrit dans son résumé d'exécution. Le relire, ou le redemander
 registre :
 
 ```bash
-docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:2
+docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:0.3
 ```
 
 Noter la ligne `Digest: sha256:…`. C'est la seule sortie de cette tâche, et la
@@ -1589,17 +1608,36 @@ celui de la sonde.
 
 - [ ] **Step 1: Vérifier que le mot de passe du serveur ne contient pas de `$`**
 
-C'est le geste le moins visible et celui qui bloquerait tout. Le rendeur de la
-tâche 5 refuse un mot de passe qui en porte un — donc si le secret de production
-en contient un, **aucune session Sunkenland ne peut être provisionnée**, et
-personne ne le découvrirait avant la tâche 12.
+C'est le geste le moins visible et celui qui bloquerait tout. `renderCloudInit`
+refuse toute valeur qui porte un `$` — donc si le secret en contient un,
+**aucune session ne peut être provisionnée, des deux jeux**, et personne ne le
+découvrirait avant la tâche 12.
+
+**La vérification ne se fait pas dans Secret Manager, et ce plan s'y trompait.**
+Relevé le 2026-09-08 : sur les cinq secrets que `container.ts` déclare, **seul
+`SCW_SECRET_KEY` y existe** ; `SERVER_PASSWORD`, `S3_SECRET_KEY` et les deux
+`DYNHOST_*` n'y ont aucune version. C'est cohérent avec l'état du projet — rien
+n'est déployé, et une vraie session se pilote depuis l'émulateur, qui lit
+`apps/functions/.env` recopié par `tools/dev-secrets.mjs`. La commande d'origine
+(`firebase functions:secrets:access SERVER_PASSWORD`) échoue donc en `404` sans
+rien dire de la valeur réellement utilisée.
+
+La source qui fait foi aujourd'hui est `apps/functions/.env`. Vérifier **toutes**
+ses valeurs, puisque le refus les couvre toutes, et sans jamais en afficher une :
 
 ```bash
-firebase functions:secrets:access SERVER_PASSWORD | grep -c '\$'
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue;; esac
+  k=${line%%=*}; v=${line#*=}
+  case "$v" in *'$'*) echo "$k PORTE UN \$";; esac
+done < apps/functions/.env
 ```
 
-Attendu : `0`. Sinon, changer le secret avant de continuer — et le mot de passe
-d'Enshrouded change avec, les deux jeux partageant le même.
+Attendu : **aucune sortie**. Sinon, changer la valeur avant de continuer — et le
+mot de passe d'Enshrouded change avec, les deux jeux partageant le même.
+
+Le jour où les Functions seront déployées (tranche 4 et son gate), la même
+vérification se refera sur Secret Manager, qui deviendra la source qui fait foi.
 
 - [ ] **Step 2: Déposer l'archive unique des fichiers de jeu**
 

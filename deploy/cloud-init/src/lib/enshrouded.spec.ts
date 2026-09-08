@@ -1,37 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
-
-const REQUEST = {
-  serverName: 'Beacon',
-  serverPassword: 'hunter2',
-  slotCount: 4,
-  sessionId: 's1',
-  agentToken: 'a'.repeat(64),
-  endpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
-  saves: {
-    endpoint: 'https://s3.fr-par.scw.cloud',
-    region: 'fr-par',
-    savesBucket: 'beacon-saves',
-    gamesBucket: 'beacon-games',
-    accessKey: 'SCWXXXXXXXXXXXXXXXXX',
-    secretKey: 'a-secret-with-a$&-in-it',
-  },
-};
-
-/**
- * One service's own lines, not the whole compose: depth is syntax here
- * exactly as it is in the cloud-init's own block scalar (see the test below
- * that checks it) — a line belongs to a service until the next line at its
- * own two-space depth opens the next one.
- */
-function serviceBlock(compose: string, name: string): string {
-  const lines = compose.split('\n');
-  const start = lines.findIndex((line) => line === `  ${name}:`);
-  if (start === -1) throw new Error(`no "${name}" service in this compose`);
-  let end = start + 1;
-  while (end < lines.length && !/^ {2}\S/.test(lines[end])) end += 1;
-  return lines.slice(start, end).join('\n');
-}
+import { REQUEST, serviceBlock } from './catalogue-fixtures.spec-helper.js';
 
 describe('the enshrouded catalogue entry', () => {
   // §10: an immutable digest, never a moving tag. With a moving one, tonight's
@@ -78,16 +47,6 @@ describe('the enshrouded catalogue entry', () => {
     expect(rendered).toMatch(/path: \/opt\/beacon\/\.env\n {4}permissions: "0600"/);
   });
 
-  // A `$&` or a `$'` in a password is capture-group syntax to String.replace.
-  // It corrupted a password once, silently, on a server that then looked fine.
-  it('carries a password full of replacement syntax through untouched', () => {
-    const rendered = renderCloudInit('enshrouded', {
-      ...REQUEST,
-      serverPassword: "a$&b$'c$`d",
-    });
-    expect(rendered).toContain("SERVER_PASSWORD=a$&b$'c$`d");
-  });
-
   // The compose travels as a block scalar, so its depth is its syntax: a line
   // landing short of the six spaces closes the block, and everything after it
   // becomes cloud-init keys nobody wrote. Nothing else catches that — the
@@ -116,8 +75,10 @@ describe('the enshrouded catalogue entry', () => {
     expect(rendered.startsWith('#cloud-config\n')).toBe(true);
   });
 
-  it('yields the join point a player copies, from the address alone', () => {
-    expect(catalogFor('enshrouded').joinInfo('51.15.42.7')).toEqual({
+  // This game publishes an address, and nothing the machine declares enters
+  // what a player copies: the address comes from what the function reserved.
+  it('yields the join point a player copies, from the reserved address', () => {
+    expect(catalogFor('enshrouded').joinInfo({ address: '51.15.42.7' })).toEqual({
       game: 'enshrouded',
       hostname: 'enshrouded.beacon.charlouze.com',
       address: '51.15.42.7',
@@ -125,10 +86,18 @@ describe('the enshrouded catalogue entry', () => {
     });
   });
 
-  // Not an oversight, and the message has to say so: this game cannot boot
-  // before its 2.3 GB are restored, which is the companion, which is tranche 3.
-  it('refuses the game whose files nothing restores yet', () => {
-    expect(() => catalogFor('sunkenland')).toThrow(/tranche 3/);
+  // And an identifier that arrived anyway changes nothing: this game has no use
+  // for one, and a catalogue entry reading a field it does not use would be a
+  // frontier that leaks.
+  it('ignores an identifier this game has no use for', () => {
+    expect(
+      catalogFor('enshrouded').joinInfo({ address: '51.15.42.7', serverId: 'whatever' }),
+    ).toEqual({
+      game: 'enshrouded',
+      hostname: 'enshrouded.beacon.charlouze.com',
+      address: '51.15.42.7',
+      port: 15637,
+    });
   });
 
   it('hands the machine its session, its token and where to report', () => {
@@ -140,13 +109,13 @@ describe('the enshrouded catalogue entry', () => {
     );
   });
 
-  // Every value that reaches the machine goes through the same replacement, and
-  // a `$&` in an s3 secret is capture-group syntax to String.replace exactly as
-  // it is in a password. A silently corrupted key restores nothing, on a
-  // machine that looks healthy.
-  it('carries an s3 secret full of replacement syntax through untouched', () => {
+  // The credential every restore and every push depends on, byte for byte: a
+  // key that arrives altered restores nothing, on a machine that looks healthy.
+  // Its `$&` moved to `template.spec.ts` — the frontier refuses a `$` in
+  // everything a request carries now, so no request can reach that trap.
+  it('carries the s3 secret to the machine byte for byte', () => {
     expect(renderCloudInit('enshrouded', REQUEST)).toContain(
-      'BEACON_S3_SECRET_KEY=a-secret-with-a$&-in-it',
+      'BEACON_S3_SECRET_KEY=a-secret-with-no-dollar-in-it',
     );
   });
 

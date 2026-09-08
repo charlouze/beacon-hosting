@@ -47,14 +47,29 @@ export function fromS3(client: S3Client, bucket: string): ObjectApi {
       // ContentLength is passed explicitly: a stream has no length, and without
       // it the sdk buffers the whole archive in memory on a machine that is
       // also running a game server.
-      await client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: createReadStream(fromFile),
-          ContentLength: statSync(fromFile).size,
-        }),
-      );
+      const sizeBytes = statSync(fromFile).size;
+      const body = createReadStream(fromFile);
+      try {
+        await client.send(
+          new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentLength: sizeBytes }),
+        );
+      } catch (error) {
+        // A send that fails before reading the body — a bad endpoint, a refused
+        // signature — leaves this stream with nobody to consume it, while every
+        // caller deletes the file it points at on its way out. Destroying it
+        // releases the descriptor, and the listener catches what destroying
+        // cannot: an fs stream opens late, so the open still reports back, on a
+        // file that is gone by then. That 'error' has no reader left to reach,
+        // and an unhandled one ends the process — the deposit's real cause
+        // never gets reported, and on a game machine the companion dies instead
+        // of answering `failed` (§8). Whatever it says concerns a file this
+        // deposit has already given up on.
+        body.on('error', () => undefined);
+        body.destroy();
+        throw error;
+      }
+      // Nothing to close on success: the sdk consumed the stream, and reading it
+      // to the end closes it.
     },
 
     async get(key: string, toFile: string): Promise<void> {

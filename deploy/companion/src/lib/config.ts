@@ -24,7 +24,12 @@ export interface CompanionConfig {
   readonly saveDir: string;
   /** `uid:gid`, because the game server does not run as root and the restore does. */
   readonly saveOwner: string;
-  /** How readiness is observed for this game. `a2s://host:port` for now. */
+  /**
+   * How readiness is observed for this game, as a url naming the mechanism:
+   * `a2s://host:port` for a game that answers a query, `serverid://path` for
+   * one whose join point only the machine discovers. `readiness.ts` holds the
+   * list; a form it cannot read is a catalogue entry to fix.
+   */
   readonly readyProbe: string;
   readonly stopFlag: string;
   /**
@@ -35,6 +40,17 @@ export interface CompanionConfig {
   readonly pushIntervalMs: number;
   /** Where archives are built. Not the save folder: never write inside a world. */
   readonly workDir: string;
+  /**
+   * Only the game whose 2.3 GB cannot come from SteamCMD writes this pair —
+   * the other downloads its own files and leaves both variables unset.
+   * Absent, `runRestore` moves the world alone; present, both members are
+   * required, because a folder with nothing to fetch into it is as broken as
+   * a key with nowhere to land.
+   */
+  readonly gameFiles?: {
+    readonly objectKey: string;
+    readonly directory: string;
+  };
 }
 
 type Env = Record<string, string | undefined>;
@@ -55,6 +71,22 @@ function requiredNumber(env: Env, name: string): number {
     throw new Error(`${name} must be a positive number of milliseconds`);
   }
   return value;
+}
+
+/**
+ * Two variables or none. Reading each with `required` when either is present
+ * makes the missing one name itself in the thrown message, the same way every
+ * other variable in this file already does — a second, bespoke message would
+ * only drift from that one over time.
+ */
+function readGameFiles(env: Env): CompanionConfig['gameFiles'] {
+  if (env['BEACON_GAME_FILES_KEY'] === undefined && env['BEACON_GAME_DIR'] === undefined) {
+    return undefined;
+  }
+  return {
+    objectKey: required(env, 'BEACON_GAME_FILES_KEY'),
+    directory: required(env, 'BEACON_GAME_DIR'),
+  };
 }
 
 export function readConfig(env: Env): CompanionConfig {
@@ -82,5 +114,6 @@ export function readConfig(env: Env): CompanionConfig {
     stopFlag: required(env, 'BEACON_STOP_FLAG'),
     pushIntervalMs: requiredNumber(env, 'BEACON_PUSH_INTERVAL_MS'),
     workDir: env['BEACON_WORK_DIR'] ?? '/tmp/beacon',
+    gameFiles: readGameFiles(env),
   };
 }

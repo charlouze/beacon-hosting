@@ -1,11 +1,15 @@
 import type { JoinInfo } from '@beacon/session';
-import type { BootRequest, GameCatalogEntry } from './catalog.js';
+import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
+import { COMPANION_IMAGE } from './companion-image.js';
+import { fill, indent } from './template.js';
 
-// §10: pinned by digest, never a moving tag — the one component that writes
-// to the bucket, so a tag that moved under a session nobody watched would be
-// the one image nobody tested. Re-resolve by hand from a published git tag,
-// never by re-pulling a floating one.
-const COMPANION = 'ghcr.io/charlouze/beacon-companion@sha256:7717f76dcc07185554d7ce26ef13ff042121185460f4722724b56b781005b9ef';
+/**
+ * What the compose names the game container, and what the stop unit below
+ * hands to `docker stop`. One value for both: the unit is useless the day it
+ * names a container the compose no longer does, and nothing on the machine
+ * would say so — the stop would simply never happen.
+ */
+const GAME_CONTAINER = 'enshrouded';
 
 /**
  * What tranche 0 measured, moved from `docker-compose.yml` to here. It is a
@@ -18,7 +22,7 @@ const COMPOSE = `services:
   # no game container at all, so nobody can join a world that is not the right
   # one — and that evening cannot be saved over the real one.
   restore:
-    image: ${COMPANION}
+    image: ${COMPANION_IMAGE}
     container_name: beacon-restore
     command: ["/app/restore.mjs"]
     restart: "no"
@@ -29,7 +33,7 @@ const COMPOSE = `services:
 
   enshrouded:
     image: mornedhels/enshrouded-server@sha256:85978a10f88a85ab0a0aa92e9821d30424895d38bf81fe543532451219c42d0d
-    container_name: enshrouded
+    container_name: ${GAME_CONTAINER}
     restart: unless-stopped
     stop_grace_period: 90s
     depends_on:
@@ -58,7 +62,7 @@ const COMPOSE = `services:
       - ./data:/opt/enshrouded
 
   agent:
-    image: ${COMPANION}
+    image: ${COMPANION_IMAGE}
     container_name: beacon-agent
     command: ["/app/agent.mjs"]
     restart: unless-stopped
@@ -148,7 +152,7 @@ write_files:
       # gone exits non-zero — the ordinary shape of a retry, not a rare one.
       # The leading dash makes ExecStart='s own exit code never block the
       # clear, so the flag is gone whether the stop succeeded or not.
-      ExecStart=-/usr/bin/docker stop -t 90 enshrouded
+      ExecStart=-/usr/bin/docker stop -t 90 ${GAME_CONTAINER}
       ExecStartPost=-/bin/rm -f /opt/beacon/control/stop
 
 runcmd:
@@ -158,24 +162,6 @@ runcmd:
   - [ systemctl, enable, --now, beacon-stop.path ]
   - [ docker, compose, -f, /opt/beacon/docker-compose.yml, --env-file, /opt/beacon/.env, up, -d ]
 `;
-
-/** The marker sits six spaces in, so only the following lines get indented. */
-function indent(text: string): string {
-  return text
-    .trimEnd()
-    .split('\n')
-    .map((line, index) => (index === 0 || line === '' ? line : `      ${line}`))
-    .join('\n');
-}
-
-/**
- * A function replacement, and every occurrence: `$&`, `` $` `` and `$'` inside
- * a password are capture-group syntax to String.replace, and would be
- * substituted silently. The server then boots with a password nobody has.
- */
-function fill(template: string, marker: string, value: string): string {
-  return template.replaceAll(marker, () => value);
-}
 
 export const enshrouded: GameCatalogEntry = {
   game: 'enshrouded',
@@ -199,11 +185,13 @@ export const enshrouded: GameCatalogEntry = {
     return fill(rendered, '__GAMES_BUCKET__', request.saves.gamesBucket);
   },
 
-  joinInfo(address: string): JoinInfo {
+  // This game's join point comes from the address alone, so it never refuses —
+  // and it never reads `serverId`, which it has no use for.
+  joinInfo(facts: JoinFacts): JoinInfo {
     return {
       game: 'enshrouded',
       hostname: this.hostname as string,
-      address,
+      address: facts.address,
       port: 15637,
     };
   },

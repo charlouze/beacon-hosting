@@ -1,21 +1,18 @@
 import { writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { REPORT_INTERVAL_MS } from '@beacon/agent-protocol';
-import { a2sInfo, probeFor } from './lib/a2s.js';
 import { runAgentLoop } from './lib/agent-loop.js';
 import { readConfig } from './lib/config.js';
 import { buildSaveStore } from './lib/container.js';
 import { pushSave, stopAndPush, type PushDeps } from './lib/push.js';
+import { probeFor } from './lib/readiness.js';
 import { httpReporter } from './lib/reporter.js';
 
 const config = readConfig(process.env);
-const probe = probeFor(config.readyProbe);
+// The probe already comes wired to whichever mechanism the catalogue named —
+// this file never learns which one it is running (§4).
+const probeReady = probeFor(config.readyProbe);
 const log = (message: string) => console.log(`beacon: ${message}`);
-
-/** Half the report interval: a probe must never be what makes a report late. */
-const PROBE_TIMEOUT_MS = Math.floor(REPORT_INTERVAL_MS / 2);
-
-const probeReady = () => a2sInfo(probe.host, probe.port, PROBE_TIMEOUT_MS);
 
 const pushDeps: PushDeps = {
   store: buildSaveStore(config),
