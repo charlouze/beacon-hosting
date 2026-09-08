@@ -1,5 +1,6 @@
 import type { Game, JoinInfo } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
+import { sunkenland } from './sunkenland.js';
 
 /** The s3 side of what a machine is told, and the only credential it holds. */
 export interface SaveAccess {
@@ -74,17 +75,15 @@ export interface GameCatalogEntry {
   joinInfo(facts: JoinFacts): JoinInfo | null;
 }
 
-const CATALOG: Partial<Record<Game, GameCatalogEntry>> = { enshrouded };
+/**
+ * Total, and the type says so: every game this system knows has an entry, so
+ * nothing here can refuse one. The day a third game is added, the compiler
+ * names this line rather than a session failing at boot.
+ */
+const CATALOG: Record<Game, GameCatalogEntry> = { enshrouded, sunkenland };
 
 export function catalogFor(game: Game): GameCatalogEntry {
-  const entry = CATALOG[game];
-  if (entry === undefined) {
-    // Named, and with the reason: this game cannot start before its 2.3 GB
-    // are restored from object storage, which is the companion, which is
-    // tranche 3. A bare "unknown game" would read as an oversight.
-    throw new Error(`no catalogue entry for ${game}: it arrives with the companion, in tranche 3`);
-  }
-  return entry;
+  return CATALOG[game];
 }
 
 /**

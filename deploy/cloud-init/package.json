@@ -33,6 +33,15 @@
             "WHAT": "compose"
           }
         }
+      },
+      "render-serverid-filter": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx deploy/cloud-init/src/render.ts",
+          "env": {
+            "WHAT": "serverid-filter"
+          }
+        }
       }
     }
   },

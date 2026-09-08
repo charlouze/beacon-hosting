@@ -48,10 +48,11 @@ paraît correcte à la relecture. Le versionnement est **suspendu** sur
 `beacon-saves`, et le `NoncurrentVersionExpiration` de ce fichier n'a plus rien
 à faire — il reste comme filet si quelqu'un le réactivait.
 
-**Il n'y a qu'une règle, et elle ne touche que les poussées régulières.** Les
+**Une règle par jeu, et elles ne touchent que les poussées régulières.** Les
 sauvegardes de fin de session n'expirent jamais : une règle qui effacerait la
 dernière sauvegarde d'un monde faute d'y avoir joué pendant un an économiserait
 quelques centimes contre la seule chose que ce système existe pour protéger
-(§8). Le préfixe est littéral, donc chaque jeu ajoute sa propre règle —
-`saves/sunkenland/auto/` naît avec la tranche 3 bis, et personne ne le fera
-tomber d'un test.
+(§8). Le préfixe est littéral, donc chaque jeu ajoute la sienne —
+`saves/sunkenland/auto/` est arrivée avec le second jeu, et rien n'échouera le
+jour où la troisième manquera : ces sauvegardes s'accumuleraient simplement
+sans fin.
