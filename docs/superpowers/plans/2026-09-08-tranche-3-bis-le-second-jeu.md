@@ -1517,13 +1517,18 @@ git push -u origin tranche-3-bis-le-second-jeu
 
 - [ ] **Step 3: Poser le tag**
 
-Le tag de la tranche 3 était `companion-v1` ; celui-ci est le suivant. Le tag
-d'image n'est pas celui du tag git — le workflow retire le préfixe, l'image
-s'appelant déjà `beacon-companion`.
+Le tag de la tranche 3 était `companion-v0.1` — relevé au distant, ce plan
+annonçait `companion-v1` et se trompait. Celui-ci est le suivant, et le `0.`
+tient jusqu'à ce que le système soit fini.
+
+Le tag d'image n'est pas celui du tag git : le workflow le dérive par
+`${GITHUB_REF_NAME#companion-v}`, l'image s'appelant déjà `beacon-companion`.
+`companion-v0.2` publie donc `beacon-companion:0.2`, sans rien changer au
+workflow — son déclencheur est `companion-v*`.
 
 ```bash
-git tag companion-v2
-git push origin companion-v2
+git tag companion-v0.2
+git push origin companion-v0.2
 ```
 
 La barrière tourne avant la publication (§10), soit quelques minutes de
@@ -1535,7 +1540,7 @@ Le workflow l'écrit dans son résumé d'exécution. Le relire, ou le redemander
 registre :
 
 ```bash
-docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:2
+docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:0.2
 ```
 
 Noter la ligne `Digest: sha256:…`. C'est la seule sortie de cette tâche, et la
