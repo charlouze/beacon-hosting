@@ -33,6 +33,17 @@ describe('what one POST with a false token proves', () => {
     expect(said({ status: 400 })).toContain('agent-protocol');
   });
 
+  // Measured on 2026-09-09 against the emulator: a function that throws while
+  // building its dependencies answers 500 before it ever looks at the token.
+  // Here the Scaleway sdk refused a malformed access key out of
+  // apps/functions/.env — nothing about the tunnel was wrong, and the default
+  // "no story for this answer" would have sent the operator to the tunnel.
+  it('reads 500 as the function dying before the token was ever checked', () => {
+    expect(verdictFor({ status: 500 }).ok).toBe(false);
+    expect(said({ status: 500 })).toContain('before it could check the token');
+    expect(said({ status: 500 })).toContain('emulator ui');
+  });
+
   it('reads a bad gateway as nothing listening behind the tunnel', () => {
     for (const status of [502, 503, 504, 530]) {
       expect(verdictFor({ status }).ok).toBe(false);

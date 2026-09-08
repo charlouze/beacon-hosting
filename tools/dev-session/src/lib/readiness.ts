@@ -61,6 +61,18 @@ export function verdictFor(probe: Probe): Verdict {
           'One of the project, region or function name in agent-endpoint.ts is wrong.',
         ],
       };
+    // Distinct from the gateway errors below: the tunnel carried, the function
+    // ran, and it threw on the way to the token check. Measured against the
+    // emulator with a malformed SCW_ACCESS_KEY, where the Scaleway sdk refuses
+    // the key while `buildAgentReportDeps` is still assembling.
+    case 500:
+      return {
+        ok: false,
+        lines: [
+          '500 — agentReport was reached and died before it could check the token.',
+          'This is not the tunnel. The emulator ui shows what threw, under its logs tab.',
+        ],
+      };
     case 502:
     case 503:
     case 504:

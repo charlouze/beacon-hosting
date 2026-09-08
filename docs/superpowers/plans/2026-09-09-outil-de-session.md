@@ -99,7 +99,7 @@ Fichiers modifiés hors du projet :
 
 ```mermaid
 flowchart TD
-    A["1 · l'arbre servi<br/>branche, SHA, propreté — annoncés"] --> B["2 · cloudflared --url<br/>vers 127.0.0.1:5001"]
+    A["1 · l'arbre servi, annoncé<br/>et les deux fichiers lus<br/>avant que rien ne démarre"] --> B["2 · cloudflared --url<br/>vers 127.0.0.1:5001"]
     B --> C["3 · AGENT_ENDPOINT<br/>une ligne de apps/functions/.env"]
     C --> D["4 · mise run emulators<br/>construit dist/ puis démarre"]
     D --> E["5 · mise run seed"]
@@ -779,6 +779,17 @@ describe('what one POST with a false token proves', () => {
     expect(said({ status: 400 })).toContain('agent-protocol');
   });
 
+  // Measured on 2026-09-09 against the emulator: a function that throws while
+  // building its dependencies answers 500 before it ever looks at the token.
+  // Here the Scaleway sdk refused a malformed access key out of
+  // apps/functions/.env — nothing about the tunnel was wrong, and the default
+  // "no story for this answer" would have sent the operator to the tunnel.
+  it('reads 500 as the function dying before the token was ever checked', () => {
+    expect(verdictFor({ status: 500 }).ok).toBe(false);
+    expect(said({ status: 500 })).toContain('before it could check the token');
+    expect(said({ status: 500 })).toContain('emulator ui');
+  });
+
   it('reads a bad gateway as nothing listening behind the tunnel', () => {
     for (const status of [502, 503, 504, 530]) {
       expect(verdictFor({ status }).ok).toBe(false);
@@ -873,6 +884,18 @@ export function verdictFor(probe: Probe): Verdict {
         lines: [
           'the tunnel carries, but that path is not agentReport.',
           'One of the project, region or function name in agent-endpoint.ts is wrong.',
+        ],
+      };
+    // Distinct from the gateway errors below: the tunnel carried, the function
+    // ran, and it threw on the way to the token check. Measured against the
+    // emulator with a malformed SCW_ACCESS_KEY, where the Scaleway sdk refuses
+    // the key while `buildAgentReportDeps` is still assembling.
+    case 500:
+      return {
+        ok: false,
+        lines: [
+          '500 — agentReport was reached and died before it could check the token.',
+          'This is not the tunnel. The emulator ui shows what threw, under its logs tab.',
         ],
       };
     case 502:
@@ -1755,6 +1778,17 @@ git commit -m "feat(dev-session): donne au geste ses sept etapes en une commande
 Cette tâche ne s'écrit pas, elle se conduit. Elle n'allume **aucune machine** et
 ne coûte rien : elle s'arrête avant d'ouvrir une session dans le pilote.
 
+**Prérequis, et il n'est pas évident.** `apps/functions/.env` est ignoré par git
+et porte de vrais secrets : **il n'existe pas dans un worktree neuf**. Un
+worktree ne peut donc pas conduire cette tâche telle quelle. Deux issues, au
+choix : la conduire depuis la copie principale du dépôt, ou y copier le `.env`
+à la main — auquel cas il ne repart jamais de là, et `mise run session` le
+réécrit à chaque lancement.
+
+La commande le dit elle-même : l'étape 1 lit ce fichier et y répète la
+réécriture à blanc, **avant d'ouvrir quoi que ce soit**. Sans lui, elle refuse
+en nommant le fichier et ce qui manque, sans avoir lancé un seul processus.
+
 - [ ] **Step 1: Lancer la commande**
 
 ```bash
@@ -1815,6 +1849,29 @@ git commit -m "docs(plan): releve ce que l'outil de session mesure en marchant"
 ```
 
 ---
+
+## Ce que la vérification locale a mesuré, le 2026-09-09
+
+Conduite sur l'émulateur seul, sans tunnel et sans machine, avec un
+`apps/functions/.env` factice monté puis effacé.
+
+- **Les trois ports déclarés répondent bien là où le plan les met** : le hub sur
+  4400 rend son JSON, l'interface sur 4000 rend un `200`, et `agentReport`
+  répond sur 5001 au chemin `/demo-beacon/europe-west1/agentReport`. La
+  duplication des trois noms dans `agent-endpoint.ts` est donc juste, et elle
+  est vérifiée à chaque lancement par la sonde.
+- **Un `500` est un état à part, et il a été observé.** Le SDK Scaleway refuse
+  une `SCW_ACCESS_KEY` mal formée **dans `buildAgentReportDeps`**, donc avant
+  que le jeton soit regardé : la Function meurt, l'émulateur rend `500`, et
+  rien n'est en cause du côté du tunnel. Sans ce cas, `verdictFor` serait tombé
+  sur « pas d'histoire pour cette réponse » et aurait envoyé l'opérateur
+  chercher du côté du tunnel. C'est exactement la panne que cet outil existe
+  pour ne pas laisser arriver.
+- **L'arrêt ne laisse rien** : après l'arrêt de l'émulateur, aucun port en
+  écoute, aucun `java`, aucun `cloudflared`.
+
+Reste non mesuré, et c'est la tâche 8 : le tunnel lui-même, le 401 à travers
+lui, le pilote, et le Ctrl-C sur les trois processus à la fois.
 
 ## Ce que ce plan ne fait pas
 
