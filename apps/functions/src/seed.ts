@@ -2,13 +2,19 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 
 /**
- * What §5 means by "seeded at deployment". Never touches an existing document:
- * re-running it after an incident is the recovery path, not a hazard.
+ * What §5 means by "seeded at deployment", and it is exactly the two documents
+ * no client may create — a `create` would be born past every field-by-field
+ * check at once, so someone above the rules has to write them first.
  *
- * The first members/{uid} is seeded in tranche 4, with the rules and the auth
- * that give it a reader.
+ * `members` is not one of them, though it is just as unwritable by a client:
+ * its first document names a Google `uid`, which does not exist until someone
+ * has signed in against this very project. A deployment cannot know it, so the
+ * first admin is a console gesture after the first merge (§5, §10).
+ *
+ * Never touches an existing document: re-running it after an incident is the
+ * recovery path, not a hazard.
  */
-async function seed(): Promise<void> {
+export async function seed(): Promise<void> {
   const db = getFirestore(defaultApp());
   const doc = db.doc('server/current');
 
@@ -18,8 +24,8 @@ async function seed(): Promise<void> {
     console.log('server/current already exists — left untouched');
   } else {
     // Every field of §5, present and null. A field that is absent rather than
-    // null does not read the same way in a rules diff, and the tranche 4 rules
-    // will be written against this very document.
+    // null does not read the same way in a rules diff, and `firestore.rules`
+    // is written against this very document.
     await doc.create({
       state: 'IDLE',
       stateSince: Timestamp.now(),
@@ -62,8 +68,3 @@ async function seed(): Promise<void> {
     console.log('config/settings seeded');
   }
 }
-
-seed().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});

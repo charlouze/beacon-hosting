@@ -58,7 +58,7 @@
       "seed": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "npx tsx apps/functions/src/seed.ts"
+          "command": "npx tsx apps/functions/src/seed-entry.ts"
         }
       },
       "prune-lockfile": {
