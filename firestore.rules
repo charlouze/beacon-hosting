@@ -2,6 +2,108 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // §7: a client string with no ceiling is a resource exhaustion paid in
+    // euros. Same bound as the one `libs/agent-protocol` already holds.
+    function bounded(value) {
+      return value is string && value.size() <= 1024;
+    }
+
+    function isMember() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+
+    // The existence test is not redundant with the get(). `get()` on an absent
+    // document yields null, and reading `.data` off null fails the evaluation
+    // rather than returning false — so without it a visitor would be refused by
+    // a crash, and every branch this function sits in would die with it,
+    // including the ones that should have passed.
+    function isAdmin() {
+      return isMember()
+        && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Checked on create and on update alike: a document validated at birth and
+    // left free afterwards is validated nowhere. The three keys are the update
+    // path's — on a create the admin's own predicate is narrower, and `steamId`
+    // only ever joins the document later, written by its subject.
+    //
+    // Null is a value this document holds, and §5 is why: every member is
+    // enrolled from the Firebase console until the administration screen
+    // exists, the first admin included. A console write goes through the Admin
+    // SDK, above the rules, and it may legitimately record no address —
+    // `{ role, email: null, steamId: null }` is the shape §5 asks for. So
+    // demanding a string here would refuse nothing at enrolment and everything
+    // after it, starting with that member declaring its own steam id.
+    //
+    // The opening stops at `update`, which is the only path such a document
+    // ever takes: `adminEnrols()` demands an address of its own, so "an admin
+    // invites by address" still holds everywhere the rules actually govern
+    // enrolment. What `hasAll` holds here is narrower and it is the other half
+    // — the keys are there at all, absent and null not reading the same way in
+    // a diff.
+    function isValidMember(data) {
+      return data.keys().hasOnly(['email', 'role', 'steamId'])
+        && data.keys().hasAll(['email', 'role'])
+        && data.role in ['admin', 'player']
+        && (data.email == null || bounded(data.email))
+        && (!('steamId' in data) || data.steamId == null || bounded(data.steamId));
+    }
+
+    // §5, line 783: the two writers of this document own disjoint fields. An
+    // admin enrols and manages — an address and a role; `steamId` is "the
+    // subject itself, and nobody else", and enrolling someone with one already
+    // filled in declares an identifier that is not one's own. `isValidMember`
+    // cannot catch that: the key is a legitimate one, it is its writer that is
+    // not.
+    function membershipFields() {
+      return ['email', 'role'];
+    }
+
+    // The two predicates differ in what they are allowed to look at —
+    // `resource` is null on a create, so there is no diff to take — and in the
+    // address. §5: an admin invites by address, so an enrolment carries a real
+    // one. `isValidMember` cannot say that any more, having to accept the null
+    // a console enrolment may carry; here it costs nothing, because no console
+    // write ever arrives by `create`.
+    //
+    // The presence test is not redundant with `hasOnly`, which tolerates a
+    // missing key: reading an absent one is an evaluation error, and that would
+    // refuse an enrolment without an address by crashing instead of deciding.
+    function adminEnrols() {
+      return isAdmin()
+        && request.resource.data.keys().hasOnly(membershipFields())
+        && 'email' in request.resource.data
+        && bounded(request.resource.data.email);
+    }
+
+    function adminManagesMembership() {
+      return isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(membershipFields());
+    }
+
+    // §5: the subject writes this one field and no other. Opening the document
+    // to its subject instead would hand it `role`, which is the privilege
+    // escalation §7 names.
+    function declaresOwnSteamId(uid) {
+      return isMember()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['steamId'])
+        && bounded(request.resource.data.steamId);
+    }
+
+    match /members/{uid} {
+      // Narrower than membership, and deliberately: what this document holds is
+      // an email address. A visitor reading its own absent document is how the
+      // interface learns it is a visitor.
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create: if adminEnrols() && isValidMember(request.resource.data);
+      allow update: if (adminManagesMembership() || declaresOwnSteamId(uid))
+        && isValidMember(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
