@@ -1913,6 +1913,39 @@ pré-vérifications de connectivité. Le tableau de bord y disparaît. Une fois
 l'URL capturée, plus rien de ce que `cloudflared` dit n'est utile à l'écran —
 seul l'accumulateur qui alimente `output()` a besoin de continuer.
 
+---
+
+### Task 9: Rendre au tableau de bord l'écran que cloudflared lui prend
+
+Écrite après la tâche 8, parce que c'est elle qui l'a rendue nécessaire.
+
+**Un filtre, pas une coupure.** Couper `cloudflared` après l'URL serait faux :
+le relevé du 2026-09-08 compte « le tunnel expire avec sa fenêtre » parmi les
+trois pannes que cet outil répond, et un tunnel qui meurt en pleine session doit
+se voir. Seuls les deux niveaux dont on sait qu'ils sont du bavardage — `INF` et
+`DBG` — sont tus ; `WRN`, `ERR`, `FTL`, et **tout niveau inconnu**, passent.
+Cacher ce qu'on ne reconnaît pas est la façon dont une panne neuve passe
+inaperçue.
+
+**`tunnel-url.ts` devient `cloudflared.ts`.** Le module gagne une seconde
+fonction, `stillWorthShowing`, qui n'est pas au sujet de l'URL — mais qui relève
+de la même connaissance que la première : comment `cloudflared` parle. Un module
+se nomme d'après ce qu'il sait, pas d'après sa première fonction.
+
+**`Spawned` gagne `quieten(keep)`.** L'interacteur décide *quand* le silence
+tombe et *sur qui* — le tunnel seul, après lecture de l'URL ; l'émulateur et le
+pilote gardent leur sortie, leurs journaux **sont** la session. L'adaptateur ne
+fait qu'exécuter, et il accumule toujours tout : `output()` est inchangé.
+
+Un détail qui compte dans l'adaptateur : les morceaux qui arrivent sur `stdout`
+ne s'arrêtent pas aux fins de ligne. La moitié d'une ligne serait jugée sur son
+préfixe et l'autre moitié sur rien ; le reste est donc gardé jusqu'au morceau
+suivant.
+
+Quatre tests sur le filtre, un sur l'interacteur — qui vérifie aussi que
+l'émulateur et le pilote ne sont **pas** silenciés, et que le silence tombe après
+la lecture de l'URL et pas avant.
+
 ## Ce que ce plan ne fait pas
 
 - **Il ne restaure pas `apps/functions/.env` en sortant.** La valeur y reste,

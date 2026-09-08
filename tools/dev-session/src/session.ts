@@ -76,18 +76,31 @@ function spawnChild(name: string, command: string, args: readonly string[]): Spa
   });
 
   let seen = '';
-  const keep = (chunk: Buffer): void => {
+  let worthShowing: (line: string) => boolean = () => true;
+  // What is left of a chunk that ended mid-line. A filter fed half a line
+  // would judge it on a prefix, and the other half on nothing at all.
+  let pending = '';
+
+  const read = (chunk: Buffer): void => {
     const text = chunk.toString('utf8');
     seen += text;
-    process.stdout.write(text);
+
+    pending += text;
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? '';
+    const shown = lines.filter(worthShowing);
+    if (shown.length > 0) process.stdout.write(`${shown.join('\n')}\n`);
   };
-  child.stdout?.on('data', keep);
-  child.stderr?.on('data', keep);
+  child.stdout?.on('data', read);
+  child.stderr?.on('data', read);
 
   return {
     name,
     output: () => seen,
     running: () => child.exitCode === null && child.signalCode === null,
+    quieten: (keep) => {
+      worthShowing = keep;
+    },
     stop: () => stopTree(child),
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tunnelUrlFrom } from './tunnel-url.js';
+import { stillWorthShowing, tunnelUrlFrom } from './cloudflared.js';
 
 /**
  * What cloudflared really writes on stderr, banner included. The documentation
@@ -51,5 +51,46 @@ describe('finding the tunnel url in what cloudflared says', () => {
     const notice =
       '2026-09-09T20:14:01Z INF cloudflared version 2026.8.3 is out: https://github.com/cloudflare/cloudflared/releases';
     expect(tunnelUrlFrom(notice)).toBeUndefined();
+  });
+});
+
+/**
+ * Measured on 2026-09-09: cloudflared writes about forty lines before its `ok`
+ * — terms of use, version, protocol, and a whole connectivity pre-check table
+ * — and the dashboard drowns in them. Once the url is out, none of that is
+ * worth the screen. What still is: the tunnel expiring mid-session, which the
+ * 2026-09-08 log names as one of the three faults this command exists for.
+ */
+describe('what cloudflared still deserves the screen for, once the url is out', () => {
+  it('drops the chatter that made the dashboard unreadable', () => {
+    for (const line of [
+      '2026-09-09T20:14:07Z INF |  DNS Resolution    region1.v2.argotunnel.com  PASS  |',
+      '2026-09-09T20:14:07Z INF Registered tunnel connection connIndex=0 protocol=quic',
+      '2026-09-09T20:14:06Z INF Version 2026.8.3 (Checksum 83e726ed18ea78c5)',
+      '2026-09-09T20:14:06Z DBG Retrying connection in up to 2s',
+    ]) {
+      expect(stillWorthShowing(line)).toBe(false);
+    }
+  });
+
+  it('keeps what says the tunnel is in trouble', () => {
+    for (const line of [
+      '2026-09-09T21:02:11Z WRN Connection terminated error="context canceled"',
+      '2026-09-09T21:02:11Z ERR Failed to serve quic connection',
+      '2026-09-09T21:02:11Z FTL no more connections active and exiting',
+    ]) {
+      expect(stillWorthShowing(line)).toBe(true);
+    }
+  });
+
+  // Hiding what we do not recognise is how a new failure mode goes unseen.
+  // The rule only ever silences the two levels it knows are chatter.
+  it('keeps anything it does not recognise, rather than guessing it is noise', () => {
+    expect(stillWorthShowing('panic: runtime error: invalid memory address')).toBe(true);
+    expect(stillWorthShowing('2026-09-09T21:02:11Z NEW a level that did not exist before')).toBe(true);
+  });
+
+  it('says nothing about blank lines either way, by keeping them out', () => {
+    expect(stillWorthShowing('   ')).toBe(false);
   });
 });

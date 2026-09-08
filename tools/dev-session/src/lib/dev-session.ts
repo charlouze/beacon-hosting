@@ -1,7 +1,7 @@
 import { agentEndpointFor, withAgentEndpoint } from './agent-endpoint.js';
 import { type EmulatorPorts, emulatorPortsFrom } from './emulator-ports.js';
 import { PROBE_BODY, PROBE_TOKEN, type Probe, verdictFor } from './readiness.js';
-import { tunnelUrlFrom } from './tunnel-url.js';
+import { stillWorthShowing, tunnelUrlFrom } from './cloudflared.js';
 
 export const FUNCTIONS_ENV = 'apps/functions/.env';
 export const FIREBASE_CONFIG = 'firebase.dev.json';
@@ -25,6 +25,12 @@ export interface Started {
 export interface Spawned extends Started {
   /** Everything the child has written so far, stdout and stderr merged. */
   output(): string;
+  /**
+   * Narrows what reaches the terminal to the lines `keep` accepts. What
+   * `output()` returns is unaffected — the child goes on being read in full,
+   * it just stops writing all of it on the screen.
+   */
+  quieten(keep: (line: string) => boolean): void;
 }
 
 export interface Head {
@@ -134,6 +140,10 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
       say('        Nothing was rewritten and nothing else was started.');
       return 'refused';
     }
+    // Its startup chatter has done its job: the url was in it. From here only
+    // what cloudflared complains about is worth the screen — a tunnel that
+    // expires mid-session is one of the three faults this command answers.
+    tunnel.quieten(stillWorthShowing);
     say(`  ok    ${tunnelUrl} -> http://127.0.0.1:${emulator.functions}`);
 
     say('');

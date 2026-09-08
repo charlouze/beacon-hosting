@@ -32,6 +32,7 @@ function fakePorts(overrides: Partial<DevSessionPorts> = {}): { ports: DevSessio
       name,
       output: () => (name === 'tunnel' ? TUNNEL_STDERR : ''),
       running: () => alive,
+      quieten: () => log.calls.push(`quieten:${name}`),
       stop: async () => {
         log.calls.push(`stop:${name}`);
         alive = false;
@@ -83,6 +84,7 @@ describe('the order, which is the whole point of the command', () => {
     expect(log.calls.filter((call) => !call.startsWith('read:'))).toEqual([
       'spawn:tunnel',
       'wait:tunnel url',
+      'quieten:tunnel',
       'write:apps/functions/.env',
       'spawn:emulator',
       'wait:emulator',
@@ -95,6 +97,19 @@ describe('the order, which is the whole point of the command', () => {
       'stop:emulator',
       'stop:tunnel',
     ]);
+  });
+
+  // Measured on 2026-09-09: cloudflared buries the dashboard under forty
+  // startup lines. The emulator and the pilot keep theirs — function logs and
+  // rebuilds are the session — so only the tunnel is quietened, and only once
+  // the url it was launched for has been read out of them.
+  it('quietens the tunnel and nothing else, and only after reading its url', async () => {
+    const { ports, log } = fakePorts();
+    await runDevSession(ports);
+    expect(log.calls).toContain('quieten:tunnel');
+    expect(log.calls).not.toContain('quieten:emulator');
+    expect(log.calls).not.toContain('quieten:pilot');
+    expect(log.calls.indexOf('quieten:tunnel')).toBeGreaterThan(log.calls.indexOf('wait:tunnel url'));
   });
 
   it('stops what it started in reverse, so no tunnel outlives the window', async () => {
@@ -172,7 +187,13 @@ describe('what happens when a step gives up', () => {
     const { ports, log } = fakePorts({
       spawn: (name) => {
         log.calls.push(`spawn:${name}`);
-        return { name, output: () => TUNNEL_STDERR, running: () => true, stop: async () => undefined };
+        return {
+          name,
+          output: () => TUNNEL_STDERR,
+          running: () => true,
+          quieten: () => undefined,
+          stop: async () => undefined,
+        };
       },
     });
     await runDevSession(ports);
