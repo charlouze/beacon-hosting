@@ -1518,21 +1518,35 @@ git push -u origin tranche-3-bis-le-second-jeu
 - [ ] **Step 3: Poser le tag**
 
 Le tag de la tranche 3 était `companion-v0.1` — relevé au distant, ce plan
-annonçait `companion-v1` et se trompait. Celui-ci est le suivant, et le `0.`
-tient jusqu'à ce que le système soit fini.
+annonçait `companion-v1` et se trompait. Le `0.` tient jusqu'à ce que le
+système soit fini.
 
 Le tag d'image n'est pas celui du tag git : le workflow le dérive par
 `${GITHUB_REF_NAME#companion-v}`, l'image s'appelant déjà `beacon-companion`.
-`companion-v0.2` publie donc `beacon-companion:0.2`, sans rien changer au
+`companion-v0.3` publie donc `beacon-companion:0.3`, sans rien changer au
 workflow — son déclencheur est `companion-v*`.
 
 ```bash
-git tag companion-v0.2
-git push origin companion-v0.2
+git tag companion-v0.3
+git push origin companion-v0.3
 ```
 
-La barrière tourne avant la publication (§10), soit quelques minutes de
-conteneurs ; un rouge là ne dit rien de la publication elle-même.
+**`companion-v0.2` est brûlé, et pourquoi il l'est vaut d'être su.** Sa barrière
+a échoué sur un runner : `run.sh` faisait `docker compose up -d bucket` puis
+appelait `mc` aussitôt, or `up -d` rend la main au démarrage du conteneur et non
+quand le serveur répond — MinIO annonçait `Started`, et la connexion était
+refusée **154 ms plus tard**. La course vivait sur `main` depuis l'origine du
+harnais ; un poste la perd assez rarement pour paraître vert. Corrigée par
+`--wait`, qui lit enfin le `healthcheck` que le service déclarait déjà.
+
+**Un tag ne se déplace pas, il se succède.** Rien n'ayant été publié sous `0.2`,
+le déplacer aurait été tentant — mais c'est un réflexe qui se paie le jour où
+quelque chose l'aura consommé, et un numéro ne coûte rien.
+
+La barrière tourne **avant** la publication (§10), soit quelques minutes de
+conteneurs. Un rouge là ne dit rien de la qualité de l'image : il dit qu'**elle
+n'existe pas**, l'étape de poussée étant sautée. Le tag est alors consommé pour
+rien, et le suivant se pose sur le correctif.
 
 - [ ] **Step 4: Relever le digest publié**
 
@@ -1540,7 +1554,7 @@ Le workflow l'écrit dans son résumé d'exécution. Le relire, ou le redemander
 registre :
 
 ```bash
-docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:0.2
+docker buildx imagetools inspect ghcr.io/charlouze/beacon-companion:0.3
 ```
 
 Noter la ligne `Digest: sha256:…`. C'est la seule sortie de cette tâche, et la
