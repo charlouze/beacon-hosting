@@ -76,6 +76,7 @@ un jeu par tranche.
 | 4 | La sécurité | Le système peut être exposé | à venir |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
+| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **proposée** |
 
 ### 0 · Sonder
 
@@ -320,6 +321,30 @@ pour le budget.
 qui appartiennent au watchdog et se réconcilient par tag ; les règles, les
 index, les Functions, le Hosting et le job Scheduler, que `firebase deploy`
 déploie. Deux outils sur le même objet est une guerre d'états.
+
+### 7 · Les mondes vont et viennent
+
+**Proposée le 2026-09-08, pas encore acceptée.** Un administrateur dépose dans le
+système un monde qui vient d'ailleurs, et récupère celui qui y est. Le système
+sait aujourd'hui faire naître un monde et le faire survivre à ses sessions ; il
+ne sait ni en adopter un, ni en rendre un.
+
+`tools/game-depot` donne la forme : un geste d'administrateur, depuis sa machine,
+vers un seau — pas une surface d'interface, pas un rôle de plus dans les règles.
+Ce qui change est la nature de ce qu'on dépose. Les fichiers d'un jeu se
+retéléchargent ; un monde, non.
+
+**Et c'est la seule opération du système qui écrase.** Le §8 pose que rien dans
+le dépôt n'efface une sauvegarde, et le port `SaveStore` n'expose ni suppression
+ni élagage. Déposer un monde par-dessus un autre contourne cette propriété sans
+la contredire : personne n'efface, mais la clé précédente cesse d'être celle
+qu'on restaure. Ce que le §8 devient alors se décide dans le spec, pas dans un
+plan — c'est la première chose à faire si cette tranche est acceptée.
+
+**Elle suit la 6, et ce n'est pas une préférence.** La tranche 6 repose sur un
+nuke, gratuit tant que les seaux ne portent rien ; cette tranche-ci est
+exactement l'événement qui y met fin. Dans l'autre ordre, la 6 perd son
+hypothèse et repasse en import.
 
 ## La livraison ne fait pas de tranche
 
