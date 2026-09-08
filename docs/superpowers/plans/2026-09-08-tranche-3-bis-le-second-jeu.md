@@ -1608,17 +1608,36 @@ celui de la sonde.
 
 - [ ] **Step 1: Vérifier que le mot de passe du serveur ne contient pas de `$`**
 
-C'est le geste le moins visible et celui qui bloquerait tout. Le rendeur de la
-tâche 5 refuse un mot de passe qui en porte un — donc si le secret de production
-en contient un, **aucune session Sunkenland ne peut être provisionnée**, et
-personne ne le découvrirait avant la tâche 12.
+C'est le geste le moins visible et celui qui bloquerait tout. `renderCloudInit`
+refuse toute valeur qui porte un `$` — donc si le secret en contient un,
+**aucune session ne peut être provisionnée, des deux jeux**, et personne ne le
+découvrirait avant la tâche 12.
+
+**La vérification ne se fait pas dans Secret Manager, et ce plan s'y trompait.**
+Relevé le 2026-09-08 : sur les cinq secrets que `container.ts` déclare, **seul
+`SCW_SECRET_KEY` y existe** ; `SERVER_PASSWORD`, `S3_SECRET_KEY` et les deux
+`DYNHOST_*` n'y ont aucune version. C'est cohérent avec l'état du projet — rien
+n'est déployé, et une vraie session se pilote depuis l'émulateur, qui lit
+`apps/functions/.env` recopié par `tools/dev-secrets.mjs`. La commande d'origine
+(`firebase functions:secrets:access SERVER_PASSWORD`) échoue donc en `404` sans
+rien dire de la valeur réellement utilisée.
+
+La source qui fait foi aujourd'hui est `apps/functions/.env`. Vérifier **toutes**
+ses valeurs, puisque le refus les couvre toutes, et sans jamais en afficher une :
 
 ```bash
-firebase functions:secrets:access SERVER_PASSWORD | grep -c '\$'
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue;; esac
+  k=${line%%=*}; v=${line#*=}
+  case "$v" in *'$'*) echo "$k PORTE UN \$";; esac
+done < apps/functions/.env
 ```
 
-Attendu : `0`. Sinon, changer le secret avant de continuer — et le mot de passe
-d'Enshrouded change avec, les deux jeux partageant le même.
+Attendu : **aucune sortie**. Sinon, changer la valeur avant de continuer — et le
+mot de passe d'Enshrouded change avec, les deux jeux partageant le même.
+
+Le jour où les Functions seront déployées (tranche 4 et son gate), la même
+vérification se refera sur Secret Manager, qui deviendra la source qui fait foi.
 
 - [ ] **Step 2: Déposer l'archive unique des fichiers de jeu**
 
