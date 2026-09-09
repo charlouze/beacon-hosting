@@ -1,0 +1,214 @@
+name: deploy
+
+# §10: the decision to go to production is the merge, never the triggering of
+# a workflow. No `workflow_dispatch` — a button here would be a second way to
+# deploy, and the one that has no review.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # What federated identity needs, and the only reason this job holds more
+  # than the pull-request one.
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # A repository variable that was never created does not fail the way a
+      # missing secret does: `vars.X` expands to the empty string, `.env` goes
+      # out carrying `SCW_ACCESS_KEY=`, and `defineString` asks for nothing
+      # because the key is present. The deployment then goes green on a
+      # configuration no session can use, and the symptom arrives on a games
+      # night rather than on this page. It is the only path in this workflow
+      # that breaks without turning red, so the variables are counted here, by
+      # name, before anything is installed or published.
+      #
+      # AGENT_ENDPOINT is the one exception, and not out of leniency: it is the
+      # url of the `agentReport` function, which does not exist until this
+      # workflow has deployed it once. Demanded here it would make the first
+      # deployment impossible, which is the one case a bootstrap has to survive.
+      # Left empty it costs a session that provisions and never reports back —
+      # loud, bounded, and closed by the watchdog.
+      - name: Refuse a deployment whose repository variables are missing
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.DEPLOY_SERVICE_ACCOUNT }}
+          SCW_ACCESS_KEY: ${{ vars.SCW_ACCESS_KEY }}
+          SCW_PROJECT_ID: ${{ vars.SCW_PROJECT_ID }}
+          SCW_ZONE: ${{ vars.SCW_ZONE }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          S3_ACCESS_KEY: ${{ vars.S3_ACCESS_KEY }}
+          SAVES_BUCKET: ${{ vars.SAVES_BUCKET }}
+          GAMES_BUCKET: ${{ vars.GAMES_BUCKET }}
+          AGENT_ENDPOINT: ${{ vars.AGENT_ENDPOINT }}
+        run: |
+          missing=''
+          for name in FIREBASE_PROJECT_ID WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT \
+                      SCW_ACCESS_KEY SCW_PROJECT_ID SCW_ZONE \
+                      S3_ENDPOINT S3_ACCESS_KEY SAVES_BUCKET GAMES_BUCKET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Repository variables are empty or unset:$missing — see task 12 of docs/superpowers/plans/2026-09-09-tranche-4-la-securite.md for where each value is read. Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+          if [ -z "$AGENT_ENDPOINT" ]; then
+            echo "::warning::AGENT_ENDPOINT is empty. Expected on the very first deployment, which is what creates the agentReport function; set it afterwards, or a provisioned machine will never report back."
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      # Four test targets shell out to `firebase emulators:exec`, and the
+      # Firestore emulator is a Java program. Without this the barrier rests on
+      # the runner image happening to ship a jdk.
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+
+      # Steps 1 and 2 of §10 in one command. The rules never leave if their
+      # refusals are not green: `nx run-many -t test` runs @beacon/rules, and
+      # the job stops at the first red step.
+      #
+      # It comes before the stamp, not after: `rules-stamp:test` reads
+      # `rules-version.ts` off the disk and pins it to the 'dev' the repository
+      # holds. Stamping first turns this barrier red on every single merge.
+      - run: npx nx run-many -t lint test build typecheck --all
+
+      # The bundle carries the value (§4), so the stamp lands between the
+      # barrier and the build that reads it. 'dev' never matches a deployed
+      # reference, so a forgotten stamp would reload every tab forever rather
+      # than fail quietly.
+      - run: npx nx run rules-stamp:stamp -- ${{ github.sha }}
+      - run: npx nx run web:build
+
+      # `firebase.json` makes `npm run predeploy:functions` copy this file into
+      # the bundle, and it is gitignored — a fresh checkout has none, so the
+      # copy would fail with ENOENT once the deployment is already under way.
+      #
+      # Every value below is a public identifier or a resource name, the same
+      # ones `.env.example` carries in clear. The secret keys they pair with —
+      # SCW_SECRET_KEY, S3_SECRET_KEY, DYNHOST_USER, DYNHOST_PASSWORD,
+      # SERVER_PASSWORD — live in Secret Manager, set by `firebase
+      # functions:secrets:set`, and never appear here: §10 keeps every
+      # hosting-provider secret out of this workflow, and a repository variable
+      # is readable by anyone who can read the repository.
+      - run: |
+          cat > apps/functions/.env <<'ENVFILE'
+          SCW_ACCESS_KEY=${{ vars.SCW_ACCESS_KEY }}
+          SCW_PROJECT_ID=${{ vars.SCW_PROJECT_ID }}
+          SCW_ZONE=${{ vars.SCW_ZONE }}
+          AGENT_ENDPOINT=${{ vars.AGENT_ENDPOINT }}
+          S3_ENDPOINT=${{ vars.S3_ENDPOINT }}
+          S3_ACCESS_KEY=${{ vars.S3_ACCESS_KEY }}
+          SAVES_BUCKET=${{ vars.SAVES_BUCKET }}
+          GAMES_BUCKET=${{ vars.GAMES_BUCKET }}
+          ENVFILE
+
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SERVICE_ACCOUNT }}
+
+      # What `firebase deploy` publishes comes out of `dist/`, which Nx may
+      # have restored from cache rather than built. A target that stopped
+      # declaring its `outputs` correctly would give a cache hit over an empty
+      # folder, and Hosting would publish an empty site without a red line.
+      - run: test -f dist/apps/web/browser/index.html && test -f apps/functions/dist/main.js
+
+      # The flag arms the announcement below, and it is set inside this step so
+      # that a deployment which fails halfway — rules out, hosting out,
+      # functions refused — counts as started.
+      #
+      # `--non-interactive` without `--force` on purpose: when an export
+      # disappears from `main.ts`, the cli asks before deleting the deployed
+      # function, and here that question becomes a failure instead. That is the
+      # wanted behaviour — a function is deleted by a decision, never by a
+      # merge. The day it happens, delete it by hand with `firebase functions:delete
+      # <name> --project <id>`, then merge again.
+      - run: |
+          echo 'DEPLOYMENT_STARTED=1' >> "$GITHUB_ENV"
+          npx firebase deploy --project ${{ vars.FIREBASE_PROJECT_ID }} --only firestore:rules,firestore:indexes,functions,hosting --non-interactive
+
+      # §10 étape 4: idempotent, never touches an existing document, and
+      # re-runnable after an incident. The two documents no client may create,
+      # and only those — the first admin names a Google uid that does not exist
+      # until someone has signed in against this project, so no merge can know
+      # it. §5 makes it a console gesture, after this workflow has run once.
+      - run: npx nx run @beacon/functions:seed
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+
+      # §10 étape 5. Without it the guard against drift between tabs would
+      # never fire.
+      - run: npx nx run @beacon/functions:stamp -- ${{ github.sha }}
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+
+      # Between the deployment and the stamp, the live bundle carries this
+      # commit while `config/settings.rulesVersion` still carries the previous
+      # one — the drift guard fires on every tab that loads it, including a
+      # fresh one. Nominally that window lasts seconds; if anything above this
+      # line failed, it lasts until a human closes it, and a red cross on a
+      # workflow page tells nobody that the application is looping.
+      #
+      # The marker is armed before `firebase deploy` runs, so it also fires when
+      # the deployment published nothing at all — a refused permission, a failed
+      # predeploy. That is the accepted trade: the cli cannot be asked how far it
+      # got. What it forbids is a text that asserts. This one states no fact it
+      # cannot know, and makes the stamp conditional on a reading, because
+      # stamping a commit that is not being served is how you *create* the loop.
+      - if: failure() && env.DEPLOYMENT_STARTED == '1'
+        run: |
+          echo "::error::This deployment failed after firebase deploy started, so what is being served is unknown. Read the job summary and check which commit the live bundle carries BEFORE running anything — stamping the wrong commit is what puts every tab into a permanent reload loop."
+          {
+            echo '## Check what is being served before you run anything'
+            echo
+            echo 'This job failed somewhere after `firebase deploy` started, and it cannot know how'
+            echo 'far the publication got. Two very different situations look identical from here:'
+            echo 'the new bundle went out, or nothing went out at all.'
+            echo
+            echo '**Do not run the stamp yet.** Writing `config/settings.rulesVersion` while the'
+            echo 'previous bundle is still being served is what creates a permanent reload loop —'
+            echo 'the exact failure this message exists to prevent.'
+            echo
+            echo '### 1. Read which commit the live bundle carries'
+            echo
+            echo '```'
+            echo 'SITE=https://${{ vars.FIREBASE_PROJECT_ID }}.web.app'
+            echo 'BUNDLE=$(curl -sL "$SITE/" | grep -o "main-[^\"]*\.js" | head -1)'
+            echo 'curl -sL "$SITE/$BUNDLE" | grep -c ${{ github.sha }}'
+            echo '```'
+            echo
+            echo 'The last line prints `1` or more if the live bundle is this commit'
+            echo '(`${{ github.sha }}`), and `0` if it is still the previous one.'
+            echo
+            echo '### 2a. It printed 0 — nothing is looping, do not stamp'
+            echo
+            echo 'The previous bundle is being served and it matches the `rulesVersion` already in'
+            echo 'place. The application is healthy on the old version. Fix whatever turned this job'
+            echo 'red, and merge again. Rules and indexes may already have gone out ahead of the'
+            echo 'bundle; that is their normal precedence and it loops nothing.'
+            echo
+            echo '### 2b. It printed 1 or more — every tab is looping, stamp now'
+            echo
+            echo 'The live bundle is this commit while the database still names the previous one.'
+            echo 'From a checkout of `main`:'
+            echo
+            echo '```'
+            echo 'GOOGLE_CLOUD_PROJECT=${{ vars.FIREBASE_PROJECT_ID }} npx nx run @beacon/functions:stamp -- ${{ github.sha }}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

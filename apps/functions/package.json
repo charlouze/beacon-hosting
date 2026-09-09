@@ -61,6 +61,12 @@
           "command": "npx tsx apps/functions/src/seed-entry.ts"
         }
       },
+      "stamp": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx apps/functions/src/stamp-entry.ts"
+        }
+      },
       "prune-lockfile": {
         "dependsOn": [
           "build"

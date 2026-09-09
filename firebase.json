@@ -10,6 +10,11 @@
       "predeploy": ["npm run predeploy:functions"]
     }
   ],
+  "hosting": {
+    "public": "dist/apps/web/browser",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  },
   "emulators": {
     "firestore": { "port": 8080 },
     "auth": { "port": 9099 },
