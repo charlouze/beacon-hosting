@@ -12,6 +12,9 @@ export const REQUEST: BootRequest = {
   serverName: 'Beacon',
   serverPassword: 'hunter2',
   slotCount: 4,
+  // The account of the 2026-09-05 measurement, so a suite that does not care
+  // about administrators still renders the boot that was actually observed.
+  adminSteamIds: ['76561197965918116'],
   sessionId: 's1',
   agentToken: 'a'.repeat(64),
   endpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',

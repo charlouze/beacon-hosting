@@ -2,6 +2,7 @@ import { DEFAULT_LIMITS } from '@beacon/session';
 import { serverStateStore, settingsStore } from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
+import { adminMembershipRecord } from '@beacon/membership-record/admin';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -97,6 +98,7 @@ export function buildDeps(): WatchdogDeps {
 
 export function buildProvisionDeps(): ProvisionDeps {
   const shared = buildShared();
+  const db = getFirestore(defaultApp());
   return {
     clock: shared.clock,
     host: shared.host,
@@ -104,7 +106,8 @@ export function buildProvisionDeps(): ProvisionDeps {
     settings: shared.settings,
     ledger: shared.ledger,
     serverPassword: () => SERVER_PASSWORD.value(),
-    tokens: agentTokens(getFirestore(defaultApp())),
+    members: adminMembershipRecord(db),
+    tokens: agentTokens(db),
     agentEndpoint: AGENT_ENDPOINT.value(),
     saveKeys: () => ({
       endpoint: S3_ENDPOINT.value(),

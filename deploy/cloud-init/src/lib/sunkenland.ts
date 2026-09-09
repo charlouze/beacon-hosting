@@ -53,18 +53,6 @@ const WORLD_NAME = "Beacon's World";
 /** Measured: the region the server registers in, and the one a client filters by. */
 const REGION = 'eu';
 
-/**
- * Proved by its effect on 2026-09-05, and not by a log line: the manual save
- * of 20:18:08 was triggered from the game's console by this account. It is the
- * only way a human can ask this game to save, which is why it survives the
- * cull of the options the probe carried only to try them.
- *
- * A catalogue constant and not a request field: nothing a caller sends decides
- * who administers a server. Tranche 4 brings `members` and their `steamId`,
- * and takes this value from there.
- */
-const ADMIN_STEAM_IDS = '76561197965918116';
-
 /** The commanditaire's decision (§2), and the binary logs it back verbatim. */
 const AUTOSAVE_SECONDS = 300;
 
@@ -169,13 +157,31 @@ done
 `;
 
 /**
+ * Nothing at all when nobody declared an identifier, and never an empty value:
+ * `-adminSteamIDs` followed by nothing makes the parser swallow the option
+ * after it, exactly as the empty `-password` did further down.
+ *
+ * The comma is a guess. The measurement of 2026-09-05 passed one identifier and
+ * proved one thing — a save triggered from the game's console by that account —
+ * and nothing about how this game reads a list.
+ */
+const adminOption = (adminSteamIds: readonly string[]): string =>
+  adminSteamIds.length === 0
+    ? ''
+    : `
+  # The argument form, never a file: it keeps a restored world pure data, and
+  # Beacon writes nothing inside a save folder. What it buys is the only way a
+  # human has of asking this game to save.
+  -adminSteamIDs ${adminSteamIds.join(',')}`;
+
+/**
  * The probe's script of 2026-09-05, adopted with its constraints and stripped
  * of what the probe carried only to try it: `-port`, `-publicip`, `-publicport`
  * and `-steamID` are all absent, because the measurement said a player behind
  * a real NAT joins from the list without any of them — and carrying them would
  * announce an address this game does not use.
  */
-const START_SH = `#!/usr/bin/env bash
+const startSh = (adminSteamIds: readonly string[]): string => `#!/usr/bin/env bash
 set -euo pipefail
 
 # Never SteamCMD: this dedicated server needs an account that owns the licence,
@@ -209,11 +215,7 @@ args=(
   -worldGuid "$WORLD_GUID"
   -region ${REGION}
   -maxPlayerCapacity "\${MAX_PLAYERS:-4}"
-  -autoSaveIntervalInSeconds ${AUTOSAVE_SECONDS}
-  # The argument form, never a file: it keeps a restored world pure data, and
-  # Beacon writes nothing inside a save folder. What it buys is the only way a
-  # human has of asking this game to save.
-  -adminSteamIDs ${ADMIN_STEAM_IDS}
+  -autoSaveIntervalInSeconds ${AUTOSAVE_SECONDS}${adminOption(adminSteamIds)}
 )
 
 # Printed so a boot can be read back from the log without guessing what the
@@ -449,7 +451,7 @@ export const sunkenland: GameCatalogEntry = {
   compose: () => COMPOSE,
 
   render(request: BootRequest): string {
-    let rendered = fill(CLOUD_INIT, '__START_SH__', indent(START_SH));
+    let rendered = fill(CLOUD_INIT, '__START_SH__', indent(startSh(request.adminSteamIds)));
     rendered = fill(rendered, '__SERVERID_FILTER__', indent(SERVERID_FILTER));
     rendered = fill(rendered, '__DOCKER_COMPOSE__', indent(COMPOSE));
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);

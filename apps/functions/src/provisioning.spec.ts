@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getFirestore } from 'firebase-admin/firestore';
 import { Deadline, DEFAULT_SETTINGS, Session } from '@beacon/session';
+import { adminMembershipRecord, MEMBERS } from '@beacon/membership-record/admin';
+import { defaultApp } from './firebase-app.js';
 import { runStateChange, type ProvisionDeps } from './provisioning.js';
 
 const NOW = new Date('2026-09-06T20:00:00Z');
@@ -17,6 +20,10 @@ const provisioning = () =>
   });
 
 const stopping = () => Session.from({ ...fieldsOf(provisioning()), state: 'STOPPING' });
+
+/** The one game whose cloud-init carries `-adminSteamIDs` at all. */
+const provisioningSunkenland = () =>
+  Session.from({ ...fieldsOf(provisioning()), state: 'PROVISIONING', game: 'sunkenland' });
 
 let deps: ProvisionDeps;
 
@@ -49,6 +56,7 @@ beforeEach(() => {
       openSessions: vi.fn(async () => []),
     },
     serverPassword: () => 'hunter2',
+    members: { declaredSteamIds: vi.fn(async () => []) },
     tokens: { issue: vi.fn(async () => undefined), verify: vi.fn(async () => false) },
     agentEndpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
     saveKeys: () => ({
@@ -190,6 +198,51 @@ describe('provisioning', () => {
     expect(deps.ledger.close).not.toHaveBeenCalled();
   });
 
+  // The register, not a double: what this tranche changes is that `members`
+  // decides who administers a server in the game, and a stub would only prove
+  // that a method was called. Seeded through the Admin SDK, like every other
+  // suite here — the rules do not apply to a Function.
+  describe('the steam ids the game is told about', () => {
+    const db = getFirestore(defaultApp());
+
+    const clearMembers = async (): Promise<void> => {
+      const existing = await db.collection(MEMBERS).get();
+      await Promise.all(existing.docs.map((doc) => doc.ref.delete()));
+    };
+
+    beforeEach(async () => {
+      await clearMembers();
+      deps = { ...deps, members: adminMembershipRecord(db) };
+    });
+
+    // And after, which matters more: `immediate-pass.spec.ts` builds a real
+    // admin face too, over the same emulator, and expects no administrator at
+    // all. A member left behind here would arm it a `-adminSteamIDs` depending
+    // on the order the files ran in — the shape of red that shows up once in
+    // three runs and costs a day.
+    afterEach(clearMembers);
+
+    // A `player`, and that is the point: §2 gives the in-game administrator
+    // role to every member. What reaches the cloud-init is a member's declared
+    // identifier, never a Beacon role.
+    it('names any member who declared an identifier', async () => {
+      await db.doc(`${MEMBERS}/alice`).set({ role: 'player', steamId: '76561197965918116' });
+
+      await runStateChange(deps, provisioningSunkenland());
+
+      expect(bootstrapOf(deps)).toContain('-adminSteamIDs 76561197965918116');
+    });
+
+    // Not an empty option: a flag with no value eats the argument after it.
+    it('leaves the option out when nobody declared one', async () => {
+      await db.doc(`${MEMBERS}/alice`).set({ role: 'player' });
+
+      await runStateChange(deps, provisioningSunkenland());
+
+      expect(bootstrapOf(deps)).not.toContain('-adminSteamIDs');
+    });
+  });
+
   // `server/current.lastError` is read by every member's browser, live —
   // nothing proves the provider's SDK keeps a cloud-init's secret out of an
   // error's text.
@@ -287,6 +340,9 @@ const fieldsOf = (session: Session) => ({
   instanceSize: session.instanceSize,
   hasJoinInfo: false,
 });
+
+const bootstrapOf = (deps: ProvisionDeps): string =>
+  (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0].bootstrap;
 
 const tokenIn = (bootstrap: string): string =>
   /BEACON_TOKEN=([0-9a-f]{64})/.exec(bootstrap)?.[1] ?? '';

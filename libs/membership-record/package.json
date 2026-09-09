@@ -16,9 +16,15 @@
       "import": "./src/client.ts",
       "default": "./src/client.ts"
     },
+    "./admin": {
+      "types": "./src/admin.ts",
+      "import": "./src/admin.ts",
+      "default": "./src/admin.ts"
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "firebase-admin": "^13.10.0",
     "firebase": "^11.10.0"
   },
   "nx": {

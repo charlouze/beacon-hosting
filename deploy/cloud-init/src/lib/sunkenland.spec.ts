@@ -215,12 +215,32 @@ describe('the sunkenland catalogue entry', () => {
     );
   });
 
-  // Kept where the four announced options were dropped, because it is measured
-  // as proved by its effect: the manual save of 20:18:08 was triggered from the
-  // game's console by this account. It is the only way a human can ask this
-  // game to save, and no field of a request decides it.
-  it('names the admin account the measurement proved can trigger a save', () => {
-    expect(renderCloudInit('sunkenland', REQUEST)).toContain('-adminSteamIDs 76561197965918116');
+  // The one measured case, byte for byte as the constant rendered it. What was
+  // proved on 2026-09-05 was a save triggered from the game console by this
+  // account, and nothing about the shape of a list.
+  it('renders one administrator exactly as the constant did', () => {
+    const rendered = renderCloudInit('sunkenland', {
+      ...REQUEST,
+      adminSteamIds: ['76561197965918116'],
+    });
+    expect(rendered).toContain('\n        -adminSteamIDs 76561197965918116\n');
+  });
+
+  // Unmeasured: no probe ever passed two. A comma is the guess, and the plan
+  // says so out loud rather than letting a reader assume it was tested.
+  it('joins several administrators with a comma', () => {
+    const rendered = renderCloudInit('sunkenland', {
+      ...REQUEST,
+      adminSteamIds: ['11111111111111111', '76561197965918116'],
+    });
+    expect(rendered).toContain('-adminSteamIDs 11111111111111111,76561197965918116');
+  });
+
+  // An empty option is not the same as no option, and a flag with no value is
+  // how a command line starts eating the argument that follows it.
+  it('leaves the option out when nobody declared an identifier', () => {
+    const rendered = renderCloudInit('sunkenland', { ...REQUEST, adminSteamIds: [] });
+    expect(rendered).not.toContain('-adminSteamIDs');
   });
 
   // The `$` compose swallows is refused at the frontier and no longer here —
@@ -277,7 +297,10 @@ describe('the sunkenland catalogue entry', () => {
     // The entry point is not exported, so its edges and its deepest line stand
     // for it: shebang, argument list, trap, and the line it ends on.
     expect(rendered).toContain('    content: |\n      #!/usr/bin/env bash\n      set -euo pipefail\n');
-    expect(rendered).toContain('\n        -adminSteamIDs 76561197965918116\n');
+    // An argument, at the depth arguments sit at. It used to be
+    // `-adminSteamIDs`, which no longer belongs to a fixture — the test that
+    // renders one administrator now pins that line at this very depth.
+    expect(rendered).toContain('\n        -region eu\n');
     expect(rendered).toContain('\n      trap _terminate HUP INT QUIT TERM\n');
     expect(rendered).toContain('\n      wait\n');
   });

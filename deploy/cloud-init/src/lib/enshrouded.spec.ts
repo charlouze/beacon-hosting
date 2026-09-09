@@ -41,6 +41,13 @@ describe('the enshrouded catalogue entry', () => {
     expect(compose).not.toContain('15636');
   });
 
+  // The request is common to both games, and the shared fixture now carries an
+  // identifier: this game knows no such option, so it must ignore the field
+  // rather than grow a `-adminSteamIDs` nobody asked it for.
+  it('ignores the administrators, an option this game does not know', () => {
+    expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('-adminSteamIDs');
+  });
+
   it('writes the session password into a file only root can read', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('SERVER_PASSWORD=hunter2');

@@ -25,6 +25,13 @@ function render(): string {
     serverName: process.env['SERVER_NAME'] ?? 'Beacon',
     serverPassword,
     slotCount: Number(process.env['SLOT_COUNT'] ?? 4),
+    // No register is read here: this target renders, it never touches
+    // Firestore. Empty is the honest default — the same document an evening
+    // where nobody declared an identifier produces. Nothing is filtered on the
+    // way in either: `renderCloudInit` refuses anything but digits, and a
+    // caller that pre-cleaned its own values is a caller that would stop
+    // noticing the day the frontier changed its mind.
+    adminSteamIds: (process.env['ADMIN_STEAM_IDS'] ?? '').split(',').filter((id) => id !== ''),
     // Rendering values, never real credentials: this target exists so a human
     // can read the cloud-init, and it must not be a way to print a token.
     sessionId: 'render',

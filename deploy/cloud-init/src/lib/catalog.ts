@@ -18,6 +18,18 @@ export interface BootRequest {
   readonly serverName: string;
   readonly serverPassword: string;
   readonly slotCount: number;
+  /**
+   * Who administers the server **inside the game** (§4), and never the `admin`
+   * role of Beacon: §2 grants this one to **every** member, whatever their role,
+   * and what fills the field is the identifiers they declared. `members` names
+   * them, this repository no longer does. Empty is an ordinary evening — nobody
+   * declared an identifier — and an entry for a game that does not know the
+   * option ignores the field, as it ignores every other one it has no use for.
+   *
+   * **Digits only.** These reach a machine as shell, and `renderCloudInit`
+   * refuses the whole boot over anything else rather than let a caller decide.
+   */
+  readonly adminSteamIds: readonly string[];
   readonly sessionId: string;
   /**
    * Thirty-two bytes that die with the session (§7). It rides here because
@@ -95,8 +107,10 @@ export function catalogFor(game: Game): GameCatalogEntry {
  * unknown variable and none about the value it just amputated. `env_file`
  * changes nothing: the same interpolation applies there.
  *
- * `slotCount` is the one field of a request missing here, and its type is the
- * whole reason: a number has no `$` to lose.
+ * Two fields of a request are missing here, and neither is an oversight.
+ * `slotCount` for its type — a number has no `$` to lose. `adminSteamIds`
+ * because it lands in no file compose reads: it is shell, and the refusal that
+ * covers it is `refuseAnythingButDigits` below, which is stricter than this one.
  */
 const exposedValues = (request: BootRequest): readonly (readonly [string, string])[] => [
   ['serverName', request.serverName],
@@ -113,8 +127,32 @@ const exposedValues = (request: BootRequest): readonly (readonly [string, string
 ];
 
 /**
+ * §5 calls a steam id a public integer. Here that is a contract rather than a
+ * description: `adminSteamIds` is the one field of a request that reaches a
+ * machine as **shell** — unquoted, inside the `args=( … )` of an entry point —
+ * so `$(…)` in it runs as root on a billed machine, and it travelled all the
+ * way from a browser. Quoting buys nothing: bash substitutes inside double
+ * quotes too. Refusing is what protects, and it belongs to the module that
+ * knows a shell script is being written, not to whoever fills the field.
+ *
+ * Its twin lives in `libs/membership-record`, on the same values, and skips
+ * them **silently**: there the malformed identifier is a member's typo, and §5
+ * says the one consequence is not being an in-game admin. Here it is a caller's
+ * defect, so it is loud. The two guard different things and both stay.
+ */
+const refuseAnythingButDigits = (adminSteamIds: readonly string[]): void => {
+  for (const [index, steamId] of adminSteamIds.entries()) {
+    if (!/^[0-9]+$/.test(steamId)) {
+      throw new Error(
+        `refusing to write a cloud-init whose adminSteamIds[${index}] is not a steam id: it lands unquoted in a shell, where anything but digits is code`,
+      );
+    }
+  }
+};
+
+/**
  * The one gate every boot passes, whichever game it is for, and the last place
- * a value can be refused while nothing is billed yet. Two refusals live here,
+ * a value can be refused while nothing is billed yet. Three refusals live here,
  * and they share their reason: what they catch leaves no trace downstream.
  *
  * The only place `endpoint` enters the system. It comes from `AGENT_ENDPOINT`,
@@ -135,6 +173,11 @@ const exposedValues = (request: BootRequest): readonly (readonly [string, string
  * and this error travels: `provisioning` writes a summary of it to a field
  * every member's browser reads live, through a sanitiser that is length-based,
  * so a short human-chosen password crosses it untouched.
+ *
+ * The third is `refuseAnythingButDigits` above, and it is held here for the
+ * same reason as the `$`: one entry writes that option today, the request is
+ * common to both, and a guard living in that entry would protect nothing the
+ * day a second game learns the option.
  */
 export const renderCloudInit = (game: Game, request: BootRequest): string => {
   if (!request.endpoint.startsWith('https://')) {
@@ -149,6 +192,7 @@ export const renderCloudInit = (game: Game, request: BootRequest): string => {
       );
     }
   }
+  refuseAnythingButDigits(request.adminSteamIds);
   return catalogFor(game).render(request);
 };
 
