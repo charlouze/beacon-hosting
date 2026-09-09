@@ -1,6 +1,6 @@
 {
   "firestore": {
-    "rules": "firestore.dev.rules",
+    "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "functions": [
@@ -11,6 +11,7 @@
   ],
   "emulators": {
     "firestore": { "port": 8080 },
+    "auth": { "port": 9099 },
     "functions": { "port": 5001 },
     "hub": { "port": 4400 },
     "ui": { "enabled": true, "port": 4000 },

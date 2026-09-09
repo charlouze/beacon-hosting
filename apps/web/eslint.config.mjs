@@ -48,17 +48,26 @@ export default [
           patterns: [
             {
               // `@firebase/*` is the same sdk under its unscoped packages, and
-              // reaches Firestore just as directly. Neither `firebase` nor
-              // `firebase/app` is barred: the driver calls `initializeApp`
-              // from it, and `firebase/auth` becomes legitimate in tranche 4.
+              // reaches Firestore just as directly.
+              //
+              // `firebase/auth` is barred for the same reason as Firestore, and
+              // it took a decision to see it: signing in looks like the screen's
+              // business, but the `Actor` of every event is built from the
+              // profile it returns, so a screen holding the Auth sdk holds the
+              // identity too. It lives in `libs/membership-record`, behind
+              // `connectMembershipRecord`.
+              //
+              // `firebase/app` stays allowed: `main.ts` calls `initializeApp`,
+              // which names no document and reads nothing.
               group: [
                 'firebase/firestore',
+                'firebase/auth',
                 '@firebase/*',
                 'firebase-admin',
                 'firebase-admin/*',
               ],
               message:
-                'the session context reaches Firestore through a *-record module (§4)',
+                'this project reaches Firestore and Auth through a *-record module (§4)',
             },
           ],
         },

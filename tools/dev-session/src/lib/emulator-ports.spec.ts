@@ -6,7 +6,7 @@ import { emulatorPortsFrom } from './emulator-ports.js';
 const REAL_CONFIG = new URL('../../../../firebase.dev.json', import.meta.url);
 
 const CONFIG = JSON.stringify({
-  firestore: { rules: 'firestore.dev.rules', indexes: 'firestore.indexes.json' },
+  firestore: { rules: 'firestore.rules', indexes: 'firestore.indexes.json' },
   functions: [{ source: 'apps/functions/dist', codebase: 'default' }],
   emulators: {
     firestore: { port: 8080 },
