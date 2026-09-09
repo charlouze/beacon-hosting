@@ -5,9 +5,9 @@
 **But :** le système peut être exposé. Un membre se connecte avec son compte
 Google, les règles Firestore délimitent son autorité champ par champ, un
 visiteur n'obtient rien, et la fusion dans `main` déploie le tout — règles,
-index, Functions et l'application — avec le semis du premier admin et le tampon
-de version. À la fin, le gate du lotissement est levé : c'est la seule tranche
-dont c'est l'objet.
+index, Functions et l'application — avec le semis et le tampon de version. À la
+fin, le gate du lotissement est levé : c'est la seule tranche dont c'est
+l'objet.
 
 **Approche :** les règles sont écrites **après** les écritures qu'elles
 filtrent, et c'est la deuxième des trois règles du lotissement. Toutes existent
@@ -33,8 +33,8 @@ avec identité fédérée OIDC.
 **Spec :** [`docs/superpowers/specs/2026-09-02-game-hosting-design.md`](../specs/2026-09-02-game-hosting-design.md).
 Cette tranche implémente le §4 (`libs/membership-record`, ce que les règles font
 et ne font pas), le §5 (qui a le droit de lire, la propriété champ par champ,
-`steamId`, le semis du premier admin, le TTL de `events`), le §7 (le modèle de
-menace en entier), le §9 (la suite de refus, écritures **et** lectures) et le
+`steamId`, l'entrée d'un membre par la console, le TTL de `events`), le §7 (le
+modèle de menace en entier), le §9 (la suite de refus, écritures **et** lectures) et le
 §10 (le déploiement à la fusion, ses cinq étapes, et la protection de `main`).
 Le découpage est au [lotissement](2026-09-02-lotissement.md), que la tâche 14
 met à jour.
@@ -135,7 +135,7 @@ flowchart TD
     T5["5 · Les regles : ce que<br/>personne ne lit"]
     T6["6 · Le pilote se connecte,<br/>l'emulateur se ferme"]
     T7["7 · steamId remonte<br/>jusqu'au serveur de jeu"]
-    T8["8 · Le semis du<br/>premier admin"]
+    T8["8 · Le semis sous test,<br/>et son point d'entree"]
     T9["9 · rulesVersion :<br/>les deux moities"]
     T10["10 · Le TTL de events"]
     T11["11 · Le workflow<br/>de deploiement"]
@@ -1350,19 +1350,25 @@ pilote appelant `initializeApp`.
 
 - [ ] **Step 5: Écrire le geste de développement dans `apps/web/README.md`**
 
-Trois lignes, pas plus. Elles remplacent `firebase.dev.json`, qui n'existe plus,
-et elles décrivent exactement la séquence de production — c'est ce qui les rend
-utiles :
+Trois gestes en commandes, plus un à la main. Ils remplacent
+`firestore.dev.rules`, qui n'existe plus, et décrivent exactement la séquence de
+production — c'est ce qui les rend utiles :
 
 ```bash
-# 1. l'emulateur, avec les vraies regles
-npx firebase emulators:start --project demo-beacon --only firestore,auth
-# 2. le pilote ; se connecter une fois pour exister
+# 1. les Functions construites, puis l'emulateur avec les vraies regles
+mise run dev-functions
+npx firebase emulators:start --config firebase.dev.json --project demo-beacon \
+  --only firestore,auth,functions
+# 2. les deux documents qu'aucun client ne peut creer
+mise run seed
+# 3. le pilote ; se connecter une fois pour exister
 npx nx serve web
-# 3. le uid s'affiche dans l'ui de l'emulateur Auth ; s'en faire un membre
-BEACON_FIRST_ADMIN_UID=<uid> FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
-  npx nx run @beacon/functions:seed
 ```
+
+Puis le quatrième geste, qui n'est pas une commande : dans l'UI de l'émulateur,
+relever l'`uid` sous Authentication et créer `members/{uid}` sous Firestore avec
+`role: 'admin'`, `email: null`, `steamId: null`. C'est exactement le geste de
+production de la tâche 13, et c'est ce qui rend la séquence utile.
 
 - [ ] **Step 6: Lancer les tests et vérifier qu'ils passent**
 
@@ -1374,9 +1380,9 @@ npx nx run-many -t lint typecheck build --projects=web,@beacon/rules
 - [ ] **Step 7: Vérifier à la main que le pilote fonctionne**
 
 Suivre les trois commandes du README. Constater, dans cet ordre : le bouton de
-connexion, l'écran de visiteur après connexion, l'écran de membre après le
-semis, puis une session ouverte et arrêtée sans qu'aucune écriture ne soit
-refusée.
+connexion, l'écran de visiteur après connexion, l'écran de membre après avoir
+créé `members/{uid}` à la main, puis une session ouverte et arrêtée sans
+qu'aucune écriture ne soit refusée.
 
 **C'est la première fois du projet qu'une écriture du navigateur passe par les
 vraies règles.** Un refus ici est un défaut des tâches 2 à 5, pas de cette
@@ -1398,6 +1404,15 @@ constante du catalogue, et c'est la tranche 4 qui apporte `members` et son
 `steamId`. C'est aussi le seul moyen qu'un humain a de déclencher une sauvegarde
 sur ce jeu — mesuré le 2026-09-05, par son effet.
 
+**Le rôle d'administrateur dans le jeu va à tous les membres, pas aux admins
+Beacon.** Le §2 du spec le tranche et en donne la raison — « la ressource est
+commune », même principe que « n'importe qui démarre, prolonge et arrête » — et
+le §4 dit expressément de ne pas confondre ce rôle avec le rôle `admin` de
+Beacon. **Une première version de cette tâche avait rétréci cette décision du §2
+à un `where('role', '==', 'admin')`, et l'implémentation a suivi le plan** :
+remettre ce filtre n'est pas réparer un oubli, c'est refaire le défaut. La
+requête ne lit pas le rôle du tout.
+
 **Le séparateur pour plusieurs identifiants n'est pas mesuré.** La sonde n'en a
 jamais posé qu'un. La contrainte qui en découle est nette : **le rendu à un seul
 administrateur doit rester identique à l'octet près** à celui d'aujourd'hui, et
@@ -1413,7 +1428,10 @@ c'est un test. Le cas à plusieurs est une virgule, et il est signalé comme non
 
 **Interfaces :**
 - Produit : `adminMembershipRecord(db: Firestore)` — face admin, `firebase-admin` —
-  avec `adminSteamIds(): Promise<readonly string[]>`
+  avec `declaredSteamIds(): Promise<readonly string[]>`. Le nom dit ce que la
+  liste **est** — les identifiants Steam que les membres ont déclarés — et non ce
+  que le jeu en fait : `adminSteamIds` mélangeait les deux vocabulaires que le §4
+  sépare
 - Produit : `BootRequest.adminSteamIds: readonly string[]`
 
 - [ ] **Step 1: Écrire les tests de la face admin, qui échouent**
@@ -1427,27 +1445,42 @@ fichier : `seed(path, data)`, une écriture par l'Admin SDK, et `record`, le
 // The order is sorted and not "whatever Firestore returned": the cloud-init is
 // written at every provisioning, and two identical evenings must produce two
 // identical files.
-it('lists the declared steam ids of the admins, sorted', async () => {
+it('lists the steam ids every member declared, sorted', async () => {
   await seed('members/root', { role: 'admin', steamId: '76561197965918116' });
-  await seed('members/zoe', { role: 'admin', steamId: '11111111111111111' });
+  await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });
   await seed('members/alice', { role: 'player', steamId: '22222222222222222' });
 
-  expect(await record.adminSteamIds()).toEqual(['11111111111111111', '76561197965918116']);
+  expect(await record.declaredSteamIds()).toEqual([
+    '11111111111111111',
+    '22222222222222222',
+    '76561197965918116',
+  ]);
 });
 
-// Declaring one is optional, and §5 says an identifier grants nothing. An
-// admin who never declared one is simply not an in-game admin.
-it('skips an admin who declared none', async () => {
-  await seed('members/root', { role: 'admin' });
-  await seed('members/zoe', { role: 'admin', steamId: '11111111111111111' });
+// §2 gives the in-game administrator role to **every** member, on the same
+// principle as "anyone starts, extends and stops": the resource is common. The
+// `admin` role of Beacon is another question entirely (§4), and this query has
+// no business asking it.
+it('names a player, the role of Beacon being none of its business', async () => {
+  await seed('members/alice', { role: 'player', steamId: '22222222222222222' });
 
-  expect(await record.adminSteamIds()).toEqual(['11111111111111111']);
+  expect(await record.declaredSteamIds()).toEqual(['22222222222222222']);
 });
 
-it('is empty when no admin declared one', async () => {
+// Declaring one is optional, and §5 says an identifier grants nothing. A member
+// who never declared one is simply not an in-game admin.
+it('skips a member who declared none', async () => {
   await seed('members/root', { role: 'admin' });
+  await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });
 
-  expect(await record.adminSteamIds()).toEqual([]);
+  expect(await record.declaredSteamIds()).toEqual(['11111111111111111']);
+});
+
+it('is empty when nobody declared one', async () => {
+  await seed('members/root', { role: 'admin' });
+  await seed('members/zoe', { role: 'player' });
+
+  expect(await record.declaredSteamIds()).toEqual([]);
 });
 ```
 
@@ -1459,8 +1492,9 @@ npx nx test @beacon/membership-record
 
 - [ ] **Step 3: Écrire la face admin**
 
-Une requête sur `role == 'admin'`, une projection sur `steamId`, un tri. Aucune
-autre opération : la face admin de ce module n'existe que pour cet appelant.
+Toute la collection, une projection sur `steamId`, un tri. **Aucun filtre sur le
+rôle** — voir plus haut. Aucune autre opération : la face admin de ce module
+n'existe que pour cet appelant.
 
 - [ ] **Step 4: Écrire les tests du catalogue, qui échouent**
 
@@ -1516,9 +1550,13 @@ L'entrée `enshrouded` ne bouge pas : ce jeu ne connaît pas cette option, et le
 - [ ] **Step 7: Brancher la Function de provisionnement**
 
 `provisioning.ts` lit la liste par la face admin de `membership-record` et la
-passe dans le `BootRequest`. Un test à ajouter à `provisioning.spec.ts` :
-l'appel rend un `cloud-init` qui contient l'identifiant d'un admin semé dans
-`members`, et le rend sans lui quand personne n'en a déclaré.
+passe dans le `BootRequest`. C'est **la couture entre les deux vocabulaires** :
+`declaredSteamIds()` d'un côté, `adminSteamIds` de l'autre — le champ et
+l'option `-adminSteamIDs` restent le mot du jeu, et un commentaire à cette ligne
+dit pourquoi les deux listes n'en font qu'une (§2). Un test à ajouter à
+`provisioning.spec.ts` : l'appel rend un `cloud-init` qui contient l'identifiant
+d'un membre `player` semé dans `members` — le rôle ne joue aucun rôle —, et le
+rend sans lui quand personne n'en a déclaré.
 
 - [ ] **Step 8: Lancer les tests et vérifier qu'ils passent**
 
@@ -1538,66 +1576,66 @@ git commit -m "feat(cloud-init): fait nommer les administrateurs du jeu par memb
 
 ---
 
-### Task 8: Le semis du premier admin
+### Task 8: Le semis sous test, et son point d'entrée
 
-`members` n'étant écrit que par un admin, il n'y aurait sinon aucun moyen d'en
-obtenir un premier (§5). Le rôle vivant en base, ce semis est une écriture
-Firestore ordinaire — ni Admin SDK hors bande, ni console, ni custom claim.
+Le semis existe depuis la tranche 2 et crée déjà `server/current` et
+`config/settings` — les deux documents qu'aucun client ne peut créer (§5), ce
+qui est toute leur raison d'être semés. Il n'a jamais eu de test.
 
-**C'est le seul paramètre d'installation du système** (§10), et il vient de
-l'environnement : `BEACON_FIRST_ADMIN_UID`.
+**Le premier admin n'entre pas ici, et la raison est mesurée.** Le plan portait
+jusqu'au 2026-09-09 un troisième document, `members/{uid}`, nourri par une
+variable de dépôt qu'il appelait « le seul paramètre d'installation ». La
+séquence est circulaire : la variable veut un `uid` Google, un `uid` Google
+n'existe qu'après une connexion contre la production, et une connexion contre la
+production suppose que le déploiement ait eu lieu — que la garde du workflow
+refuse de lancer tant que la variable est vide. Poser une valeur bidon pour
+débloquer crée un admin qui n'est personne, et le semis étant en `create` seul,
+une seconde fusion ne l'annule pas : elle ajoute le bon **à côté**. Le premier
+admin est donc un geste de console après la première fusion (tâche 13), comme
+tous les membres suivants.
 
-**Idempotent, comme les deux autres documents** : relancer le semis après un
-incident est le chemin de récupération, pas un danger. Un document existant
-n'est jamais touché — y compris s'il porte `role: 'player'`, ce qui est le seul
-cas où relancer ne répare rien. Le remède est de supprimer le document dans la
-console et de relancer, et il vaut mieux écrit ici que découvert un vendredi
-soir.
+**Idempotent** : relancer le semis après un incident est le chemin de
+récupération, pas un danger. Un document existant n'est jamais touché, et chaque
+document est vérifié pour lui-même — une panne entre les deux `create` ne doit
+pas faire sauter le second au passage suivant.
 
 **Fichiers :**
-- Modifier : `apps/functions/src/seed.ts`
+- Modifier : `apps/functions/src/seed.ts`, `apps/functions/src/seed-entry.ts`
 - Créer : `apps/functions/src/seed.spec.ts`
 
 - [ ] **Step 1: Écrire les tests, qui échouent**
 
 Contre l'émulateur. Le semis est un script à effet ; le test appelle sa fonction
-exportée plutôt que le processus. `db` est le Firestore de l'Admin SDK, vidé
-entre chaque test.
+exportée plutôt que le processus, ce qui suppose d'extraire le point d'entrée
+dans `seed-entry.ts`. `db` est le Firestore de l'Admin SDK.
 
 ```ts
-it('creates the first admin from the environment', async () => {
-  await seed({ firstAdminUid: 'root' });
+it('seeds the two documents on an empty database', async () => {
+  await seed();
 
-  const stored = (await db.doc('members/root').get()).data();
-  expect(stored).toEqual({ role: 'admin', email: null, steamId: null });
+  for (const path of ['server/current', 'config/settings']) {
+    expect((await db.doc(path).get()).exists).toBe(true);
+  }
 });
 
 // The recovery path (§10): re-running after an incident must be safe.
-it('leaves an existing member untouched', async () => {
-  await db.doc('members/root').set({ role: 'player', email: 'root@example.com' });
+it('leaves existing documents untouched', async () => {
+  await db.doc('server/current').set({ state: 'RUNNING' });
+  await db.doc('config/settings').set({ sessionDurationMs: 1 });
 
-  await seed({ firstAdminUid: 'root' });
+  await seed();
 
-  expect((await db.doc('members/root').get()).data()).toEqual({
-    role: 'player',
-    email: 'root@example.com',
-  });
+  expect((await db.doc('server/current').get()).data()).toEqual({ state: 'RUNNING' });
+  expect((await db.doc('config/settings').get()).data()).toEqual({ sessionDurationMs: 1 });
 });
 
-// A deployment that forgot the parameter must not silently produce a database
-// nobody can write to. It seeds the other two documents and says so.
-it('refuses to run without a uid', async () => {
-  await expect(seed({ firstAdminUid: undefined })).rejects.toThrow(/BEACON_FIRST_ADMIN_UID/);
-});
+// The sentinel that the seed never quietly takes the console gesture back.
+it('creates nothing in members', async () => {
+  const uidsBefore = (await db.collection('members').get()).docs.map((doc) => doc.id);
 
-// Each document is checked on its own: a crash between two creates must not
-// make a re-run skip the third.
-it('seeds the three documents on an empty database', async () => {
-  await seed({ firstAdminUid: 'root' });
+  await seed();
 
-  for (const path of ['server/current', 'config/settings', 'members/root']) {
-    expect((await db.doc(path).get()).exists).toBe(true);
-  }
+  expect((await db.collection('members').get()).docs.map((doc) => doc.id)).toEqual(uidsBefore);
 });
 ```
 
@@ -1607,17 +1645,14 @@ it('seeds the three documents on an empty database', async () => {
 npx nx test @beacon/functions
 ```
 
-- [ ] **Step 3: Écrire le semis du membre**
+- [ ] **Step 3: Extraire le point d'entrée**
 
-`seed.ts` prend son paramètre en argument plutôt que de lire `process.env` en
-son cœur — c'est ce qui le rend testable —, et l'entrée du script lit
-l'environnement. Le document créé porte `email: null` et `steamId: null` : les
-deux valeurs sont renseignées ensuite, l'une par la console, l'autre par le
-sujet lui-même. Un champ absent et un champ nul ne se lisent pas pareil dans un
-diff de règles, et le semis existant a déjà fait ce choix pour `server/current`.
+`seed.ts` cesse d'être un script qui s'exécute à l'import : il n'exporte qu'une
+fonction, et `seed-entry.ts` l'appelle. C'est ce qui rend le test possible, et
+la cible `seed` du projet pointe désormais sur l'entrée.
 
 Le commentaire de tête qui annonce « the first members/{uid} is seeded in
-tranche 4 » disparaît : il est fait.
+tranche 4 » disparaît, et dit à sa place pourquoi `members` n'est pas semé.
 
 - [ ] **Step 4: Lancer les tests et vérifier qu'ils passent**
 
@@ -1629,7 +1664,7 @@ npx nx test @beacon/functions
 
 ```bash
 git add apps/functions
-git commit -m "feat(functions): seme le premier admin, seul parametre d'installation"
+git commit -m "test(functions): met le semis sous test, par un point d'entree separe"
 ```
 
 ---
@@ -1956,7 +1991,6 @@ jobs:
       - run: npx nx run @beacon/functions:seed
         env:
           GOOGLE_CLOUD_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
-          BEACON_FIRST_ADMIN_UID: ${{ vars.FIRST_ADMIN_UID }}
 
       # §10 étape 5. Without it the guard against drift between tabs would
       # never fire.
@@ -1999,6 +2033,18 @@ parallèle de tout le reste : rien du dépôt n'en dépend avant la tâche 13.
 Chaque geste est écrit ici avec ce qu'il produit, pour qu'il soit relisible six
 mois plus tard — c'est la même exigence que `deploy/scaleway/`.
 
+**Cette liste est la seule que l'humain suit**, et elle a été relue en lisant le
+premier déploiement comme s'il tournait. Ce qui n'y figure pas n'est pas fait :
+un commentaire de `deploy.yml` ne se coche pas.
+
+- [ ] **Step 0: Créer la base Firestore du projet**
+
+Console Firebase → Firestore Database → Créer une base de données, en mode
+production, dans la région du reste du projet. Rien ne le demande ailleurs, et
+tout en dépend : `firebase deploy --only firestore:rules,firestore:indexes`
+échoue s'il n'y a pas de base à qui poser des règles, et le semis de l'étape 4
+du §10 écrit dedans.
+
 - [ ] **Step 1: Activer le fournisseur Google dans Auth**
 
 Console Firebase → Authentication → Sign-in method → Google → activer. Relever
@@ -2018,29 +2064,101 @@ configuration. Rien à recopier dans le dépôt.
 
 Un pool d'identité de charge de travail, un fournisseur OIDC pour GitHub, et un
 compte de service dédié au déploiement — **jamais une clé de longue durée**
-(§10). Restreindre le fournisseur au dépôt `charlouze/game-hosting` et à la
+(§10). Restreindre le fournisseur au dépôt `charlouze/beacon-hosting` et à la
 branche `main` : sans cette condition, n'importe quel dépôt GitHub peut prendre
 l'identité.
 
-Rôles minimaux sur le projet : Firebase Hosting Admin, Cloud Datastore Owner
-(règles, index et écritures du semis), Cloud Functions Admin, Service Account
-User, et Firebase Rules Admin.
+**Les rôles, et pourquoi la liste est plus longue qu'elle n'en a l'air.** Les
+Functions sont **gen 2** (`firebase-functions` ^6) : un déploiement ne pose pas
+une fonction, il construit une image et publie un service Cloud Run, avec un
+déclencheur pour chaque forme d'appel. `main.ts` en porte trois — `onSchedule`,
+`onDocumentWritten`, `onRequest` —, donc trois chaînes de plus à autoriser.
+
+| Rôle | Ce qu'il débloque |
+|---|---|
+| `roles/firebasehosting.admin` | la publication de `dist/apps/web/browser` |
+| `roles/firebaserules.admin` | `firestore:rules` |
+| `roles/datastore.owner` | `firestore:indexes`, et les écritures du semis et du tampon |
+| `roles/cloudfunctions.admin` | les Functions telles que la CLI les nomme |
+| `roles/run.admin` | gen 2 : chaque Function **est** un service Cloud Run, et `agentReport` y pose `invoker: 'public'` |
+| `roles/cloudbuild.builds.editor` | la construction de l'image, à chaque déploiement |
+| `roles/artifactregistry.admin` | le dépôt `gcf-artifacts` où cette image atterrit, à créer la première fois |
+| `roles/eventarc.admin` | le déclencheur Firestore d'`onServerStateChange` |
+| `roles/cloudscheduler.admin` et `roles/pubsub.admin` | `onSchedule` : un job Scheduler qui publie sur un sujet Pub/Sub |
+| `roles/secretmanager.admin` | les cinq secrets de l'étape 5, que le déploiement rattache aux Functions |
+| `roles/iam.serviceAccountUser` | agir au nom du compte d'exécution des Functions |
+| `roles/serviceusage.serviceUsageConsumer` | le projet de quota des appels d'API |
+
+Les API correspondantes doivent être activées sur le projet — `run`,
+`cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`, `pubsub`,
+`secretmanager`. La console le propose au premier refus ; un déploiement en
+identité fédérée, lui, se contente d'échouer.
+
+Et **`iamcredentials`**, qui n'est dans la liste ci-dessus d'aucun rôle parce
+qu'elle ne sert à aucune étape du déploiement : `google-github-actions/auth`
+échange le jeton OIDC contre un jeton d'accès en *usurpant* le compte de
+service, et c'est cette API qui autorise l'usurpation. Sans elle rien n'échoue
+plus tard, tout échoue tout de suite — à la première étape qui s'authentifie,
+avant qu'une seule ligne soit publiée.
 
 Relever les trois valeurs et les poser en **variables** de dépôt GitHub — pas en
 secrets, aucune n'en est un : `FIREBASE_PROJECT_ID`, `WIF_PROVIDER`,
 `DEPLOY_SERVICE_ACCOUNT`.
 
-- [ ] **Step 4: Se connecter une fois, et relever son `uid`**
+- [ ] **Step 4: Poser les huit variables que le workflow lit pour composer `.env`**
 
-Impossible avant l'étape 1, et nécessaire à l'étape 5 : le premier admin doit
-exister dans Auth avant que le semis puisse le nommer. Se connecter au pilote
-— en local suffit si le domaine `localhost` est autorisé —, puis relever l'`uid`
-dans la console Firebase → Authentication → Users.
+`deploy.yml` écrit `apps/functions/.env` à partir de huit variables de dépôt,
+parce que ce fichier est ignoré par git et qu'un `predeploy` le recopie dans le
+bundle. Aucune n'est un secret : ce sont des identifiants publics et des noms de
+ressources, exactement ce que `apps/functions/.env.example` porte en clair.
 
-- [ ] **Step 5: Poser le paramètre d'installation**
+Une variable jamais créée **n'échoue pas** : elle vaut la chaîne vide, `.env`
+part avec `SCW_ACCESS_KEY=`, et `defineString` ne réclame rien puisque la clé
+est là. La garde en tête du workflow refuse ce cas par son nom — c'est le seul
+de toute la chaîne qui, sans elle, passerait au vert sur une configuration
+inutilisable.
 
-Variable de dépôt GitHub `FIRST_ADMIN_UID`, avec la valeur de l'étape 4. C'est
-le seul paramètre d'installation du système (§10).
+| Variable | Où l'humain lit la valeur |
+|---|---|
+| `SCW_ACCESS_KEY` | console Scaleway → IAM → Clés API : la moitié publique de la clé, `SCW…` |
+| `SCW_PROJECT_ID` | console Scaleway → Paramètres du projet → ID du projet (un uuid) |
+| `SCW_ZONE` | la zone où vivent les instances, `fr-par-1` (§2) |
+| `S3_ENDPOINT` | `https://s3.<région>.scw.cloud`, la région étant celle de la zone ci-dessus |
+| `S3_ACCESS_KEY` | la **même** clé API que `SCW_ACCESS_KEY` : Scaleway signe l'Object Storage avec elle |
+| `SAVES_BUCKET` | le nom du seau des sauvegardes, `deploy/scaleway/README.md` |
+| `GAMES_BUCKET` | le nom du seau des dépôts de jeu, même fichier |
+| `AGENT_ENDPOINT` | l'URL de la Function `agentReport`, **qui n'existe qu'après le premier déploiement** |
+
+`AGENT_ENDPOINT` est donc vide au premier passage, et c'est la seule que la
+garde tolère vide — sans quoi le déploiement qui crée la Function ne pourrait
+jamais avoir lieu. La relever ensuite (console Firebase → Functions, ou
+`firebase functions:list`), la poser, et fusionner une seconde fois. Tant
+qu'elle est vide, une machine provisionnée ne rapporte rien et la session reste
+en `PROVISIONING` jusqu'à ce que le watchdog la ramasse.
+
+**Huit et non neuf : le premier admin n'est pas une variable de dépôt, et il ne
+peut pas l'être.** Son `uid` Google n'existe qu'après une première connexion
+**contre ce projet**, que seule la fusion rend possible — poser sa valeur ici
+supposerait de la connaître avant que le système existe. Le geste est à la tâche
+13, après le déploiement, et c'est le même que pour tous les membres suivants.
+
+- [ ] **Step 5: Poser les cinq secrets dans Secret Manager**
+
+`container.ts` déclare cinq `defineSecret`, et un secret sans version publiée
+fait **demander la valeur** à la CLI. Avec `--non-interactive`, cette question
+devient une erreur — après que `firebase deploy` a commencé, donc dans la
+fenêtre que le message d'échec du workflow décrit.
+
+Ils ne vivent ni dans le dépôt ni dans une variable GitHub, mais dans Secret
+Manager, posés une fois depuis un poste :
+
+```bash
+firebase functions:secrets:set SCW_SECRET_KEY --project <id>
+firebase functions:secrets:set SERVER_PASSWORD --project <id>
+firebase functions:secrets:set DYNHOST_USER --project <id>
+firebase functions:secrets:set DYNHOST_PASSWORD --project <id>
+firebase functions:secrets:set S3_SECRET_KEY --project <id>
+```
 
 - [ ] **Step 6: Protéger `main`**
 
@@ -2086,14 +2204,55 @@ déployée est le seul état que ce projet n'a jamais eu.
 
 - [ ] **Step 3: Constater ce que le déploiement a produit**
 
-Quatre lectures, dans la console :
+Cinq lectures, dans la console :
 
 - `firestore.rules` déployé porte bien les règles du dépôt, pas les fermées ;
-- `members/{uid}` existe, en `admin`, avec l'`uid` de la variable ;
+- `server/current` existe, en `IDLE`, et `config/settings` avec ses durées ;
+- `members` est **vide** — c'est l'étape suivante qui le remplit ;
 - `config/settings.rulesVersion` porte la référence du commit fusionné ;
 - `beacon.charlouze.com` sert l'application.
 
-- [ ] **Step 4: Éprouver la frontière depuis un vrai navigateur**
+- [ ] **Step 4: Devenir le premier admin, depuis la console**
+
+**C'est ici et nulle part avant.** Un `uid` Google n'existe qu'après une
+première connexion **contre ce projet** : ni le dépôt, ni le workflow, ni le
+semis ne peuvent le connaître avant que ce déploiement-ci ait servi l'écran de
+connexion. C'est pour cela que le semis ne crée que les deux documents qu'aucun
+client ne peut créer, et que le premier admin entre exactement comme les
+suivants (§5).
+
+1. Se connecter sur `beacon.charlouze.com` avec son compte Google. L'écran dit
+   qu'on n'est pas membre — c'est correct, et c'est déjà la moitié du point 1 de
+   l'étape suivante.
+2. Console Firebase → Authentication → Users : relever l'`uid` à côté de son
+   e-mail.
+3. Console Firebase → Firestore → collection `members` → créer un document dont
+   l'identifiant **est** cet `uid`, avec `role: 'admin'` (string), `email` et
+   `steamId` en `null`.
+4. Recharger l'onglet : on est admin, **sans se reconnecter**.
+5. **Déclarer son propre `steamId` depuis le pilote**, et constater que
+   l'écriture passe.
+
+Le point 5 n'est pas une formalité, c'est le seul voyant de la tâche. Aucun
+autre step n'exerce l'écriture du document du premier admin : le step 5 fait
+déclarer un `steamId` par le **nouveau** membre, jamais par lui. Un premier
+admin mal formé traverserait donc les steps 3 à 6 sans qu'aucun refus ne
+s'allume — il *est* admin, il lit `server/current`, tout a l'air correct — et le
+symptôme n'arriverait qu'en tranche 5, ou plus tard encore quand le `cloud-init`
+chercherait les `steamId` des membres et n'en trouverait aucun.
+
+Les trois champs, pas seulement `role` : `isValidMember` demande que `email`
+soit présent, fût-il nul, et un document sans lui refuse toute écriture de son
+sujet — c'est exactement ce que le point 5 attrape. Ce n'est pas sans issue : un
+admin peut y ajouter `email` ensuite, le sien comme celui d'un autre, puisque
+`isAdmin()` ne lit que `role`. C'est la forme que `libs/rules` épingle sous le
+nom `CONSOLE_ENROLLED_ADMIN`.
+
+Une erreur ici est visible dans la liste des membres et se corrige d'un clic :
+c'est toute la différence avec le paramètre d'installation que ce plan portait
+jusqu'au 2026-09-09.
+
+- [ ] **Step 5: Éprouver la frontière depuis un vrai navigateur**
 
 C'est le cœur de la tâche, et l'ordre compte :
 
@@ -2103,20 +2262,21 @@ C'est le cœur de la tâche, et l'ordre compte :
    abouti — un refus est le résultat attendu, pas une panne.
 2. **Le premier admin** se connecte : il lit l'état du serveur.
 3. **L'admin ajoute le premier compte** depuis la console, avec l'`uid` relevé
-   dans l'onglet Auth. Le visiteur devient membre **sans se reconnecter** —
+   dans l'onglet Auth — le geste de l'étape 4, refait pour quelqu'un d'autre et
+   en `role: 'player'`. Le visiteur devient membre **sans se reconnecter** —
    c'est la propriété que le §5 achète en gardant le rôle en base plutôt qu'en
    custom claim, et c'est le moment de la vérifier.
 4. **Le nouveau membre déclare son `steamId`**, et tente dans la console du
    navigateur d'écrire `{ steamId, role: 'admin' }` sur son propre document. Le
    refus est la mesure.
 
-- [ ] **Step 5: Éprouver la dérive de version**
+- [ ] **Step 6: Éprouver la dérive de version**
 
 Fusionner un second commit sans conséquence — une ligne de documentation — et
 constater qu'un onglet resté ouvert se recharge seul. C'est la seule façon de
 prouver les deux moitiés de la tâche 9 ensemble.
 
-- [ ] **Step 6: Écrire le relevé**
+- [ ] **Step 7: Écrire le relevé**
 
 `docs/superpowers/plans/2026-09-XX-tranche-4-session.md`, sur le modèle des
 relevés des tranches 3 et 3 bis : ce qui a été fait, dans l'ordre, avec les
@@ -2171,8 +2331,8 @@ git commit -m "docs(plan): releve la tranche 4, et leve le gate d'exposition"
 - La fusion dans `main` déploie, sème et tamponne. `main` est enfin égal à ce
   qui tourne.
 - L'onglet d'hier se recharge quand la version dérive.
-- Les administrateurs du serveur de jeu sont ceux que `members` nomme, et non
-  une constante.
+- Les administrateurs du serveur de jeu sont **tous les membres** qui ont
+  déclaré un `steamId`, et non une constante.
 - **Le gate du lotissement est levé : le système peut être exposé.**
 
 ## Ce qu'elle laisse
@@ -2187,8 +2347,11 @@ git commit -m "docs(plan): releve la tranche 4, et leve le gate d'exposition"
   est l'écran d'administration de la tranche 5. Jusque-là, un membre entre par
   la console.
 - **Un admin peut se rétrograder ou se supprimer lui-même.** Les règles ne
-  l'empêchent pas, et le remède est le semis : supprimer le document et
-  relancer le workflow. À reprendre le jour où il y aura plus d'un admin.
+  l'empêchent pas, et depuis le retrait du semis du premier admin le remède
+  n'est plus une fusion mais la console : recréer `members/{uid}` en `admin` à
+  la main, comme à l'installation. À reprendre le jour où il y aura plus d'un
+  admin — le dernier admin qui s'efface est le seul cas où plus personne dans
+  l'application ne peut réparer.
 - **Le pilote est laid, et il est en ligne.** C'est la conséquence assumée de la
   décision 3 ; la tranche 5 est la réponse, et elle a maintenant un vrai
   utilisateur à servir.
