@@ -210,6 +210,71 @@ service cloud.firestore {
       allow update: if isMember() && isValidServerUpdate();
     }
 
+    // §4: the deployment stamps it at every merge, and an admin who edited it
+    // by hand would desynchronise every open tab without knowing — a version
+    // posted once and never moved again makes the reload inert. The writer is
+    // the Admin SDK, which is above the rules, so all this has to do is
+    // subtract the key from the ones a client can affect.
+    function affectsRulesVersion() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['rulesVersion']);
+    }
+
+    match /config/settings {
+      // §5: every member, because the front computes the closing time from it.
+      allow read: if isMember();
+
+      // No bound and no schema on the rest, and that is a judgement about blast
+      // radius rather than about §4 — `bounded()` is a ceiling in bytes, it
+      // carries no business the way checking that a duration is positive would.
+      // What settles it is that this is one document, capped at a megabyte by
+      // Firestore, and that its only client writer is an account which could
+      // already rewrite `members`, grant itself `role`, or delete everyone's
+      // membership. A schema here would cost the day a template is added to
+      // `tariffPerHour`, and buy nothing that admin cannot already do.
+      //
+      // §5, and it is the same trap as `server/current`: no create, so the
+      // subtraction below cannot be bypassed by a document born whole.
+      allow update: if isAdmin() && !affectsRulesVersion();
+    }
+
+    // Deliberately not a schema. §7 assumes this collection open: a member
+    // writes what it wants in an entry, because a past fact is not verifiable
+    // after the fact and these are displays, not authorities. Demanding a field
+    // §5 does not name — `detail` is not one — would refuse a legitimate entry
+    // by a constraint nothing else in the repository states.
+    //
+    // What is left is the signature and a ceiling. The absent `actor` is
+    // refused by the first term rather than by an evaluation error, which would
+    // be the right refusal for the wrong reason.
+    //
+    // What guards the openness is `isMember()` on the create, and nothing else.
+    // Not the TTL: it is read from `expiresAt`, which the client writes and
+    // which §9 forbids constraining — an entry dated far enough ahead is never
+    // collected. So an unnamed field can hold what it likes, up to the document
+    // cap, and the attacker has to be one of the three or four friends.
+    function isValidEvent(data) {
+      return 'actor' in data
+        && data.actor is map
+        && 'uid' in data.actor
+        && bounded(data.actor.uid)
+        && data.actor.uid == request.auth.uid
+        && (!('name' in data.actor) || bounded(data.actor.name))
+        && (!('type' in data) || bounded(data.type))
+        && (!('detail' in data) || bounded(data.detail))
+        && (!('sessionId' in data) || bounded(data.sessionId));
+    }
+
+    match /events/{id} {
+      allow read: if isMember();
+
+      // Creation only, for everyone. Neither update nor delete is granted here,
+      // to a member or to an admin: a journal one can rewrite is not a journal.
+      //
+      // No constraint on `expiresAt`, which is the TTL: checking it would put a
+      // retention the rules have no business knowing into the rules (§9).
+      allow create: if isMember() && isValidEvent(request.resource.data);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
