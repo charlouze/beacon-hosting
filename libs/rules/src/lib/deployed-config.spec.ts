@@ -11,11 +11,13 @@ const read = (name: string) =>
  * play on, in one commit, with nothing else to notice.
  */
 describe('the deployed configuration', () => {
-  it('points at the closed rules and never at the development ones', () => {
+  it('points at the closed rules and never at another file', () => {
     expect(JSON.parse(read('firebase.json')).firestore.rules).toBe('firestore.rules');
   });
 
-  it('deploys rules that allow nothing', () => {
+  // The last line of defence, and the one a new collection falls through to.
+  // Its absence would not fail a single other test in this folder.
+  it('ends on a default deny', () => {
     const rules = read('firestore.rules');
     expect(rules).toContain('allow read, write: if false;');
     expect(rules).not.toContain('if true');
