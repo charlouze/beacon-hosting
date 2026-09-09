@@ -104,6 +104,19 @@ export function settingsFrom(data: Record<string, unknown>): SessionSettings {
   };
 }
 
+/**
+ * The commit reference the deployment stamped on `config/settings`, or null
+ * when it has stamped nothing. It sits beside the settings rather than inside
+ * them: a deployment fact is not a session setting, and `libs/session` has no
+ * business knowing it (§4).
+ *
+ * Anything that is not a string reads as null. An invented version would
+ * differ from every compiled one, and reload every open tab forever.
+ */
+export function rulesVersionFrom(data: Record<string, unknown>): string | null {
+  return typeof data['rulesVersion'] === 'string' ? data['rulesVersion'] : null;
+}
+
 /** What a session's opening writes. The instants are the caller's sentinel. */
 export function openingFields(session: Session, serverTime: unknown): Record<string, unknown> {
   return {

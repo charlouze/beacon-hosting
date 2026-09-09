@@ -3,6 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { connectSessionRecord } from '@beacon/session-record/client';
 import { DEFAULT_SETTINGS, type Session, type SessionSettings } from '@beacon/session';
 import { JoinInfoComponent } from './join-info.component';
+import { COMPILED_RULES_VERSION } from './rules-version';
 
 /**
  * The tranche 2 driver. It is not the screen: the visual world, the five
@@ -72,6 +73,10 @@ export class App {
   constructor() {
     this.record.watch((session) => this.session.set(session));
     this.record.watchSettings((settings) => this.settings.set(settings));
+    // The humble gesture: a tab running yesterday's rules against today's
+    // deployment cannot be reasoned back into agreement, it can only start
+    // over.
+    this.record.watchVersionDrift(COMPILED_RULES_VERSION, () => location.reload());
   }
 
   open(): void {

@@ -41,6 +41,9 @@
     },
     {
       "path": "./tools/dev-session"
+    },
+    {
+      "path": "./tools/rules-stamp"
     }
   ],
   "compilerOptions": {}
