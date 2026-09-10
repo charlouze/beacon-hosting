@@ -77,6 +77,16 @@ export const WANTED = {
       name: 'roles/serviceusage.serviceUsageConsumer',
       unlocks: 'le projet de quota des appels d’API',
     },
+    // Trouvé par le premier déploiement, le 2026-09-10 : `firebase deploy`
+    // demande à l'API des extensions quelles Functions déployées appartiennent
+    // à une extension, pour ne pas les supprimer — et il le fait avant de rien
+    // publier, donc un refus arrête tout au départ. La seule permission qui
+    // existe est `firebaseextensions.configs.list`, et ce rôle est le plus
+    // étroit des rôles prédéfinis qui la porte. Il est en lecture seule.
+    {
+      name: 'roles/firebase.developViewer',
+      unlocks: 'la lecture des extensions, que firebase deploy interroge avant de publier',
+    },
   ],
 
   /**
