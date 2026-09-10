@@ -2160,12 +2160,15 @@ Ils ne vivent ni dans le dépôt ni dans une variable GitHub, mais dans Secret
 Manager, posés une fois depuis un poste :
 
 ```bash
-firebase functions:secrets:set SCW_SECRET_KEY --project <id>
-firebase functions:secrets:set SERVER_PASSWORD --project <id>
-firebase functions:secrets:set DYNHOST_USER --project <id>
-firebase functions:secrets:set DYNHOST_PASSWORD --project <id>
-firebase functions:secrets:set S3_SECRET_KEY --project <id>
+npx nx run deploy-setup:secrets
 ```
+
+Il lit les noms dans `container.ts` plutôt que d'en tenir la liste, ne demande
+que ceux qui ne portent aucune version active, et ne fait apparaître aucune
+valeur — ni à l'écran, ni dans un fichier, ni dans `argv`. `SCW_SECRET_KEY` et
+`S3_SECRET_KEY` sont la même clé Scaleway et se saisissent quand même deux fois :
+l'outil ne sait rien de l'hébergeur, et ne fige pas une coïncidence qui peut
+cesser.
 
 - [ ] **Step 6: Protéger `main`**
 

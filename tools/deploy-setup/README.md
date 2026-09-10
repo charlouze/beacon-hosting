@@ -1,12 +1,14 @@
 # deploy-setup
 
-Le compte de service avec lequel une fusion dans `main` déploie, et tout ce qui
-doit être vrai de lui. La tâche 12 du plan de la tranche 4 est la version en
-prose de cet outil ; celui-ci est la version qui se vérifie.
+Ce qu'une fusion dans `main` suppose déjà en place, et qui n'est posé par aucune
+fusion. La tâche 12 du plan de la tranche 4 est la version en prose de cet
+outil ; celui-ci est la version qui se vérifie.
 
 ```bash
 npx nx run deploy-setup:audit -- --check   # lit et imprime l'écart, n'écrit rien
 npx nx run deploy-setup:audit              # imprime l'écart, demande, puis le comble
+npx nx run deploy-setup:secrets            # demande les secrets qui n'en ont pas
+npx nx run deploy-setup:secrets -- --all   # les redemande tous, pour une rotation
 ```
 
 Il faut un `gcloud` authentifié sur un compte qui a le droit d'administrer l'IAM
@@ -18,7 +20,31 @@ joueurs lisent ; ici le seul lecteur est l'administrateur du dépôt, et ce qu'i
 lit décide s'il accorde un droit d'administrateur sur le projet de production.
 Les identifiants restent en anglais.
 
-## Ce qu'il lit, et ce qu'il en fait
+## Les secrets
+
+Les cinq noms ne sont pas écrits ici : ils se lisent dans `container.ts`, dans
+les `defineSecret`. Une liste tenue à côté dérive, et c'est arrivé — celle de
+`tools/dev-secrets.mjs` a passé une tranche entière sans `S3_SECRET_KEY`, ce qui
+s'est vu comme un émulateur incapable de s'authentifier au milieu d'une session,
+loin du commit fautif.
+
+Un secret qui existe mais dont toutes les versions sont détruites est traité
+comme vide, parce que c'est exactement la panne que la tâche 12 décrit : la CLI
+demande la valeur, `--non-interactive` transforme la question en erreur, et ça
+tombe après que `firebase deploy` a commencé.
+
+La commande est affichée **avant** qu'on demande la valeur, pas après qu'elle est
+posée : ce à quoi on s'apprête à confier un identifiant est ce qu'il faut lire,
+et le lire ensuite c'est lire un reçu. Une saisie vide saute le secret.
+
+La valeur tapée n'est pas affichée, n'atteint aucun fichier, et ne passe pas par
+`argv` — où n'importe quelle liste de processus la lirait. Elle va dans stdin de
+`firebase functions:secrets:set … --data-file -`, et nulle part ailleurs. Aucun
+saut de ligne n'est ajouté : `--data-file` stocke les octets qu'on lui donne, et
+un secret terminé par `\n` ne s'authentifie nulle part tout en ressemblant, dans
+toutes les consoles, au bon.
+
+## Ce que l'audit lit, et ce qu'il en fait
 
 Sept lectures, aucune écriture avant la question : le compte existe-t-il, quels
 rôles porte-t-il, quelles API sont activées, le pool est-il là, le fournisseur
@@ -79,7 +105,6 @@ et le défaut survivrait à toutes les exécutions de l'outil.
 
 ## Ce qu'il ne fait pas
 
-Il ne pose ni les variables de dépôt GitHub, ni les cinq secrets de Secret
-Manager, ni la protection de `main`. Les secrets se posent depuis un poste avec
-`firebase functions:secrets:set`, et leur valeur ne doit traverser aucun outil
-qui l'écrirait quelque part.
+Il ne pose ni les variables de dépôt GitHub, ni la protection de `main`. Les
+deux se font ailleurs — `gh variable set` et les réglages du dépôt — et aucune
+n'est un secret.

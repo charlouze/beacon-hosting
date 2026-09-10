@@ -24,6 +24,12 @@
         "options": {
           "command": "npx tsx tools/deploy-setup/src/audit.ts"
         }
+      },
+      "secrets": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx tools/deploy-setup/src/secrets.ts"
+        }
       }
     }
   },
