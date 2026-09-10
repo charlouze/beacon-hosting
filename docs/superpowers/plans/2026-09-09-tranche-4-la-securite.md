@@ -2095,6 +2095,20 @@ déclencheur pour chaque forme d'appel. `main.ts` en porte trois — `onSchedule
 | `roles/secretmanager.admin` | les cinq secrets de l'étape 5, que le déploiement rattache aux Functions |
 | `roles/iam.serviceAccountUser` | agir au nom du compte d'exécution des Functions |
 | `roles/serviceusage.serviceUsageConsumer` | le projet de quota des appels d'API |
+| `roles/firebase.developViewer` | la lecture des extensions, interrogée avant toute publication |
+
+**Le dernier a été trouvé par le premier déploiement, le 2026-09-10**, et la
+liste était fausse jusque-là. `firebase deploy` demande à l'API des extensions
+quelles Functions déployées appartiennent à une extension, pour ne pas les
+supprimer — et il le fait pendant la préparation, avant de rien publier. Un
+refus arrête donc tout au départ : `HTTP Error: 403, The caller does not have
+permission`, sur `firebaseextensions.googleapis.com`, juste après la
+compilation des règles. Rien n'était parti, ce qui est le moins mauvais
+moment pour échouer.
+
+La seule permission qui existe est `firebaseextensions.configs.list` —
+l'API expose `/instances`, l'IAM la nomme `configs` — et `firebase.developViewer`
+est le plus étroit des rôles prédéfinis qui la porte. Il est en lecture seule.
 
 Les API correspondantes doivent être activées sur le projet — `run`,
 `cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`, `pubsub`,
