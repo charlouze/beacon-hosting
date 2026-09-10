@@ -4,6 +4,7 @@ import { getFirestore, type DocumentSnapshot, type Firestore } from 'firebase-ad
 import { FakeInstanceApi, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { DEFAULT_LIMITS, type ServerHost, type Session } from '@beacon/session';
 import { serverStateStore, settingsStore, sessionFrom, SERVER_DOC } from '@beacon/session-record';
+import { adminMembershipRecord } from '@beacon/membership-record/admin';
 import { agentTokens } from './agent-tokens.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import { runStateChange, type ProvisionDeps } from './provisioning.js';
@@ -102,8 +103,9 @@ const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
   settings: settingsStore(db),
   ledger: provisioningLedger(db),
   serverPassword: () => 'probe',
+  members: adminMembershipRecord(db),
   tokens: agentTokens(db),
-  agentEndpoint: 'https://example.invalid/agentReport',
+  agentEndpoint: async () => 'https://example.invalid/agentReport',
   saveKeys: () => ({
     endpoint: 'https://s3.fr-par.scw.cloud',
     region: 'fr-par',

@@ -41,6 +41,15 @@
     },
     {
       "path": "./tools/dev-session"
+    },
+    {
+      "path": "./tools/rules-stamp"
+    },
+    {
+      "path": "./libs/membership-record"
+    },
+    {
+      "path": "./tools/deploy-setup"
     }
   ],
   "compilerOptions": {}

@@ -41,6 +41,13 @@ describe('the enshrouded catalogue entry', () => {
     expect(compose).not.toContain('15636');
   });
 
+  // The request is common to both games, and the shared fixture now carries an
+  // identifier: this game knows no such option, so it must ignore the field
+  // rather than grow a `-adminSteamIDs` nobody asked it for.
+  it('ignores the administrators, an option this game does not know', () => {
+    expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('-adminSteamIDs');
+  });
+
   it('writes the session password into a file only root can read', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('SERVER_PASSWORD=hunter2');
@@ -182,8 +189,8 @@ describe('the enshrouded catalogue entry', () => {
   // would run, and the leak would leave no trace.
   //
   // Refused here rather than on the machine because this is the only place the
-  // value enters the system: it comes from `AGENT_ENDPOINT`, filled by a human,
-  // and a tunnel url pasted in a hurry is exactly the shape this catches. The
+  // value enters the system: it comes from `config/settings.agentEndpoint`, and
+  // a local tunnel url is exactly the shape this catches. The
   // companion stays permissive so the smoke harness can keep answering on http
   // over a docker bridge, where no wire leaves the developer's machine.
   it('refuses to write a cloud-init that would carry the token in clear', () => {

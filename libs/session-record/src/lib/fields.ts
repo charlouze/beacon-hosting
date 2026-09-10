@@ -15,6 +15,18 @@ export const SETTINGS_DOC = 'config/settings';
 export const EVENTS = 'events';
 
 /**
+ * The fields of `config/settings` the deployment owns and a client may not
+ * touch (§4, §5). Declared once because three places have to agree on them and
+ * nothing else can make them: `stamp()` writes them, `firestore.rules`
+ * subtracts them from what an admin may affect, and `reserved-fields.spec.ts`
+ * is the only file that can read both ends.
+ *
+ * A field added to the stamp and forgotten in the rules fails silently — the
+ * deployment keeps working, and the field is simply no longer reserved.
+ */
+export const DEPLOYED_FIELDS = ['rulesVersion', 'agentEndpoint'] as const;
+
+/**
  * The reserved fields of §5, minus `lastError`. This list is the one place in
  * the repository that knows them, and it is why `ServerRecord` carries a
  * boolean rather than the fields themselves: the day the spec adds a reserved
@@ -102,6 +114,19 @@ export function settingsFrom(data: Record<string, unknown>): SessionSettings {
     tariffPerHour:
       data['tariffPerHour'] === undefined ? DEFAULT_SETTINGS.tariffPerHour : tariffPerHour,
   };
+}
+
+/**
+ * The commit reference the deployment stamped on `config/settings`, or null
+ * when it has stamped nothing. It sits beside the settings rather than inside
+ * them: a deployment fact is not a session setting, and `libs/session` has no
+ * business knowing it (§4).
+ *
+ * Anything that is not a string reads as null. An invented version would
+ * differ from every compiled one, and reload every open tab forever.
+ */
+export function rulesVersionFrom(data: Record<string, unknown>): string | null {
+  return typeof data['rulesVersion'] === 'string' ? data['rulesVersion'] : null;
 }
 
 /** What a session's opening writes. The instants are the caller's sentinel. */

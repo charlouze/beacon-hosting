@@ -767,6 +767,25 @@ rechargerait jamais. Il est réservé pour la même raison que les champs réser
 de `server/current` — un admin qui le modifierait à la main désynchroniserait
 tout le monde sans le savoir.
 
+**Le même champ réservé porte `agentEndpoint`**, l'adresse à laquelle la machine
+de jeu rapporte son état. Elle n'a pas sa place ailleurs, et la raison est une
+boucle : c'est l'url d'une Function que le déploiement crée, donc elle n'existe
+pas avant lui. Portée par un paramètre de la Function, elle exigerait un second
+déploiement pour que la Function déployée l'apprenne — le premier ne pouvant
+pas connaître ce qu'il est en train de créer. Écrite ici après coup, par la même
+étape qui pose `rulesVersion`, elle tient en un seul déploiement, et se
+re-vérifie à chacun.
+
+**Elle n'entre pas dans `SessionSettings`.** Ce type dit ce que `config/settings`
+porte *tel que le domaine en a besoin*, et le domaine ne lit jamais cette
+adresse : seul l'adapter qui rend le cloud-init s'en sert, comme il se sert du
+mot de passe du serveur. `rulesVersion` est déjà dans ce cas, et c'est ce qui
+rend la place évidente : le document est plus large que la vue que le domaine en
+prend.
+
+Réservée, enfin, pour une raison plus dure que celle de `rulesVersion` : un
+admin qui pourrait l'écrire redirigerait l'endroit où les machines rapportent.
+
 ## 5. Modèle de données
 
 | Document | Contenu | Écrivain |
@@ -777,7 +796,7 @@ tout le monde sans le savoir.
 | `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, `closedAt` — nul à la création —, puis `instanceId`, `ipId`, `ip` : l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
-| `config/settings` | champ *réservé* : `rulesVersion` | le déploiement, via l'Admin SDK (§10) |
+| `config/settings` | champs *réservés* : `rulesVersion`, `agentEndpoint` | le déploiement, via l'Admin SDK (§10) |
 | `health/watchdog` | `lastRunAt` — battement de cœur du watchdog — et `stranded`, les volumes orphelins que le dernier passage a vus | Functions |
 | `members/{uid}` | `email`, `role` : `admin` \| `player` | navigateur (admin) ; jamais par le sujet lui-même |
 | `members/{uid}` | `steamId` | **le sujet lui-même**, et personne d'autre — seule écriture du système qu'un membre fait sur son propre document |
@@ -955,21 +974,37 @@ tu es* et lire pour savoir *ce qui est métier-correct*. `members` répond à la
 première question, donc les règles y accèdent. `config/settings` répond à la
 seconde — durées, fenêtres, gabarit par défaut — donc elles n'y touchent jamais.
 
-**Le premier admin est semé au déploiement**, avec `server/current` et
-`config/settings` (§10). `members` n'étant écrit que par un admin, il n'y aurait
-sinon aucun moyen d'en obtenir un premier. Le rôle vivant en base, ce semis est
-une écriture Firestore ordinaire et non plus un geste hors bande.
-
-**Les suivants entrent par la console**, et il faut le dire parce que rien
-d'autre ne le dirait. Un `uid` Google n'existe qu'après une première connexion :
-l'admin ne peut pas créer le document avant que la personne se soit présentée.
-La séquence est donc toujours la même — le visiteur se connecte, ne lit rien, et
-son `uid` apparaît à côté de son e-mail dans l'onglet Auth de la console, d'où
-l'admin crée `members/{uid}`. Décidé le 2026-09-09. Ce n'est pas une exception
-taillée dans les règles : une écriture de console passe par l'Admin SDK, donc
-au-dessus d'elles par construction, et rien n'est desserré pour la permettre. Ce
-geste cesse le jour où l'écran d'administration existe, avec la face écriture de
+**Tout membre entre par la console, le premier admin compris**, et il faut le
+dire parce que rien d'autre ne le dirait. Un `uid` Google n'existe qu'après une
+première connexion : l'admin ne peut pas créer le document avant que la personne
+se soit présentée. La séquence est donc toujours la même — le visiteur se
+connecte, ne lit rien, et son `uid` apparaît à côté de son e-mail dans l'onglet
+Auth de la console, d'où l'admin crée `members/{uid}` avec `role`, `email` et
+`steamId` — les trois clés, `email` et `steamId` nuls si l'on n'a rien à y
+mettre, parce qu'une clé absente et une clé nulle ne se lisent pas pareil dans
+un diff de règles. Décidé le 2026-09-09. Ce n'est pas une exception taillée
+dans les règles : une écriture de console passe par l'Admin SDK, donc au-dessus
+d'elles par construction, et rien n'est desserré pour la permettre. Ce geste
+cesse le jour où l'écran d'administration existe, avec la face écriture de
 `libs/membership-record`.
+
+**Le premier admin n'échappe pas à cette règle, et le semis ne le crée pas.**
+Le spec l'a prévu ainsi jusqu'au 2026-09-09 : `members` n'étant écrit que par un
+admin, il semblait n'y avoir d'autre moyen d'en obtenir un premier qu'un semis
+au déploiement, nourri par une variable de dépôt. Écrire ce déploiement a montré
+que la séquence est circulaire et ne peut pas s'exécuter. La variable veut un
+`uid` **de production** ; un `uid` Google n'existe qu'après une connexion contre
+le projet de production ; cette connexion suppose que l'application y soit
+déployée ; et le workflow refuse de démarrer tant qu'une variable de dépôt est
+vide — donc la première fusion ne part pas. Poser une valeur bidon pour
+débloquer crée un admin qui n'est personne, et le semis étant en `create` seul,
+une seconde fusion ne l'annule pas : elle ajoute le bon **à côté** du mauvais.
+Le geste de console, lui, se fait au moment où l'`uid` existe naturellement,
+l'erreur se voit dans la liste des membres, et elle se défait d'un clic.
+
+Ce que le semis crée reste donc `server/current` et `config/settings` (§10) —
+les deux documents qu'aucun client ne peut créer, et dont la valeur ne dépend de
+personne.
 
 Ce qui reste vrai entre-temps, et que le §7 assume : **un visiteur non autorisé
 peut se connecter**. Il obtient un compte, aucune lecture, aucune écriture, et
@@ -1611,7 +1646,7 @@ l'instance, et le watchdog balaie les IP non réclamées.
 | Double livraison du trigger Firestore | `onServerStateChange` réclame le provisionnement dans une transaction et abandonne si `provisionClaimedAt` est déjà posé ; si deux instances naissent malgré tout, le tag unique permet au watchdog d'en détruire une |
 | Membre qui écrit en base hors de l'interface | Les règles lui interdisent tout ce qui engage une ressource ou un privilège ; une échéance ou un état incohérents sont ramenés à la norme par le watchdog en moins de 5 min |
 | Membre qui tente de recréer un document semé au déploiement | `create` refusé aux clients sur `server/current` et `config/settings` — sans quoi la restriction champ par champ, qui n'existe que sur `update`, serait contournée |
-| Perte du dernier admin | Rejouer le semis du déploiement (§10), qui recrée `members/{uid}` s'il manque ; à défaut, la console Firebase écrit dans `members` comme n'importe quel document |
+| Perte du dernier admin | La console Firebase recrée `members/{uid}` en `admin` — le même geste qu'à l'installation (§5). Le semis n'y peut rien : il ne touche pas `members` |
 | Écriture d'état réussie mais entrée d'audit absente | L'état et l'événement partent dans la même écriture groupée, donc atomique ; une Function qui décide seule écrit son propre événement avec l'acteur `system` |
 | Création d'instance refusée par le fournisseur | Nettoyage, puis `IDLE` avec `lastError` : le bouton est immédiatement recliquable |
 | Nettoyage impossible après un échec | `FAILED`, que le watchdog retente toutes les 5 min jusqu'à `IDLE`. Aucun état du système n'est sans issue |
@@ -1783,15 +1818,18 @@ la première étape rouge :
 2. **tests des règles Firestore contre l'émulateur** — c'est une barrière : les
    règles ne partent jamais si leurs refus ne sont pas verts (§9) ;
 3. déploiement des règles, des index, des Functions et du Hosting ;
-4. **semis idempotent** de `server/current`, `config/settings` et du premier
-   `members/{uid}` s'ils n'existent pas. C'est cela, « au déploiement » : un
-   script du dépôt, relançable sans effet de bord, qui ne touche jamais un
-   document existant ;
-5. **écriture de `config/settings.rulesVersion`** avec la référence du commit
-   déployé. Écriture ciblée sur ce seul champ, qui ne touche pas le reste du
-   document — donc distincte du semis, qui par construction ne modifie rien
-   d'existant. Sans cette étape, le garde-fou contre la dérive entre onglets
-   (§4) ne se déclencherait jamais.
+4. **semis idempotent** de `server/current` et de `config/settings` s'ils
+   n'existent pas. C'est cela, « au déploiement » : un script du dépôt,
+   relançable sans effet de bord, qui ne touche jamais un document existant.
+   Ces deux-là et pas un troisième : ce sont les seuls documents qu'aucun
+   client ne peut créer et dont la valeur initiale ne dépend de personne ;
+5. **écriture des champs réservés de `config/settings`** — `rulesVersion` avec
+   la référence du commit déployé, et `agentEndpoint` avec l'url que l'étape 3
+   vient de publier, relue du déploiement plutôt que fournie. Écriture ciblée
+   sur ces seuls champs, qui ne touche pas le reste du document — donc distincte
+   du semis, qui par construction ne modifie rien d'existant. Sans cette étape,
+   le garde-fou contre la dérive entre onglets (§4) ne se déclencherait jamais,
+   et une machine provisionnée ne saurait pas où rapporter.
 
 **La décision de mettre en production est donc la fusion**, pas le déclenchement
 d'un workflow. Avec un seul projet Firebase, fusionner touche la base où les
@@ -1810,9 +1848,20 @@ de fusion avant de déployer. Ce n'est pas de la redondance : deux branches
 vertes séparément peuvent produire une fusion rouge, et c'est le commit de
 fusion qui part en production.
 
-L'`uid` du premier admin est le seul paramètre d'installation. Il ne demande ni
-Admin SDK ni console : le rôle vivant en base (§5), l'amorçage est une écriture
-Firestore comme une autre.
+**Le système n'a aucun paramètre d'installation**, et ce n'est pas un choix
+d'élégance : il en a eu un, sur le papier, et il ne pouvait pas exister. Le §10
+a porté jusqu'au 2026-09-09 « l'`uid` du premier admin est le seul paramètre
+d'installation », posé en variable de dépôt et lu par le semis. Écrire le
+workflow a montré que la séquence se mord la queue — la variable veut un `uid`
+de production, cet `uid` n'existe qu'après une connexion contre la production,
+cette connexion suppose l'application déployée, et le déploiement refuse de
+partir sur une variable vide. Le premier admin est donc créé à la console
+**après** la première fusion, exactement comme tous les membres suivants (§5).
+
+Conséquence pour ce qui suit : la première fusion produit un système déployé,
+semé, tamponné — et sans aucun membre. C'est un état normal et non une panne.
+L'écran de visiteur, que le §5 exige, est ce que le premier admin voit lui-même
+pendant les deux minutes qui séparent sa connexion de son document.
 
 **Les images sont référencées par un tag immuable, jamais `latest`.** Le
 `cloud-init` est écrit au moment du provisionnement : avec un tag mobile, la

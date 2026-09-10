@@ -26,7 +26,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Three test targets shell out to `firebase emulators:exec`, and the
+      # Four test targets shell out to `firebase emulators:exec`, and the
       # Firestore emulator is a Java program. Without this the barrier rests on
       # the runner image happening to ship a jdk.
       - uses: actions/setup-java@v4

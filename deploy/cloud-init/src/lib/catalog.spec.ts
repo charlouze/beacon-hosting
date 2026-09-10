@@ -5,9 +5,12 @@ import { REQUEST } from './catalogue-fixtures.spec-helper.js';
 
 /**
  * Every field of a request that lands in a file docker compose reads, and how
- * a `$` is planted in it. `slotCount` is absent because a number cannot carry
- * one. `endpoint` keeps its `https://` prefix on purpose: without it the other
- * refusal answers first, and the test would pass while proving nothing.
+ * a `$` is planted in it. Two fields are absent, and this list is not the whole
+ * frontier: `slotCount` because a number cannot carry a `$`, `adminSteamIds`
+ * because it lands in no such file at all — it is shell, and the refusal that
+ * covers it is stricter and has its own tests below. `endpoint` keeps its
+ * `https://` prefix on purpose: without it the other refusal answers first, and
+ * the test would pass while proving nothing.
  */
 const EXPOSED: readonly (readonly [string, (value: string) => BootRequest])[] = [
   ['serverName', (value) => ({ ...REQUEST, serverName: value })],
@@ -52,6 +55,30 @@ describe('the frontier every boot crosses', () => {
     // everything else a human types must still reach a machine.
     it(`renders a request whose values hold no "$", for ${game}`, () => {
       expect(renderCloudInit(game, REQUEST).startsWith('#cloud-config\n')).toBe(true);
+    });
+
+    // The one field of a request that reaches a machine as shell, unquoted,
+    // inside an `args=( … )`. It travelled from a browser: a member writes it
+    // on its own document. Double quotes would buy nothing — bash substitutes
+    // inside them — so anything but digits is refused, and refused here rather
+    // than in the entry that writes the option, because the request is common
+    // to both games and only one of them carries that option today.
+    it(`refuses an administrator that is not a steam id, for ${game}`, () => {
+      for (const value of ['$(id)', '`id`', '765;rm -rf /', '765 -password x', '']) {
+        expect(() =>
+          renderCloudInit(game, { ...REQUEST, adminSteamIds: [value] }),
+        ).toThrow('adminSteamIds');
+      }
+    });
+
+    // The index, so a register holding a dozen members names the one to fix.
+    it(`refuses a bad administrator hiding behind good ones, for ${game}`, () => {
+      expect(() =>
+        renderCloudInit(game, {
+          ...REQUEST,
+          adminSteamIds: ['76561197965918116', '$(id)'],
+        }),
+      ).toThrow('adminSteamIds[1]');
     });
   }
 

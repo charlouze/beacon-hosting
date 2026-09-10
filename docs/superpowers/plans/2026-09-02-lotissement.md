@@ -267,9 +267,10 @@ valide le `trap` amont.
 ### 4 · La sécurité
 
 Firebase Auth, `members/{uid}` avec le rôle en base lu par `get()` dans les
-règles, `libs/membership-record` qui en est la seule porte côté navigateur, le
-semis du premier admin, `firestore.rules` et leur suite de tests de refus —
-d'écriture **et de lecture**.
+règles, `libs/membership-record` qui en est la seule porte côté navigateur,
+`firestore.rules` et leur suite de tests de refus — d'écriture **et de
+lecture**. Le premier admin, lui, entre par la console une fois le système
+déployé : son `uid` Google n'existe pas avant (§5, §10).
 
 **Gate ferme : rien n'est déployé publiquement avant cette tranche.**
 
@@ -377,7 +378,7 @@ celle qui en a besoin.
 | Tests de règles dans la CI | 1 |
 | Semis de `server/current` | 1 |
 | Semis de `config/settings` | 2 |
-| Workflow de déploiement, et semis du premier membre | 4 |
+| Workflow de déploiement | 4 |
 | Workflow de construction du compagnon vers ghcr.io, tag immuable, test de fumée | 3 |
 | Tag immuable sur l'image amont dans le `cloud-init` | 0 |
 

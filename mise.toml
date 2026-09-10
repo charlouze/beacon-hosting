@@ -26,10 +26,26 @@ cloudflared = "2026.8.3"
 # FIRESTORE_EMULATOR_HOST ne *peut pas* atteindre la base de production, meme
 # lancee par distraction. La cible est l'emulateur, toujours.
 
+# Le semis ne cree que les deux documents qu'aucun client ne peut creer. Le
+# premier membre n'en est pas : son identifiant n'existe qu'apres une connexion,
+# donc il se cree a la main — dans l'ui de l'emulateur en local, dans la console
+# Firebase en production. C'est le meme geste que pour tous les suivants.
 [tasks.seed]
 description = "Seme server/current et config/settings dans l'emulateur"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
-run = "npx nx run functions:seed"
+run = "npx nx run @beacon/functions:seed"
+
+# L'etape 5 du §10, jouee contre l'emulateur. En production le workflow relit
+# l'url que le deploiement vient de publier ; en local il n'y a pas de
+# deploiement, et l'adresse est celle du tunnel du jour — d'ou le parametre.
+#
+# `dev` comme reference de commit, et c'est la valeur qui evite la boucle :
+# c'est celle qu'un checkout compile dans le bundle, donc les deux concordent
+# et aucun onglet ne se recharge en rond.
+[tasks.stamp]
+description = "Tamponne rulesVersion et agentEndpoint dans l'emulateur"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
+run = "npx nx run @beacon/functions:stamp -- dev {{arg(name='endpoint')}}"
 
 # Le build efface `dist/`, et l'emulateur y cherche deux fichiers : `.env` pour
 # les parametres, `.secret.local` pour les secrets — `defineSecret` ne lit pas
@@ -44,13 +60,18 @@ run = [
 ]
 
 [tasks.emulators]
-description = "Demarre Firestore et les Functions sur les regles de developpement"
+description = "Demarre Firestore, Auth et les Functions sur les vraies regles"
 # L'emulateur ne sert a rien sans un `dist/` construit et ses deux fichiers
 # d'environnement : sans eux il charge zero Function, ou les charge et va
 # chercher les secrets dans Secret Manager. La dependance rend cet etat
 # inatteignable au lieu de le documenter.
 depends = ["dev-functions"]
-run = "npx firebase emulators:start --config firebase.dev.json --project demo-beacon --only firestore,functions"
+# `firebase.dev.json` ne porte plus de regles permissives — il pointe sur
+# `firestore.rules`, les memes que le deploiement envoie. Ce qu'il porte encore,
+# et pourquoi il reste, ce sont les trois emulateurs que la configuration
+# deployee n'a aucune raison de declarer : functions, hub, et l'ui qu'une
+# session de developpement se conduit en regardant.
+run = "npx firebase emulators:start --config firebase.dev.json --project demo-beacon --only firestore,auth,functions"
 
 [tasks.serve]
 description = "Sert le pilote, qui ne parle qu'a l'emulateur"

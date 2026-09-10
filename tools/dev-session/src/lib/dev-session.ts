@@ -1,19 +1,17 @@
-import { agentEndpointFor, withAgentEndpoint } from './agent-endpoint.js';
+import { agentEndpointFor } from './agent-endpoint.js';
 import { type EmulatorPorts, emulatorPortsFrom } from './emulator-ports.js';
-import { PROBE_BODY, PROBE_TOKEN, type Probe, verdictFor } from './readiness.js';
+import {
+  PROBE_BODY,
+  PROBE_TOKEN,
+  type Probe,
+  verdictFor,
+} from './readiness.js';
 import { stillWorthShowing, tunnelUrlFrom } from './cloudflared.js';
 
 export const FUNCTIONS_ENV = 'apps/functions/.env';
 export const FIREBASE_CONFIG = 'firebase.dev.json';
 /** Angular's default. Announced only — see step 7 for why that is enough. */
 export const PILOT_URL = 'http://localhost:4200';
-
-/**
- * Stands in for the real endpoint while step 1 rehearses the rewrite. It is
- * never written anywhere: the rehearsal exists to make a bad `.env` throw
- * before a tunnel is opened, and its result is discarded.
- */
-const REHEARSAL_ENDPOINT = 'https://rehearsal.invalid/never-written';
 
 /** A long-running child this command is responsible for killing. */
 export interface Started {
@@ -43,14 +41,26 @@ export interface DevSessionPorts {
   readonly head: () => Promise<Head>;
   readonly readText: (path: string) => string;
   readonly writeText: (path: string, text: string) => void;
-  readonly spawn: (name: string, command: string, args: readonly string[]) => Spawned;
+  readonly spawn: (
+    name: string,
+    command: string,
+    args: readonly string[],
+  ) => Spawned;
   /** Runs to completion and answers its exit code. */
-  readonly run: (name: string, command: string, args: readonly string[]) => Promise<number>;
+  readonly run: (
+    name: string,
+    command: string,
+    args: readonly string[],
+  ) => Promise<number>;
   readonly probe: (url: string, token: string, body: unknown) => Promise<Probe>;
   /** A plain GET that only answers whether something is listening. */
   readonly reachable: (url: string) => Promise<boolean>;
   /** Polls `check` until true or the deadline passes. */
-  readonly waitUntil: (what: string, check: () => Promise<boolean> | boolean, timeoutMs: number) => Promise<boolean>;
+  readonly waitUntil: (
+    what: string,
+    check: () => Promise<boolean> | boolean,
+    timeoutMs: number,
+  ) => Promise<boolean>;
   readonly say: (line: string) => void;
   /** Resolves when the operator asks for the window back. */
   readonly hold: () => Promise<void>;
@@ -83,7 +93,9 @@ const PROBE_TIMEOUT_MS = 60_000;
  * this command started outlives it, and a tunnel left behind is an url that
  * carries nothing while still looking alive.
  */
-export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionOutcome> {
+export async function runDevSession(
+  ports: DevSessionPorts,
+): Promise<DevSessionOutcome> {
   const { say } = ports;
   const started: Started[] = [];
 
@@ -93,32 +105,40 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
     say('');
     say('1. The tree this emulator will serve');
     const head = await ports.head();
-    say(`  ok    ${head.branch} @ ${head.sha}${head.clean ? '' : ', with uncommitted changes'}`);
+    say(
+      `  ok    ${head.branch} @ ${head.sha}${head.clean ? '' : ', with uncommitted changes'}`,
+    );
     // Said, never refused. main is a legitimate tree to test from, and the
     // build below makes the tree served and the tree checked out the same
     // thing — so the only thing left worth doing is naming it.
     say('        this command builds what is here, so that is what will run');
 
-    const emulator: EmulatorPorts = emulatorPortsFrom(ports.readText(FIREBASE_CONFIG));
+    const emulator: EmulatorPorts = emulatorPortsFrom(
+      ports.readText(FIREBASE_CONFIG),
+    );
 
     // Both files are read before anything is started, and the rewrite is
     // rehearsed against a url that will never be written. A file this command
     // cannot use costs nothing to find out about here; found out after the
     // next step, it costs an open tunnel and the operator's attention.
-    let envText: string;
     try {
-      envText = ports.readText(FUNCTIONS_ENV);
-      withAgentEndpoint(envText, REHEARSAL_ENDPOINT);
+      ports.readText(FUNCTIONS_ENV);
     } catch (error) {
-      say(`  STOP  ${FUNCTIONS_ENV} is not usable, and nothing has been started yet.`);
+      say(
+        `  STOP  ${FUNCTIONS_ENV} is not usable, and nothing has been started yet.`,
+      );
       // Safe to print: the read failure names a path, and the rewrite is
       // written never to carry a value out of that file.
       say(`        ${error instanceof Error ? error.message : String(error)}`);
-      say('        That file is git-ignored and holds real credentials, so a fresh worktree');
-      say('        has none: run this from the main checkout, or copy the file into yours.');
+      say(
+        '        That file is git-ignored and holds real credentials, so a fresh worktree',
+      );
+      say(
+        '        has none: run this from the main checkout, or copy the file into yours.',
+      );
       return 'refused';
     }
-    say(`  ok    ${FUNCTIONS_ENV} is readable and carries AGENT_ENDPOINT`);
+    say(`  ok    ${FUNCTIONS_ENV} is readable`);
 
     say('');
     say('2. The tunnel');
@@ -146,17 +166,14 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
     tunnel.quieten(stillWorthShowing);
     say(`  ok    ${tunnelUrl} -> http://127.0.0.1:${emulator.functions}`);
 
-    say('');
-    say('3. AGENT_ENDPOINT');
     const endpoint = agentEndpointFor(tunnelUrl);
-    const rewrite = withAgentEndpoint(envText, endpoint);
-    ports.writeText(FUNCTIONS_ENV, rewrite.text);
-    say(`  ok    ${FUNCTIONS_ENV}, one line rewritten, ${rewrite.assignments - 1} other values untouched`);
-    say('  ok    no value out of that file is printed by this command, here or below');
 
     say('');
-    say('4. The emulator, which builds first');
-    const emulatorProcess = ports.spawn('emulator', 'mise', ['run', 'emulators']);
+    say('3. The emulator, which builds first');
+    const emulatorProcess = ports.spawn('emulator', 'mise', [
+      'run',
+      'emulators',
+    ]);
     started.push(emulatorProcess);
     // The hub, not a log line. `firebase-tools` rewords "All emulators ready"
     // between versions; the hub answering on its declared port is a contract.
@@ -170,10 +187,12 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
       return 'refused';
     }
     say(`  ok    functions on ${emulator.functions}, hub on ${emulator.hub}`);
-    say(`  ok    emulator ui   http://127.0.0.1:${emulator.ui}   database and function logs`);
+    say(
+      `  ok    emulator ui   http://127.0.0.1:${emulator.ui}   database and function logs`,
+    );
 
     say('');
-    say('5. The seed');
+    say('4. The seed');
     if ((await ports.run('seed', 'mise', ['run', 'seed'])) !== 0) {
       say('  STOP  the seed did not finish.');
       return 'refused';
@@ -181,22 +200,42 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
     say('  ok    server/current, config/settings');
 
     say('');
+    say('5. The endpoint, stamped where the watchdog reads it');
+    // §4: `agentEndpoint` lives on `config/settings`, written by the deployment
+    // in production and by this step in local. It has to come after the seed,
+    // which is what creates the document, and it is a targeted field write —
+    // so it survives being run twice with two different tunnels.
+    if ((await ports.run('stamp', 'mise', ['run', 'stamp', endpoint])) !== 0) {
+      say(
+        '  STOP  the endpoint was not stamped, so a provisioned machine would report nowhere.',
+      );
+      return 'refused';
+    }
+    say('  ok    config/settings.agentEndpoint');
+
+    say('');
     say('6. The 401, through the tunnel');
-    let verdict = verdictFor(await ports.probe(endpoint, PROBE_TOKEN, PROBE_BODY));
+    let verdict = verdictFor(
+      await ports.probe(endpoint, PROBE_TOKEN, PROBE_BODY),
+    );
     if (!verdict.ok) {
       // A quick tunnel takes a few seconds to be reachable from outside, so
       // one red answer is not yet an answer.
       await ports.waitUntil(
         'endpoint',
         async () => {
-          verdict = verdictFor(await ports.probe(endpoint, PROBE_TOKEN, PROBE_BODY));
+          verdict = verdictFor(
+            await ports.probe(endpoint, PROBE_TOKEN, PROBE_BODY),
+          );
           return verdict.ok;
         },
         PROBE_TIMEOUT_MS,
       );
     }
     if (!verdict.ok) {
-      say('  STOP  the endpoint a game machine would report to is not answering as it must.');
+      say(
+        '  STOP  the endpoint a game machine would report to is not answering as it must.',
+      );
       for (const line of verdict.lines) say(`        ${line}`);
       return 'refused';
     }
@@ -210,10 +249,18 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
     // points at 4200. So a pilot that took longer than the wait, or that
     // picked another port because 4200 was busy, is worth a line and not a
     // refusal: its own output above already said where it is listening.
-    if (await ports.waitUntil('pilot', () => ports.reachable(PILOT_URL), PILOT_TIMEOUT_MS)) {
+    if (
+      await ports.waitUntil(
+        'pilot',
+        () => ports.reachable(PILOT_URL),
+        PILOT_TIMEOUT_MS,
+      )
+    ) {
       say(`  ok    ${PILOT_URL}`);
     } else {
-      say(`  !     nothing answered on ${PILOT_URL} — read the pilot's own output above for its port`);
+      say(
+        `  !     nothing answered on ${PILOT_URL} — read the pilot's own output above for its port`,
+      );
     }
 
     say('');
@@ -228,7 +275,9 @@ export async function runDevSession(ports: DevSessionPorts): Promise<DevSessionO
       // and the next run fails on it several minutes from here, far from the
       // cause.
       if (child.running()) {
-        say(`  !     ${child.name} is still alive after being asked and then killed — stop it by hand`);
+        say(
+          `  !     ${child.name} is still alive after being asked and then killed — stop it by hand`,
+        );
       } else {
         say(`  ok    ${child.name} stopped`);
       }

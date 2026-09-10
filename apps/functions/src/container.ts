@@ -1,7 +1,8 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
-import { serverStateStore, settingsStore } from '@beacon/session-record';
+import { deploymentRecord, serverStateStore, settingsStore } from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
+import { adminMembershipRecord } from '@beacon/membership-record/admin';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -28,7 +29,6 @@ export const SERVER_PASSWORD: ReturnType<typeof defineSecret> = defineSecret('SE
 export const DYNHOST_USER: ReturnType<typeof defineSecret> = defineSecret('DYNHOST_USER');
 export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
   defineSecret('DYNHOST_PASSWORD');
-export const AGENT_ENDPOINT: ReturnType<typeof defineString> = defineString('AGENT_ENDPOINT');
 export const S3_ENDPOINT: ReturnType<typeof defineString> = defineString('S3_ENDPOINT');
 export const S3_ACCESS_KEY: ReturnType<typeof defineString> = defineString('S3_ACCESS_KEY');
 export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_SECRET_KEY');
@@ -97,6 +97,7 @@ export function buildDeps(): WatchdogDeps {
 
 export function buildProvisionDeps(): ProvisionDeps {
   const shared = buildShared();
+  const db = getFirestore(defaultApp());
   return {
     clock: shared.clock,
     host: shared.host,
@@ -104,8 +105,9 @@ export function buildProvisionDeps(): ProvisionDeps {
     settings: shared.settings,
     ledger: shared.ledger,
     serverPassword: () => SERVER_PASSWORD.value(),
-    tokens: agentTokens(getFirestore(defaultApp())),
-    agentEndpoint: AGENT_ENDPOINT.value(),
+    members: adminMembershipRecord(db),
+    tokens: agentTokens(db),
+    agentEndpoint: () => deploymentRecord(db).agentEndpoint(),
     saveKeys: () => ({
       endpoint: S3_ENDPOINT.value(),
       // The bucket's region, the same one `shared.host` was built against —

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { type DevSessionPorts, type Spawned, runDevSession } from './dev-session.js';
+import {
+  type DevSessionPorts,
+  type Spawned,
+  runDevSession,
+} from './dev-session.js';
 
 const SECRET = 'the-secret-that-must-never-be-printed';
 
-const ENV = ['AGENT_ENDPOINT=https://dead.trycloudflare.com/x', `SCW_SECRET_KEY=${SECRET}`, ''].join('\n');
+const ENV = [`SCW_SECRET_KEY=${SECRET}`, ''].join('\n');
 
 const FIREBASE_CONFIG = JSON.stringify({
   emulators: {
@@ -14,7 +18,8 @@ const FIREBASE_CONFIG = JSON.stringify({
   },
 });
 
-const TUNNEL_STDERR = 'INF |  https://ripe-badge-outer-quest.trycloudflare.com  |';
+const TUNNEL_STDERR =
+  'INF |  https://ripe-badge-outer-quest.trycloudflare.com  |';
 
 interface Recorded {
   readonly calls: string[];
@@ -22,7 +27,10 @@ interface Recorded {
   readonly written: Map<string, string>;
 }
 
-function fakePorts(overrides: Partial<DevSessionPorts> = {}): { ports: DevSessionPorts; log: Recorded } {
+function fakePorts(overrides: Partial<DevSessionPorts> = {}): {
+  ports: DevSessionPorts;
+  log: Recorded;
+} {
   const log: Recorded = { calls: [], said: [], written: new Map() };
 
   const spawn = (name: string): Spawned => {
@@ -74,21 +82,28 @@ function fakePorts(overrides: Partial<DevSessionPorts> = {}): { ports: DevSessio
 }
 
 describe('the order, which is the whole point of the command', () => {
-  it('runs the seven steps in the one order that works', async () => {
+  it('runs the steps in the one order that works', async () => {
     const { ports, log } = fakePorts();
     expect(await runDevSession(ports)).toBe('held');
 
-    // The rewrite lands before the build, and the build is inside `emulators`
-    // — that is the invariant two dead sessions paid for. dist/.env is a copy
-    // the build lays down, and the emulator reads it once, at startup.
+    // The stamp lands after the seed and before the probe, and that order is
+    // the whole of it: the seed creates `config/settings`, the stamp writes
+    // `agentEndpoint` on it (§4), and only then is there any point asking the
+    // endpoint whether it answers.
+    //
+    // Nothing writes a file any more. The endpoint used to be a line in
+    // `.env`, which the emulator reads once at startup — which is why it had
+    // to be written before the build. Living in Firestore, it can be written
+    // after, and a tunnel that dies mid-session is re-stamped by re-running
+    // this command rather than by rebuilding.
     expect(log.calls.filter((call) => !call.startsWith('read:'))).toEqual([
       'spawn:tunnel',
       'wait:tunnel url',
       'quieten:tunnel',
-      'write:apps/functions/.env',
       'spawn:emulator',
       'wait:emulator',
       'run:seed',
+      'run:stamp',
       'probe',
       'spawn:pilot',
       'wait:pilot',
@@ -109,13 +124,19 @@ describe('the order, which is the whole point of the command', () => {
     expect(log.calls).toContain('quieten:tunnel');
     expect(log.calls).not.toContain('quieten:emulator');
     expect(log.calls).not.toContain('quieten:pilot');
-    expect(log.calls.indexOf('quieten:tunnel')).toBeGreaterThan(log.calls.indexOf('wait:tunnel url'));
+    expect(log.calls.indexOf('quieten:tunnel')).toBeGreaterThan(
+      log.calls.indexOf('wait:tunnel url'),
+    );
   });
 
   it('stops what it started in reverse, so no tunnel outlives the window', async () => {
     const { ports, log } = fakePorts();
     await runDevSession(ports);
-    expect(log.calls.slice(-3)).toEqual(['stop:pilot', 'stop:emulator', 'stop:tunnel']);
+    expect(log.calls.slice(-3)).toEqual([
+      'stop:pilot',
+      'stop:emulator',
+      'stop:tunnel',
+    ]);
   });
 });
 
@@ -127,26 +148,18 @@ describe('what it settles before it starts anything', () => {
   it('refuses without opening a tunnel when the env file cannot be read', async () => {
     const { ports, log } = fakePorts({
       readText: (path) => {
-        if (path.endsWith('.env')) throw new Error("ENOENT: no such file or directory, open 'apps/functions/.env'");
+        if (path.endsWith('.env'))
+          throw new Error(
+            "ENOENT: no such file or directory, open 'apps/functions/.env'",
+          );
         return FIREBASE_CONFIG;
       },
     });
     expect(await runDevSession(ports)).toBe('refused');
     expect(log.calls).not.toContain('spawn:tunnel');
     expect(log.said.join('\n')).toContain('nothing has been started yet');
-  });
-
-  // The rewrite is rehearsed in step 1, so a file that is not the one this
-  // command expects is refused before cloudflared is ever launched.
-  it('refuses without opening a tunnel when the env file carries no AGENT_ENDPOINT', async () => {
-    const { ports, log } = fakePorts({
-      readText: (path) => (path.endsWith('.env') ? `SCW_SECRET_KEY=${SECRET}\n` : FIREBASE_CONFIG),
-    });
-    expect(await runDevSession(ports)).toBe('refused');
-    expect(log.calls).not.toContain('spawn:tunnel');
-    expect(log.said.join('\n')).toContain('AGENT_ENDPOINT');
-    // The refusal prints what the rewrite threw, so this is the path where a
-    // leak would happen if the rewrite ever named a value it read.
+    // The refusal prints what the read threw, so this is the path where a leak
+    // would happen if that message ever named a value out of the file.
     expect(log.said.join('\n')).not.toContain(SECRET);
   });
 });
@@ -220,7 +233,11 @@ describe('the branch, said and never refused', () => {
 
   it('says when the tree is dirty, because that is served too', async () => {
     const { ports, log } = fakePorts({
-      head: async () => ({ branch: 'tranche-4-la-securite', sha: 'deadbee', clean: false }),
+      head: async () => ({
+        branch: 'tranche-4-la-securite',
+        sha: 'deadbee',
+        clean: false,
+      }),
     });
     await runDevSession(ports);
     expect(log.said.join('\n')).toContain('uncommitted');
@@ -237,11 +254,17 @@ describe('what the whole run is allowed to print', () => {
     const { ports, log } = fakePorts();
     await runDevSession(ports);
     expect(log.said.join('\n')).not.toContain(SECRET);
-    expect(log.written.get('apps/functions/.env')).toContain(SECRET);
+    // It used to rewrite one line of that file, and this test held that the
+    // twelve others survived. It writes nothing at all now, which is the
+    // stronger property: a file holding five credentials that no command
+    // touches cannot be damaged by one.
+    expect(log.written.size).toBe(0);
   });
 
   it('never says a secret when a step fails either', async () => {
-    const { ports, log } = fakePorts({ probe: async () => ({ unreachable: 'fetch failed' }) });
+    const { ports, log } = fakePorts({
+      probe: async () => ({ unreachable: 'fetch failed' }),
+    });
     await runDevSession(ports);
     expect(log.said.join('\n')).not.toContain(SECRET);
   });

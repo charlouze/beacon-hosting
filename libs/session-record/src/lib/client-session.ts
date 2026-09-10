@@ -19,6 +19,7 @@ import {
 import {
   EVENTS,
   openingFields,
+  rulesVersionFrom,
   sessionFrom,
   settingsFrom,
   SERVER_DOC,
@@ -41,6 +42,16 @@ export interface OpenRequest {
 export interface ClientSessionRecord {
   watch(onSession: (session: Session | null) => void): () => void;
   watchSettings(onSettings: (settings: SessionSettings) => void): () => void;
+  /**
+   * Calls back at most once, when the deployed rules version stops matching
+   * the one this bundle was compiled against. A tab left open since yesterday
+   * runs yesterday's rules against today's `config/settings` and today's
+   * watchdog (§4), and the symptom is a button that works then evaporates.
+   *
+   * An unstamped deployment — null — is not a drift: a freshly seeded base has
+   * never been stamped, and reloading on it would loop on first boot.
+   */
+  watchVersionDrift(compiled: string, onDrift: () => void): () => void;
   open(request: OpenRequest): Promise<void>;
   extend(actor: Actor): Promise<void>;
   requestStop(actor: Actor): Promise<void>;
@@ -59,9 +70,21 @@ export function clientSessionRecord(
    */
   let settings: SessionSettings = DEFAULT_SETTINGS;
   const settingsListeners = new Set<(settings: SessionSettings) => void>();
+
+  /**
+   * The deployment's stamp, carried by the same document and kept current by
+   * the same listener: a second subscription on `config/settings` would be a
+   * second copy of it, free to lag behind the first.
+   */
+  let deployedVersion: string | null = null;
+  const versionListeners = new Set<(deployed: string | null) => void>();
+
   onSnapshot(doc(db, SETTINGS_DOC), (snapshot) => {
-    settings = settingsFrom(snapshot.data() ?? {});
+    const data = snapshot.data() ?? {};
+    settings = settingsFrom(data);
+    deployedVersion = rulesVersionFrom(data);
     for (const listener of settingsListeners) listener(settings);
+    for (const listener of versionListeners) listener(deployedVersion);
   });
 
   const eventFor = (session: Session, event: { type: string; detail: string }, actor: Actor) => ({
@@ -110,6 +133,19 @@ export function clientSessionRecord(
       settingsListeners.add(onSettings);
       onSettings(settings);
       return () => settingsListeners.delete(onSettings);
+    },
+
+    watchVersionDrift(compiled, onDrift) {
+      const listener = (deployed: string | null): void => {
+        if (deployed === null || deployed === compiled) return;
+        // Firestore delivers a snapshot per write, and one reload per snapshot
+        // would race the reload itself. The listener leaves before it calls.
+        versionListeners.delete(listener);
+        onDrift();
+      };
+      versionListeners.add(listener);
+      listener(deployedVersion);
+      return () => versionListeners.delete(listener);
     },
 
     /**
