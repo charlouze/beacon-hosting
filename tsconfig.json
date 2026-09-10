@@ -47,6 +47,9 @@
     },
     {
       "path": "./libs/membership-record"
+    },
+    {
+      "path": "./tools/deploy-setup"
     }
   ],
   "compilerOptions": {}

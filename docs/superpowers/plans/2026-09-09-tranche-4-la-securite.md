@@ -2068,6 +2068,13 @@ compte de service dédié au déploiement — **jamais une clé de longue durée
 branche `main` : sans cette condition, n'importe quel dépôt GitHub peut prendre
 l'identité.
 
+`npx nx run deploy-setup:audit` fait ce geste, avec un `gcloud` authentifié
+sur ton compte. Il lit d'abord, imprime l'écart, et n'écrit qu'après un `o`.
+Relancé plus tard il ne propose rien, ce qui est le vrai intérêt : la question
+« est-ce que c'est toujours bien posé » se repose, celle-ci ne se pose qu'une
+fois. Le reste de cette étape est ce qu'il faut savoir pour lire ce qu'il
+propose — l'outil ne dispense pas de comprendre ce qu'il accorde.
+
 **Les rôles, et pourquoi la liste est plus longue qu'elle n'en a l'air.** Les
 Functions sont **gen 2** (`firebase-functions` ^6) : un déploiement ne pose pas
 une fonction, il construit une image et publie un service Cloud Run, avec un
