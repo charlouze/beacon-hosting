@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, Session } from '@beacon/session';
-import { openingFields, RESERVED_FACTS } from './fields.js';
+import { DEPLOYED_FIELDS, openingFields, RESERVED_FACTS } from './fields.js';
 
 // An ordinary member's opening, which is the one that must go through every
 // evening. No `instanceSize`: §5 leaves the template to an admin, and the
@@ -25,6 +25,30 @@ function demandedByRules(): string[] {
   if (declaration === null) throw new Error('firestore.rules declares no demandedFields()');
   return [...declaration[1].matchAll(/'([^']+)'/g)].map(([, name]) => name);
 }
+
+// The other named list the rules declare, read the same way and for the same
+// reason. It is the subtraction that keeps `config/settings` fields the
+// deployment owns out of an admin's reach.
+function subtractedByRules(): string[] {
+  const rules = readFileSync(new URL('../../../../firestore.rules', import.meta.url), 'utf8');
+  const declaration = /function affectsDeployedFields\(\)[\s\S]*?hasAny\(\[([^\]]*)\]\)/.exec(rules);
+  if (declaration === null) throw new Error('firestore.rules declares no affectsDeployedFields()');
+  return [...declaration[1].matchAll(/'([^']+)'/g)].map(([, name]) => name);
+}
+
+describe('the rules and the deployment agree on what an admin may not write', () => {
+  // Add a third field to the stamp, forget it here, and an admin can write it.
+  // Nothing else in the repository can see both ends: the rules are not
+  // TypeScript, and the failure is silent — the deployment keeps working, and
+  // the field is simply no longer reserved.
+  //
+  // `agentEndpoint` is why this matters more than it did for `rulesVersion`
+  // alone: an admin able to write it redirects where every provisioned machine
+  // reports.
+  it('subtracts every field the deployment stamps', () => {
+    expect(subtractedByRules()).toEqual(expect.arrayContaining([...DEPLOYED_FIELDS]));
+  });
+});
 
 describe('the rules and the record agree on who owns what', () => {
   // A field the record writes and the rules do not demand is an opening

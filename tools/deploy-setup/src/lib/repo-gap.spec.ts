@@ -23,7 +23,7 @@ describe('knownValuesFor', () => {
 });
 
 describe('variableGap', () => {
-  const names = ['FIREBASE_PROJECT_ID', 'SCW_ACCESS_KEY', 'AGENT_ENDPOINT'];
+  const names = ['FIREBASE_PROJECT_ID', 'SCW_ACCESS_KEY'];
   const known = { FIREBASE_PROJECT_ID: 'beacon-hosting-charlouze' };
 
   it('sets what it knows, and asks only for what no file can know', () => {
@@ -33,16 +33,6 @@ describe('variableGap', () => {
       { name: 'FIREBASE_PROJECT_ID', value: 'beacon-hosting-charlouze' },
     ]);
     expect(gap.toAsk).toEqual(['SCW_ACCESS_KEY']);
-  });
-
-  // It is the url of a function this very deployment creates, so demanding it
-  // would make the first deployment impossible — the one case a bootstrap has
-  // to survive. `deploy.yml` tolerates it empty exactly once, and warns.
-  it('never asks for AGENT_ENDPOINT, and says it is left for later', () => {
-    const gap = variableGap(names, JSON.stringify([]), known);
-
-    expect(gap.toAsk).not.toContain('AGENT_ENDPOINT');
-    expect(gap.leftForLater).toEqual(['AGENT_ENDPOINT']);
   });
 
   it('leaves alone a variable the repository already carries', () => {

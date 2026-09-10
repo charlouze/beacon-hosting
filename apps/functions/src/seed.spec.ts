@@ -61,10 +61,12 @@ describe('seed', () => {
   // Null and not absent, for the same reason: the stamp of §10 writes this
   // field on every merge, and `libs/session-record` reads its absence as "no
   // deployment has stamped it yet" rather than as a drift.
-  it('seeds config/settings with an unstamped rulesVersion', async () => {
+  it('seeds config/settings with both reserved fields unstamped', async () => {
     await seed();
 
-    expect((await db.doc('config/settings').get()).data()?.['rulesVersion']).toBeNull();
+    const settings = (await db.doc('config/settings').get()).data();
+    expect(settings?.['rulesVersion']).toBeNull();
+    expect(settings?.['agentEndpoint']).toBeNull();
   });
 
   // The recovery path (§10): re-running after an incident must be safe.

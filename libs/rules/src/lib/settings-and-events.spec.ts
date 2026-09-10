@@ -49,6 +49,23 @@ describe('config/settings', () => {
     );
   });
 
+  // §4: an admin who could write this one would redirect where the game
+  // machines report their state — a harder consequence than the drift
+  // `rulesVersion` guards, and the reason both are subtracted together.
+  it('refuses even an admin the endpoint the deployment stamps', async () => {
+    await assertFails(
+      updateDoc(doc(as(env, ROOT), 'config', 'settings'), {
+        agentEndpoint: 'https://attacker.invalid/report',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(as(env, ROOT), 'config', 'settings'), {
+        sessionDurationMs: 7_200_000,
+        agentEndpoint: 'https://attacker.invalid/report',
+      }),
+    );
+  });
+
   // §4: written by the deployment at every merge. An admin who edited it by
   // hand would desynchronise every open tab without knowing.
   it('refuses even an admin the version the deployment stamps', async () => {

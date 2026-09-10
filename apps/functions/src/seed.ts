@@ -60,10 +60,12 @@ export async function seed(): Promise<void> {
       // are billed together by the started hour (§11). Read from the project's
       // own catalogue on 2026-09-03, not from a public price page.
       tariffPerHour: { 'DEV1-L': 0.05454 },
-      // Written by the deployment at every merge, with the deployed commit
-      // (§4, §10). Null here means "no deployment has stamped it yet", which
-      // is exactly true of a freshly seeded database.
+      // Both written by the deployment at every merge — the deployed commit,
+      // and the url of the function that same deployment publishes (§4, §10).
+      // Null here means "no deployment has stamped it yet", which is exactly
+      // true of a freshly seeded database, and is why the seed runs first.
       rulesVersion: null,
+      agentEndpoint: null,
     });
     console.log('config/settings seeded');
   }

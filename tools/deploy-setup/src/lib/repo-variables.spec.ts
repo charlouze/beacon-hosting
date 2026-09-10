@@ -27,12 +27,18 @@ describe('variablesReadBy', () => {
   // `tools/dev-secrets.mjs` exists to illustrate: a list kept beside the thing
   // it mirrors drifts, and the drift shows up as a deployment that goes green
   // on a configuration no session can use.
-  it('finds the eleven the deployment actually reads', () => {
+  it('finds the ten the deployment actually reads', () => {
     const names = variablesReadBy(readFileSync(DEPLOY_WORKFLOW, 'utf8'));
 
     expect(names).toContain('WIF_PROVIDER');
-    expect(names).toContain('AGENT_ENDPOINT');
-    expect(names).toHaveLength(11);
+    expect(names).toHaveLength(10);
+  });
+
+  // The eleventh was AGENT_ENDPOINT, and it is gone from the workflow rather
+  // than skipped here: the deployment reads its own address back and stamps it
+  // on config/settings (§4). Nothing has to be told, so nothing has to be set.
+  it('no longer reads an address the deployment discovers itself', () => {
+    expect(variablesReadBy(readFileSync(DEPLOY_WORKFLOW, 'utf8'))).not.toContain('AGENT_ENDPOINT');
   });
 });
 

@@ -2145,17 +2145,18 @@ inutilisable.
 | `S3_ACCESS_KEY` | la **même** clé API que `SCW_ACCESS_KEY` : Scaleway signe l'Object Storage avec elle |
 | `SAVES_BUCKET` | le nom du seau des sauvegardes, `deploy/scaleway/README.md` |
 | `GAMES_BUCKET` | le nom du seau des dépôts de jeu, même fichier |
-| `AGENT_ENDPOINT` | l'URL de la Function `agentReport`, **qui n'existe qu'après le premier déploiement** |
 
-`AGENT_ENDPOINT` est donc vide au premier passage, et c'est la seule que la
-garde tolère vide — sans quoi le déploiement qui crée la Function ne pourrait
-jamais avoir lieu. La relever ensuite (console Firebase → Functions, ou
-`firebase functions:list`), la poser, et fusionner une seconde fois. Tant
-qu'elle est vide, une machine provisionnée ne rapporte rien et la session reste
-en `PROVISIONING` jusqu'à ce que le watchdog la ramasse.
+**Il n'y a pas de variable pour l'adresse à laquelle la machine rapporte, et une
+seule fusion suffit.** Elle l'était jusqu'au 2026-09-11, et la chaîne se mordait
+la queue : l'url de `agentReport` n'existe qu'après le déploiement qui la crée,
+donc la première fusion partait sans, et il fallait la relever, la poser, puis
+fusionner une seconde fois. Le déploiement relit désormais cette url et la
+tamponne sur `config/settings.agentEndpoint`, à l'étape 5 du §10, là où il pose
+déjà `rulesVersion`. Personne ne la recopie, et elle se re-vérifie à chaque
+déploiement.
 
-**Huit et non neuf : le premier admin n'est pas une variable de dépôt, et il ne
-peut pas l'être.** Son `uid` Google n'existe qu'après une première connexion
+**Le premier admin n'est pas une variable de dépôt, et il ne peut pas
+l'être.** Son `uid` Google n'existe qu'après une première connexion
 **contre ce projet**, que seule la fusion rend possible — poser sa valeur ici
 supposerait de la connaître avant que le système existe. Le geste est à la tâche
 13, après le déploiement, et c'est le même que pour tous les membres suivants.

@@ -60,19 +60,12 @@ async function main(): Promise<void> {
 
   console.log(`${names.length} variables lues par deploy.yml.`);
   console.log(
-    `  ${names.length - gap.toSet.length - gap.toAsk.length - gap.leftForLater.length} déjà posées`,
+    `  ${names.length - gap.toSet.length - gap.toAsk.length} déjà posées`,
   );
   console.log(`  ${gap.toSet.length} que cet outil connaît déjà`);
   console.log(
     `  ${gap.toAsk.length} à te demander : ${gap.toAsk.join(', ') || '—'}`,
   );
-  if (gap.leftForLater.length > 0) {
-    console.log(
-      `  ${gap.leftForLater.join(', ')} reste vide : c’est l’url d’une Function que ` +
-        `le premier déploiement crée. À poser après lui, puis fusionner une seconde fois.`,
-    );
-  }
-
   const prompt = createInterface({
     input: process.stdin,
     output: process.stdout,

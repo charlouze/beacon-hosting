@@ -113,6 +113,7 @@ const seed = async (): Promise<void> => {
     defaultInstanceSize: null,
     tariffPerHour: null,
     rulesVersion: null,
+    agentEndpoint: null,
   });
 };
 

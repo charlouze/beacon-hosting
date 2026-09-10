@@ -210,13 +210,24 @@ service cloud.firestore {
       allow update: if isMember() && isValidServerUpdate();
     }
 
-    // §4: the deployment stamps it at every merge, and an admin who edited it
-    // by hand would desynchronise every open tab without knowing — a version
-    // posted once and never moved again makes the reload inert. The writer is
-    // the Admin SDK, which is above the rules, so all this has to do is
-    // subtract the key from the ones a client can affect.
-    function affectsRulesVersion() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['rulesVersion']);
+    // §4: the two fields of `config/settings` the deployment stamps at every
+    // merge. The writer is the Admin SDK, which is above the rules, so all this
+    // has to do is subtract the keys from the ones a client can affect.
+    //
+    // `rulesVersion` because an admin who edited it by hand would desynchronise
+    // every open tab without knowing — a version posted once and never moved
+    // again makes the reload inert.
+    //
+    // `agentEndpoint` for a harder reason: it is the address a game machine
+    // reports its state to, so an admin able to write it redirects every
+    // machine the system provisions. It is listed here and not merely trusted
+    // to the Admin SDK's precedence, because a rule that permits it once is a
+    // rule that permits it for ever.
+    function affectsDeployedFields() {
+      return request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasAny(['rulesVersion', 'agentEndpoint']);
     }
 
     match /config/settings {
@@ -234,7 +245,7 @@ service cloud.firestore {
       //
       // §5, and it is the same trap as `server/current`: no create, so the
       // subtraction below cannot be bypassed by a document born whole.
-      allow update: if isAdmin() && !affectsRulesVersion();
+      allow update: if isAdmin() && !affectsDeployedFields();
     }
 
     // Deliberately not a schema. §7 assumes this collection open: a member

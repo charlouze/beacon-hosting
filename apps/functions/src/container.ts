@@ -1,5 +1,5 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
-import { serverStateStore, settingsStore } from '@beacon/session-record';
+import { deploymentRecord, serverStateStore, settingsStore } from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
 import { adminMembershipRecord } from '@beacon/membership-record/admin';
@@ -29,7 +29,6 @@ export const SERVER_PASSWORD: ReturnType<typeof defineSecret> = defineSecret('SE
 export const DYNHOST_USER: ReturnType<typeof defineSecret> = defineSecret('DYNHOST_USER');
 export const DYNHOST_PASSWORD: ReturnType<typeof defineSecret> =
   defineSecret('DYNHOST_PASSWORD');
-export const AGENT_ENDPOINT: ReturnType<typeof defineString> = defineString('AGENT_ENDPOINT');
 export const S3_ENDPOINT: ReturnType<typeof defineString> = defineString('S3_ENDPOINT');
 export const S3_ACCESS_KEY: ReturnType<typeof defineString> = defineString('S3_ACCESS_KEY');
 export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_SECRET_KEY');
@@ -108,7 +107,7 @@ export function buildProvisionDeps(): ProvisionDeps {
     serverPassword: () => SERVER_PASSWORD.value(),
     members: adminMembershipRecord(db),
     tokens: agentTokens(db),
-    agentEndpoint: AGENT_ENDPOINT.value(),
+    agentEndpoint: () => deploymentRecord(db).agentEndpoint(),
     saveKeys: () => ({
       endpoint: S3_ENDPOINT.value(),
       // The bucket's region, the same one `shared.host` was built against —

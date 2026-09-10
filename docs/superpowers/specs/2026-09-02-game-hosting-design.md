@@ -767,6 +767,25 @@ rechargerait jamais. Il est réservé pour la même raison que les champs réser
 de `server/current` — un admin qui le modifierait à la main désynchroniserait
 tout le monde sans le savoir.
 
+**Le même champ réservé porte `agentEndpoint`**, l'adresse à laquelle la machine
+de jeu rapporte son état. Elle n'a pas sa place ailleurs, et la raison est une
+boucle : c'est l'url d'une Function que le déploiement crée, donc elle n'existe
+pas avant lui. Portée par un paramètre de la Function, elle exigerait un second
+déploiement pour que la Function déployée l'apprenne — le premier ne pouvant
+pas connaître ce qu'il est en train de créer. Écrite ici après coup, par la même
+étape qui pose `rulesVersion`, elle tient en un seul déploiement, et se
+re-vérifie à chacun.
+
+**Elle n'entre pas dans `SessionSettings`.** Ce type dit ce que `config/settings`
+porte *tel que le domaine en a besoin*, et le domaine ne lit jamais cette
+adresse : seul l'adapter qui rend le cloud-init s'en sert, comme il se sert du
+mot de passe du serveur. `rulesVersion` est déjà dans ce cas, et c'est ce qui
+rend la place évidente : le document est plus large que la vue que le domaine en
+prend.
+
+Réservée, enfin, pour une raison plus dure que celle de `rulesVersion` : un
+admin qui pourrait l'écrire redirigerait l'endroit où les machines rapportent.
+
 ## 5. Modèle de données
 
 | Document | Contenu | Écrivain |
@@ -777,7 +796,7 @@ tout le monde sans le savoir.
 | `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, `closedAt` — nul à la création —, puis `instanceId`, `ipId`, `ip` : l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
-| `config/settings` | champ *réservé* : `rulesVersion` | le déploiement, via l'Admin SDK (§10) |
+| `config/settings` | champs *réservés* : `rulesVersion`, `agentEndpoint` | le déploiement, via l'Admin SDK (§10) |
 | `health/watchdog` | `lastRunAt` — battement de cœur du watchdog — et `stranded`, les volumes orphelins que le dernier passage a vus | Functions |
 | `members/{uid}` | `email`, `role` : `admin` \| `player` | navigateur (admin) ; jamais par le sujet lui-même |
 | `members/{uid}` | `steamId` | **le sujet lui-même**, et personne d'autre — seule écriture du système qu'un membre fait sur son propre document |
@@ -1804,11 +1823,13 @@ la première étape rouge :
    relançable sans effet de bord, qui ne touche jamais un document existant.
    Ces deux-là et pas un troisième : ce sont les seuls documents qu'aucun
    client ne peut créer et dont la valeur initiale ne dépend de personne ;
-5. **écriture de `config/settings.rulesVersion`** avec la référence du commit
-   déployé. Écriture ciblée sur ce seul champ, qui ne touche pas le reste du
-   document — donc distincte du semis, qui par construction ne modifie rien
-   d'existant. Sans cette étape, le garde-fou contre la dérive entre onglets
-   (§4) ne se déclencherait jamais.
+5. **écriture des champs réservés de `config/settings`** — `rulesVersion` avec
+   la référence du commit déployé, et `agentEndpoint` avec l'url que l'étape 3
+   vient de publier, relue du déploiement plutôt que fournie. Écriture ciblée
+   sur ces seuls champs, qui ne touche pas le reste du document — donc distincte
+   du semis, qui par construction ne modifie rien d'existant. Sans cette étape,
+   le garde-fou contre la dérive entre onglets (§4) ne se déclencherait jamais,
+   et une machine provisionnée ne saurait pas où rapporter.
 
 **La décision de mettre en production est donc la fusion**, pas le déclenchement
 d'un workflow. Avec un seul projet Firebase, fusionner touche la base où les

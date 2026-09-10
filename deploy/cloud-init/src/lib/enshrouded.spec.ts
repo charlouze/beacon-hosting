@@ -189,8 +189,8 @@ describe('the enshrouded catalogue entry', () => {
   // would run, and the leak would leave no trace.
   //
   // Refused here rather than on the machine because this is the only place the
-  // value enters the system: it comes from `AGENT_ENDPOINT`, filled by a human,
-  // and a tunnel url pasted in a hurry is exactly the shape this catches. The
+  // value enters the system: it comes from `config/settings.agentEndpoint`, and
+  // a local tunnel url is exactly the shape this catches. The
   // companion stays permissive so the smoke harness can keep answering on http
   // over a docker bridge, where no wire leaves the developer's machine.
   it('refuses to write a cloud-init that would carry the token in clear', () => {

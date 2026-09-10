@@ -19,8 +19,13 @@ export interface ProvisionDeps {
   /** The Steam accounts the members declared (§5). `members` says, nobody else. */
   readonly members: AdminMembershipRecord;
   readonly tokens: AgentTokens;
-  /** Where the machine reports. A deployed value, never compiled in. */
-  readonly agentEndpoint: string;
+  /**
+   * Where the machine reports, read from what the deployment stamped (§4).
+   * A call and not a value: it can refuse, and refusing here is what turns a
+   * database no deployment has stamped into a FAILED session with a reason
+   * rather than a machine that reports nowhere.
+   */
+  readonly agentEndpoint: () => Promise<string>;
   /** From Secret Manager. It never leaves this process except in a cloud-init. */
   readonly saveKeys: () => SaveAccess;
 }
@@ -77,6 +82,7 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<boolean
     // and §4 forbids confusing the words that name them. Nothing downstream
     // needs to know a role exists at all.
     const declaredSteamIds = await deps.members.declaredSteamIds();
+    const endpoint = await deps.agentEndpoint();
     opened = await deps.host.open({
       sessionId,
       game,
@@ -88,7 +94,7 @@ async function provision(deps: ProvisionDeps, session: Session): Promise<boolean
         adminSteamIds: declaredSteamIds,
         sessionId,
         agentToken,
-        endpoint: deps.agentEndpoint,
+        endpoint,
         saves: deps.saveKeys(),
       }),
     });

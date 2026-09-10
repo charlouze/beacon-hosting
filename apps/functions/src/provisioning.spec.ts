@@ -58,7 +58,7 @@ beforeEach(() => {
     serverPassword: () => 'hunter2',
     members: { declaredSteamIds: vi.fn(async () => []) },
     tokens: { issue: vi.fn(async () => undefined), verify: vi.fn(async () => false) },
-    agentEndpoint: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
+    agentEndpoint: async () => 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
     saveKeys: () => ({
       endpoint: 'https://s3.fr-par.scw.cloud',
       region: 'fr-par',

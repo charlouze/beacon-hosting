@@ -3,15 +3,6 @@ import { accountEmail, WANTED } from './wanted.js';
 type Wanted = typeof WANTED;
 
 /**
- * The url of the `agentReport` function, which does not exist until the very
- * deployment these variables enable has published it once. Demanded here it
- * would make the first deployment impossible, which is the one case a
- * bootstrap has to survive — so it is never asked for, and `deploy.yml`
- * tolerates it empty, loudly, exactly once.
- */
-export const LEFT_FOR_LATER = 'AGENT_ENDPOINT';
-
-/**
  * Where the operator reads what no file in the repository states. Printed with
  * the question, because the two Scaleway keys look alike enough that "the
  * access key" is not an instruction — and the public half is the one wanted
@@ -30,7 +21,6 @@ export interface VariableGap {
   readonly toSet: readonly { readonly name: string; readonly value: string }[];
   /** Nothing in the repository can know these; the operator is asked. */
   readonly toAsk: readonly string[];
-  readonly leftForLater: readonly string[];
 }
 
 export function wifProviderFor(wanted: Wanted): string {
@@ -89,9 +79,6 @@ export function variableGap(
     toSet: missing
       .filter((name) => known[name] !== undefined)
       .map((name) => ({ name, value: known[name] })),
-    toAsk: missing.filter(
-      (name) => known[name] === undefined && name !== LEFT_FOR_LATER,
-    ),
-    leftForLater: missing.filter((name) => name === LEFT_FOR_LATER),
+    toAsk: missing.filter((name) => known[name] === undefined),
   };
 }

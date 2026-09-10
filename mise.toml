@@ -35,6 +35,18 @@ description = "Seme server/current et config/settings dans l'emulateur"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
 run = "npx nx run @beacon/functions:seed"
 
+# L'etape 5 du §10, jouee contre l'emulateur. En production le workflow relit
+# l'url que le deploiement vient de publier ; en local il n'y a pas de
+# deploiement, et l'adresse est celle du tunnel du jour — d'ou le parametre.
+#
+# `dev` comme reference de commit, et c'est la valeur qui evite la boucle :
+# c'est celle qu'un checkout compile dans le bundle, donc les deux concordent
+# et aucun onglet ne se recharge en rond.
+[tasks.stamp]
+description = "Tamponne rulesVersion et agentEndpoint dans l'emulateur"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
+run = "npx nx run @beacon/functions:stamp -- dev {{arg(name='endpoint')}}"
+
 # Le build efface `dist/`, et l'emulateur y cherche deux fichiers : `.env` pour
 # les parametres, `.secret.local` pour les secrets — `defineSecret` ne lit pas
 # `.env`, il interroge Secret Manager sauf override local. Les deux se

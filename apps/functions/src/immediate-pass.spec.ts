@@ -105,7 +105,7 @@ const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
   serverPassword: () => 'probe',
   members: adminMembershipRecord(db),
   tokens: agentTokens(db),
-  agentEndpoint: 'https://example.invalid/agentReport',
+  agentEndpoint: async () => 'https://example.invalid/agentReport',
   saveKeys: () => ({
     endpoint: 'https://s3.fr-par.scw.cloud',
     region: 'fr-par',

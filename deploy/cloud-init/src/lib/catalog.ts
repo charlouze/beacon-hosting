@@ -155,8 +155,9 @@ const refuseAnythingButDigits = (adminSteamIds: readonly string[]): void => {
  * a value can be refused while nothing is billed yet. Three refusals live here,
  * and they share their reason: what they catch leaves no trace downstream.
  *
- * The only place `endpoint` enters the system. It comes from `AGENT_ENDPOINT`,
- * filled by a human, and it is the url the machine sends its token to — in an
+ * The only place `endpoint` enters the system. It comes from
+ * `config/settings.agentEndpoint`, which the deployment stamps with the url it
+ * just published (§4), and it is the url the machine sends its token to — in an
  * `authorization` header, once a minute, for the whole session. Over plain http
  * that token crosses the internet in clear, and **nothing downstream notices**:
  * the reports succeed, the session runs, and the leak leaves no trace.

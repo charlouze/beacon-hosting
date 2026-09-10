@@ -30,12 +30,6 @@ jobs:
       # that breaks without turning red, so the variables are counted here, by
       # name, before anything is installed or published.
       #
-      # AGENT_ENDPOINT is the one exception, and not out of leniency: it is the
-      # url of the `agentReport` function, which does not exist until this
-      # workflow has deployed it once. Demanded here it would make the first
-      # deployment impossible, which is the one case a bootstrap has to survive.
-      # Left empty it costs a session that provisions and never reports back —
-      # loud, bounded, and closed by the watchdog.
       - name: Refuse a deployment whose repository variables are missing
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
@@ -48,7 +42,6 @@ jobs:
           S3_ACCESS_KEY: ${{ vars.S3_ACCESS_KEY }}
           SAVES_BUCKET: ${{ vars.SAVES_BUCKET }}
           GAMES_BUCKET: ${{ vars.GAMES_BUCKET }}
-          AGENT_ENDPOINT: ${{ vars.AGENT_ENDPOINT }}
         run: |
           missing=''
           for name in FIREBASE_PROJECT_ID WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT \
@@ -59,9 +52,6 @@ jobs:
           if [ -n "$missing" ]; then
             echo "::error::Repository variables are empty or unset:$missing — see task 12 of docs/superpowers/plans/2026-09-09-tranche-4-la-securite.md for where each value is read. Settings > Secrets and variables > Actions > Variables."
             exit 1
-          fi
-          if [ -z "$AGENT_ENDPOINT" ]; then
-            echo "::warning::AGENT_ENDPOINT is empty. Expected on the very first deployment, which is what creates the agentReport function; set it afterwards, or a provisioned machine will never report back."
           fi
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -110,7 +100,6 @@ jobs:
           SCW_ACCESS_KEY=${{ vars.SCW_ACCESS_KEY }}
           SCW_PROJECT_ID=${{ vars.SCW_PROJECT_ID }}
           SCW_ZONE=${{ vars.SCW_ZONE }}
-          AGENT_ENDPOINT=${{ vars.AGENT_ENDPOINT }}
           S3_ENDPOINT=${{ vars.S3_ENDPOINT }}
           S3_ACCESS_KEY=${{ vars.S3_ACCESS_KEY }}
           SAVES_BUCKET=${{ vars.SAVES_BUCKET }}
@@ -152,9 +141,29 @@ jobs:
         env:
           GOOGLE_CLOUD_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
 
+      # §10 étape 5, first half: the address of the function the step above
+      # just published. Read back rather than configured, because nothing
+      # before this deployment can know it — a repository variable would have
+      # to be filled in by hand after a first merge, and a second merge run for
+      # the deployed function to carry it.
+      #
+      # gen 2 makes every function a Cloud Run service, whose name is the
+      # export lowercased. `--format=value()` prints the url alone, and an
+      # empty one stops the stamp below rather than travelling.
+      - id: endpoint
+        run: |
+          url=$(gcloud run services describe agentreport \
+            --region=europe-west1 --project=${{ vars.FIREBASE_PROJECT_ID }} \
+            --format='value(status.url)')
+          if [ -z "$url" ]; then
+            echo "::error::agentReport has no url after a deployment that claimed success. Nothing was stamped: a machine provisioned now would report nowhere."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
       # §10 étape 5. Without it the guard against drift between tabs would
-      # never fire.
-      - run: npx nx run @beacon/functions:stamp -- ${{ github.sha }}
+      # never fire, and no provisioned machine would know where to report.
+      - run: npx nx run @beacon/functions:stamp -- ${{ github.sha }} ${{ steps.endpoint.outputs.url }}
         env:
           GOOGLE_CLOUD_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
 
@@ -209,6 +218,14 @@ jobs:
             echo 'From a checkout of `main`:'
             echo
             echo '```'
-            echo 'GOOGLE_CLOUD_PROJECT=${{ vars.FIREBASE_PROJECT_ID }} npx nx run @beacon/functions:stamp -- ${{ github.sha }}'
+            echo 'URL=$(gcloud run services describe agentreport --region=europe-west1 \'
+            echo '  --project=${{ vars.FIREBASE_PROJECT_ID }} --format="value(status.url)")'
+            echo 'GOOGLE_CLOUD_PROJECT=${{ vars.FIREBASE_PROJECT_ID }} \'
+            echo '  npx nx run @beacon/functions:stamp -- ${{ github.sha }} "$URL"'
             echo '```'
+            echo
+            echo 'The stamp writes both reserved fields at once (§4), so it needs the address'
+            echo 'too — and it refuses a blank one rather than leaving provisioned machines'
+            echo 'reporting nowhere. An empty `URL` here means the functions did not go out,'
+            echo 'which is 2a and not 2b: do not stamp, fix the job, merge again.'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -15,6 +15,18 @@ export const SETTINGS_DOC = 'config/settings';
 export const EVENTS = 'events';
 
 /**
+ * The fields of `config/settings` the deployment owns and a client may not
+ * touch (§4, §5). Declared once because three places have to agree on them and
+ * nothing else can make them: `stamp()` writes them, `firestore.rules`
+ * subtracts them from what an admin may affect, and `reserved-fields.spec.ts`
+ * is the only file that can read both ends.
+ *
+ * A field added to the stamp and forgotten in the rules fails silently — the
+ * deployment keeps working, and the field is simply no longer reserved.
+ */
+export const DEPLOYED_FIELDS = ['rulesVersion', 'agentEndpoint'] as const;
+
+/**
  * The reserved fields of §5, minus `lastError`. This list is the one place in
  * the repository that knows them, and it is why `ServerRecord` carries a
  * boolean rather than the fields themselves: the day the spec adds a reserved
