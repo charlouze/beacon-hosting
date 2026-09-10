@@ -1,12 +1,12 @@
 import { createInterface } from 'node:readline/promises';
 import { commandLine } from './lib/command-line.js';
-import { gcloud, type Gcloud } from './lib/gcloud.js';
+import { gcloud, type Cli } from './lib/cli.js';
 import { gesturesClosing, type Readings } from './lib/gap.js';
 import { accountEmail, WANTED } from './lib/wanted.js';
 
 const CHECK_ONLY = process.argv.includes('--check');
 
-function read(cli: Gcloud, wanted: typeof WANTED): Readings {
+function read(cli: Cli, wanted: typeof WANTED): Readings {
   const project = `--project=${wanted.project}`;
   const email = accountEmail(wanted);
   const pool = ['--location=global', `--workload-identity-pool=${wanted.pool}`];
@@ -72,7 +72,7 @@ function read(cli: Gcloud, wanted: typeof WANTED): Readings {
  * the audit turns green, and the first deployment is denied with a message
  * about permissions rather than about identity.
  */
-function refuseAWrongProjectNumber(cli: Gcloud, wanted: typeof WANTED): void {
+function refuseAWrongProjectNumber(cli: Cli, wanted: typeof WANTED): void {
   const described = cli.read([
     'projects',
     'describe',

@@ -9,10 +9,16 @@ npx nx run deploy-setup:audit -- --check   # lit et imprime l'écart, n'écrit r
 npx nx run deploy-setup:audit              # imprime l'écart, demande, puis le comble
 npx nx run deploy-setup:secrets            # demande les secrets qui n'en ont pas
 npx nx run deploy-setup:secrets -- --all   # les redemande tous, pour une rotation
+npx nx run deploy-setup:repo               # les variables du dépôt, et la protection de main
+npx nx run deploy-setup:repo -- --check    # lit et imprime l'écart, n'écrit rien
 ```
 
 Il faut un `gcloud` authentifié sur un compte qui a le droit d'administrer l'IAM
-du projet — le tien, pas celui qu'il installe.
+du projet — le tien, pas celui qu'il installe — et un `gh` authentifié sur le
+dépôt.
+
+Les trois cibles couvrent les étapes 3 à 6 de la tâche 12. Ce qu'elles
+laissent : la fusion elle-même, qui est la décision d'un humain (§10).
 
 **Ce qu'il affiche est en français, et c'est une exception assumée** à la règle
 « interface en anglais » de `CLAUDE.md`. Cette règle protège le produit, que des
@@ -43,6 +49,48 @@ La valeur tapée n'est pas affichée, n'atteint aucun fichier, et ne passe pas p
 saut de ligne n'est ajouté : `--data-file` stocke les octets qu'on lui donne, et
 un secret terminé par `\n` ne s'authentifie nulle part tout en ressemblant, dans
 toutes les consoles, au bon.
+
+## Les variables du dépôt, et la protection de `main`
+
+Les onze noms se lisent dans `deploy.yml`, dans ses `vars.X` — pas dans une
+liste tenue ici, qui dériverait le jour où le workflow en lit une douzième.
+
+**Sur les onze, une seule catégorie t'est demandée.** Trois viennent de
+`wanted.ts`, qui sait déjà le projet, le compte et le fournisseur qu'il vient de
+créer ; quatre viennent de `.env.example`, que le dépôt porte en clair ; une
+reste vide exprès. Restent trois valeurs qu'aucun fichier du dépôt ne peut
+connaître, et l'outil dit à côté de chaque question où on la lit.
+
+Te faire recopier ce que le code sait est précisément comment un `principalSet`
+finit par nommer l'identifiant du projet au lieu de son numéro : la liaison est
+acceptée, personne ne la refuse, et le premier déploiement échoue sur un message
+de permissions.
+
+`AGENT_ENDPOINT` n'est jamais demandée. C'est l'url d'une Function que ce
+déploiement-là crée : l'exiger rendrait le premier déploiement impossible, et
+c'est le seul cas qu'un amorçage doit survivre.
+
+Une variable posée à la chaîne vide compte comme absente. C'est l'état exact que
+la garde de `deploy.yml` refuse par son nom, parce que `vars.X` sur une variable
+que personne n'a créée vaut la chaîne vide et que rien ne devient rouge.
+
+**La protection de `main` se lit dans les rulesets, et non dans l'API
+historique** `branches/main/protection`. C'était la première lecture de cet
+outil et son pire défaut : une branche protégée par un ruleset répond 404
+là-bas, donc un dépôt correctement configuré était annoncé grand ouvert — et le
+geste proposé pour le fermer aurait posé un second mécanisme par-dessus le
+premier, deux endroits à lire et deux à tenir à jour.
+
+Ce qu'il exige : ni suppression, ni poussée forcée, et **la vérification
+`verify` de `pull-request.yml`**. Sans cette dernière une pull request se
+fusionne alors que ses tests sont rouges, et une fusion est la mise en
+production. C'est aussi elle qui interdit la poussée directe, sans qu'aucune
+règle ne le dise : `verify` ne se déclenche que sur une pull request, donc rien
+de poussé directement ne peut la satisfaire.
+
+Le corps de la requête est imprimé avant d'être envoyé, et il passe par un
+fichier — c'est du json, et `commandLine` refuse une guillemet double pour de
+bonnes raisons.
 
 ## Ce que l'audit lit, et ce qu'il en fait
 
@@ -82,7 +130,7 @@ repose tous les six mois.
 
 ## Pourquoi le calcul est séparé de l'appel
 
-`gcloud` n'est appelé qu'à un seul endroit, `lib/gcloud.ts`, qui ne porte aucune
+`gcloud` n'est appelé qu'à un seul endroit, `lib/cli.ts`, qui ne porte aucune
 décision. Tout ce qui décide — l'état voulu, la lecture des politiques, la
 condition OIDC, la composition des gestes — est pur et testé.
 
@@ -105,6 +153,6 @@ et le défaut survivrait à toutes les exécutions de l'outil.
 
 ## Ce qu'il ne fait pas
 
-Il ne pose ni les variables de dépôt GitHub, ni la protection de `main`. Les
-deux se font ailleurs — `gh variable set` et les réglages du dépôt — et aucune
-n'est un secret.
+Il ne fusionne pas, ne déploie pas, et ne crée aucune ressource facturée. Ce
+qu'il pose est de la configuration : des droits, des noms et une politique de
+branche.

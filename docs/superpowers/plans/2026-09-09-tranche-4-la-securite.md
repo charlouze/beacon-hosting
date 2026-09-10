@@ -2108,16 +2108,27 @@ service, et c'est cette API qui autorise l'usurpation. Sans elle rien n'échoue
 plus tard, tout échoue tout de suite — à la première étape qui s'authentifie,
 avant qu'une seule ligne soit publiée.
 
-Relever les trois valeurs et les poser en **variables** de dépôt GitHub — pas en
-secrets, aucune n'en est un : `FIREBASE_PROJECT_ID`, `WIF_PROVIDER`,
-`DEPLOY_SERVICE_ACCOUNT`.
+Les trois valeurs qui en sortent — `FIREBASE_PROJECT_ID`, `WIF_PROVIDER`,
+`DEPLOY_SERVICE_ACCOUNT` — n'ont pas à être relevées à la main : elles se
+déduisent de ce que l'audit vient de créer, et l'étape suivante les pose
+elle-même.
 
-- [ ] **Step 4: Poser les huit variables que le workflow lit pour composer `.env`**
+- [ ] **Step 4: Poser les variables que le workflow lit**
 
-`deploy.yml` écrit `apps/functions/.env` à partir de huit variables de dépôt,
-parce que ce fichier est ignoré par git et qu'un `predeploy` le recopie dans le
-bundle. Aucune n'est un secret : ce sont des identifiants publics et des noms de
-ressources, exactement ce que `apps/functions/.env.example` porte en clair.
+```bash
+npx nx run deploy-setup:repo
+```
+
+Il lit les onze noms dans les `vars.X` de `deploy.yml`, en déduit huit valeurs —
+trois de l'état voulu, quatre de `.env.example`, une laissée vide exprès — et ne
+demande que les trois qu'aucun fichier du dépôt ne peut connaître, en disant où
+les lire. Il pose aussi la protection de `main`, ce qui absorbe l'étape 6.
+
+Ce qui suit est ce qu'il faut savoir pour lire ce qu'il propose. Aucune de ces
+valeurs n'est un secret : ce sont des identifiants publics et des noms de
+ressources, exactement ce que `apps/functions/.env.example` porte en clair, et
+`deploy.yml` les recopie dans `apps/functions/.env` parce que ce fichier est
+ignoré par git et qu'un `predeploy` le verse dans le bundle.
 
 Une variable jamais créée **n'échoue pas** : elle vaut la chaîne vide, `.env`
 part avec `SCW_ACCESS_KEY=`, et `defineString` ne réclame rien puisque la clé
@@ -2170,15 +2181,28 @@ valeur — ni à l'écran, ni dans un fichier, ni dans `argv`. `SCW_SECRET_KEY` 
 l'outil ne sait rien de l'hébergeur, et ne fige pas une coïncidence qui peut
 cesser.
 
-- [ ] **Step 6: Protéger `main`**
+- [x] **Step 6: Protéger `main`** — faite le 2026-09-10, par un ruleset
 
 Sans cette protection, la barrière du §10 se contourne d'un `git push` et tout
-le raisonnement de cette section tombe. Trois réglages, et le troisième est
-celui qu'on oublie :
+le raisonnement de cette section tombe.
 
-- pas de poussée directe sur `main` ;
-- pull request obligatoire ;
-- **vérifications requises** : le job `verify` de `pull-request.yml`.
+Le ruleset `Default branch protection` vise `~DEFAULT_BRANCH`, n'accorde aucun
+`bypass_actors`, et porte : pas de suppression, pas de poussée forcée, pas de
+création, et **la vérification `verify` de `pull-request.yml` exigée**.
+
+**Il n'y a pas de règle « pull request obligatoire », et il n'en faut pas** —
+mais il faut savoir pourquoi, parce que la garantie est indirecte.
+`pull-request.yml` ne se déclenche que sur `pull_request` : aucun commit poussé
+directement sur `main` ne peut donc satisfaire la vérification exigée, et la
+poussée est refusée. Le jour où ce workflow gagnerait un déclencheur `push`,
+cette seconde garantie partirait sans un mot.
+
+`deploy-setup:repo` le vérifie, et le poserait s'il manquait — en créant un
+ruleset, jamais une protection de branche historique. Les deux mécanismes
+coexistent chez GitHub, et en poser un par-dessus l'autre ferait deux endroits
+à lire et deux à tenir à jour.
+
+À vérifier d'un `npx nx run deploy-setup:repo -- --check`, qui ne lit que.
 
 - [ ] **Step 7: Relever ce qui a été fait**
 

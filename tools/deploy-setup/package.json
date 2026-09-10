@@ -30,6 +30,12 @@
         "options": {
           "command": "npx tsx tools/deploy-setup/src/secrets.ts"
         }
+      },
+      "repo": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx tools/deploy-setup/src/repo.ts"
+        }
       }
     }
   },

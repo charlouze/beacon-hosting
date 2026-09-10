@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { commandLine } from './lib/command-line.js';
 import { CONTAINER, secretsDeclaredIn } from './lib/declared-secrets.js';
-import { gcloud } from './lib/gcloud.js';
+import { gcloud } from './lib/cli.js';
 import { secretsToAsk, type SecretVersions } from './lib/secrets-gap.js';
 import { WANTED } from './lib/wanted.js';
 
