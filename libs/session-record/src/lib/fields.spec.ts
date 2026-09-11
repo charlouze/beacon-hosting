@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Timestamp } from 'firebase-admin/firestore';
 import { DEFAULT_SETTINGS } from '@beacon/session';
-import { sessionFrom, settingsFrom } from './fields.js';
+import { displayedFactsFrom, sessionFrom, settingsFrom } from './fields.js';
 
 const document = {
   state: 'RUNNING',
@@ -40,6 +40,78 @@ describe('sessionFrom', () => {
   it('reads the join point as an opinion of the document, never as one of its own', () => {
     expect(sessionFrom(document)?.hasJoinInfo).toBe(true);
     expect(sessionFrom({ ...document, joinInfo: null })?.hasJoinInfo).toBe(false);
+  });
+});
+
+describe('displayedFactsFrom', () => {
+  it('renders the three fields the screen shows, and no other', () => {
+    const facts = displayedFactsFrom({
+      state: 'RUNNING',
+      instanceId: 'i-1',
+      ipId: 'ip-1',
+      provisionClaimedAt: new Date(),
+      ip: '51.159.84.12',
+      joinInfo: {
+        game: 'enshrouded',
+        hostname: 'enshrouded.beacon.charlouze.com',
+        address: '51.159.84.12',
+        port: 15637,
+      },
+      lastError: null,
+    });
+    expect(Object.keys(facts).sort()).toEqual(['ip', 'joinInfo', 'lastError']);
+    expect(facts.ip).toBe('51.159.84.12');
+    expect(facts.joinInfo).toEqual({
+      game: 'enshrouded',
+      hostname: 'enshrouded.beacon.charlouze.com',
+      address: '51.159.84.12',
+      port: 15637,
+    });
+  });
+
+  /**
+   * §8: a refused creation cleans up and returns to IDLE with lastError set.
+   * That document is the most common failure screen there is, and a view that
+   * dropped the field on an idle document would leave the screen unable to say
+   * the previous attempt failed.
+   */
+  it('keeps lastError on an idle document, where it is the whole message', () => {
+    const facts = displayedFactsFrom({
+      state: 'IDLE',
+      lastError: 'no capacity left for this machine size in the zone',
+    });
+    expect(facts.lastError).toBe('no capacity left for this machine size in the zone');
+    expect(facts.joinInfo).toBeNull();
+    expect(facts.ip).toBeNull();
+  });
+
+  it('says nothing rather than inventing, on a document that carries nothing', () => {
+    expect(displayedFactsFrom({ state: 'IDLE' })).toEqual({
+      ip: null,
+      joinInfo: null,
+      lastError: null,
+    });
+  });
+
+  it('refuses a joinInfo whose game is not one this vocabulary knows', () => {
+    expect(
+      displayedFactsFrom({ joinInfo: { game: 'minecraft', hostname: 'x' } }).joinInfo,
+    ).toBeNull();
+  });
+
+  // A shape half written is not a join point. The screen prints every field it
+  // is handed, so half of one would be a line telling a player to copy
+  // `undefined`.
+  it('refuses a shape whose own game has not filled it in', () => {
+    expect(displayedFactsFrom({ joinInfo: { game: 'enshrouded', hostname: 'h' } }).joinInfo).toBeNull();
+    expect(
+      displayedFactsFrom({ joinInfo: { game: 'sunkenland', serverId: 'a~b', region: 'Europe' } })
+        .joinInfo,
+    ).toBeNull();
+  });
+
+  it('refuses a lastError that is not a string, rather than rendering an object', () => {
+    expect(displayedFactsFrom({ lastError: { code: 42 } }).lastError).toBeNull();
   });
 });
 

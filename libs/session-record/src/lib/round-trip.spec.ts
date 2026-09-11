@@ -12,10 +12,9 @@ import {
   getFirestore as getClientFirestore,
   setLogLevel,
 } from 'firebase/firestore';
-import type { Session } from '@beacon/session';
-import { clientSessionRecord, type ClientSessionRecord } from './client-session.js';
-import { serverStateStore } from './server-state.js';
-import { EVENTS, SERVER_DOC, sessionFrom } from './fields.js';
+import { clientSessionRecord, type ClientSessionRecord, type ServerView } from './client-session.js';
+import { factsPatch, serverStateStore, type ServerFacts } from './server-state.js';
+import { displayedFactsFrom, EVENTS, SERVER_DOC, sessionFrom } from './fields.js';
 
 // `clientSessionRecord` keeps its settings listener open for the record's
 // whole lifetime by design (a browser tab owns it until it closes). Deleting
@@ -121,7 +120,7 @@ describe('the two faces agree on the document', () => {
       new Date('2026-09-06T22:00:00Z'),
     );
 
-    const seen = await firstSnapshot(await clientRecord());
+    const seen = (await firstSnapshot(await clientRecord()))?.session;
     expect(seen?.state).toBe('RUNNING');
     expect(seen?.sessionId).toBe('s1');
     expect(seen?.instanceSize).toBe('DEV1-L');
@@ -129,15 +128,63 @@ describe('the two faces agree on the document', () => {
     // transports and never reads (§4) — only whether it is there at all.
     expect(seen?.hasJoinInfo).toBe(true);
   });
+
+  /**
+   * The screen's own three fields, end to end. It calls the very function
+   * `publish` calls: a round trip that recopied by hand what the writer writes
+   * would only prove the two copies agree with each other — the mistake
+   * tranche 4 paid for on the federation's `principalSet`, where the test
+   * asserted the same wrong string as the code, written from the same belief.
+   */
+  it('hands the screen exactly what the functions published', () => {
+    const published: ServerFacts = {
+      ip: '51.159.84.12',
+      joinInfo: {
+        game: 'sunkenland',
+        serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241613967341807',
+        region: 'Europe',
+        worldName: "Beacon's World",
+      },
+      instanceSize: 'DEV1-L',
+      references: { instanceId: 'i-1', ipId: 'ip-1' },
+    };
+    const read = displayedFactsFrom(factsPatch(published));
+    expect(read.joinInfo).toEqual(published.joinInfo);
+    expect(read.ip).toBe(published.ip);
+  });
+
+  /**
+   * The seam the screen has to survive: RUNNING means the join point is
+   * published (§4), but the state and the fact reach the browser in the same
+   * snapshot or not at all — which is why they travel in one callback.
+   */
+  it('carries the session and its facts in the same snapshot', async () => {
+    await runningSince('2026-09-06T23:00:00Z');
+    await serverStateStore(getFirestore()).publish(
+      {
+        ip: '51.15.42.7',
+        joinInfo: { game: 'enshrouded', hostname: 'h', address: '51.15.42.7', port: 15637 },
+        instanceSize: 'DEV1-L',
+        references: { instanceId: 'srv-1', ipId: 'ip-1' },
+      },
+      new Date('2026-09-06T23:00:00Z'),
+    );
+
+    const view = await firstSnapshot(await clientRecord());
+    expect(view?.session.state).toBe('RUNNING');
+    expect(view?.facts.ip).toBe('51.15.42.7');
+    expect(view?.facts.joinInfo?.game).toBe('enshrouded');
+    expect(view?.stateSince).toEqual(new Date('2026-09-06T23:00:00Z'));
+  });
 });
 
 /**
  * The first value the subscription yields. `onSnapshot` never fires
  * synchronously, so `unsubscribe` is assigned before the promise can settle.
  */
-function firstSnapshot(record: ClientSessionRecord): Promise<Session | null> {
+function firstSnapshot(record: ClientSessionRecord): Promise<ServerView | null> {
   let unsubscribe = (): void => undefined;
-  const first = new Promise<Session | null>((resolve) => {
+  const first = new Promise<ServerView | null>((resolve) => {
     unsubscribe = record.watch(resolve);
   });
   return first.finally(() => unsubscribe());

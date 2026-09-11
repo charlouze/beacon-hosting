@@ -173,7 +173,7 @@ export class App {
     if (this.subscriptions.length > 0) return;
     const record = this.record();
     this.subscriptions = [
-      record.watch((session) => this.session.set(session)),
+      record.watch((view) => this.session.set(view?.session ?? null)),
       record.watchSettings((settings) => this.settings.set(settings)),
       // The humble gesture: a tab running yesterday's rules against today's
       // deployment cannot be reasoned back into agreement, it can only start
