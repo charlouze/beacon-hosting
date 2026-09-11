@@ -114,6 +114,14 @@ export const WANTED = {
       name: 'run.googleapis.com',
       unlocks: 'le service Cloud Run que chaque Function gen 2 est',
     },
+    // L'activer est ce qui crée le compte compute par défaut — le membre que
+    // deux liaisons d'agents plus bas nomment. Sur un projet neuf, sans elle,
+    // ces liaisons seraient refusées pour nommer un compte qui n'existe pas.
+    {
+      name: 'compute.googleapis.com',
+      unlocks:
+        'le compte compute par défaut, au nom duquel chaque Function tourne — l’activer est ce qui le crée',
+    },
     {
       name: 'cloudbuild.googleapis.com',
       unlocks: 'la construction de leur image',
@@ -138,6 +146,56 @@ export function roleNames(wanted: typeof WANTED = WANTED): string[] {
 
 export function serviceNames(wanted: typeof WANTED = WANTED): string[] {
   return wanted.services.map((service) => service.name);
+}
+
+/**
+ * The bindings `firebase deploy` grants to Google's own service agents on the
+ * first deployment of an event-driven Function — by rewriting the project
+ * policy itself, with `resourcemanager.projects.setIamPolicy`, a right the
+ * deployment account must not hold. The CLI reads before it writes
+ * (checkIam.ts) : bindings already in place, it writes nothing. Granting them
+ * here is what keeps that write unnecessary.
+ *
+ * Derived rather than listed, because every member is a name Google composes
+ * from the project number, and a copied number is the typo this file exists
+ * to prevent.
+ */
+export interface AgentBinding {
+  readonly member: string;
+  readonly role: string;
+  readonly unlocks: string;
+  /**
+   * The API whose service identity is this member — to be materialised before
+   * the binding on a fresh project, where the agent does not exist until
+   * asked for. Absent when the member is created some other way, like the
+   * default compute account that enabling `compute.googleapis.com` creates.
+   */
+  readonly identityOf?: string;
+}
+
+export function agentBindings(wanted: typeof WANTED = WANTED): AgentBinding[] {
+  const pubsubAgent = `serviceAccount:service-${wanted.projectNumber}@gcp-sa-pubsub.iam.gserviceaccount.com`;
+  const defaultCompute = `serviceAccount:${wanted.projectNumber}-compute@developer.gserviceaccount.com`;
+  return [
+    {
+      member: pubsubAgent,
+      role: 'roles/iam.serviceAccountTokenCreator',
+      unlocks:
+        'la signature par Pub/Sub des jetons OIDC qui authentifient les appels du job d’onSchedule',
+      identityOf: 'pubsub.googleapis.com',
+    },
+    {
+      member: defaultCompute,
+      role: 'roles/run.invoker',
+      unlocks:
+        'l’appel par Eventarc du service Cloud Run qu’est chaque Function gen 2',
+    },
+    {
+      member: defaultCompute,
+      role: 'roles/eventarc.eventReceiver',
+      unlocks: 'la réception des événements Firestore par onServerStateChange',
+    },
+  ];
 }
 
 export function accountEmail(wanted: typeof WANTED = WANTED): string {

@@ -48,6 +48,20 @@ export function rolesHeldBeyond(
   );
 }
 
+/**
+ * Whether the policy names this member at all, under any role, condition or
+ * not. A named member exists — Google refuses to bind one that does not —
+ * while absence proves nothing. That asymmetry is the whole use: it decides
+ * when a service agent must be materialised before being bound, without a
+ * gesture that has nothing to do on a project where the agent already lives.
+ */
+export function memberAppearsIn(policyJson: string, member: string): boolean {
+  const policy: IamPolicy = JSON.parse(policyJson);
+  return (policy.bindings ?? []).some((binding) =>
+    (binding.members ?? []).includes(member),
+  );
+}
+
 function rolesHeldBy(policyJson: string, member: string): Set<string> {
   const policy: IamPolicy = JSON.parse(policyJson);
   return new Set(

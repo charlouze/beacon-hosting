@@ -1,4 +1,4 @@
-import { roleNames, serviceNames, WANTED } from './wanted.js';
+import { agentBindings, roleNames, serviceNames, WANTED } from './wanted.js';
 
 describe('WANTED', () => {
   // A role spelled `role/run.admin` matches nothing in a policy, so the audit
@@ -30,6 +30,13 @@ describe('WANTED', () => {
     expect(serviceNames(WANTED)).toContain('iamcredentials.googleapis.com');
   });
 
+  // Enabling compute is what creates the default compute account — the member
+  // two agent bindings below name. On a fresh project, without it, those
+  // bindings would be refused for naming an account that does not exist yet.
+  it('enables compute, whose enablement creates the default compute account', () => {
+    expect(serviceNames(WANTED)).toContain('compute.googleapis.com');
+  });
+
   // The operator confirms one command at a time, and confirms it on what this
   // string says. A role whose reason is empty asks them to grant an
   // administrator right on a project on the strength of its name alone — which
@@ -43,6 +50,35 @@ describe('WANTED', () => {
   it('says of every api why it is enabled', () => {
     expect(
       WANTED.services.filter((service) => service.unlocks.trim() === ''),
+    ).toEqual([]);
+  });
+});
+
+// The same audit as the roles above, because these travel the same pipeline:
+// a member misspelled `service-...@` without its prefix matches nothing in a
+// policy, gets granted, and is reported missing again for ever.
+describe('agentBindings', () => {
+  it('spells every member the way a policy spells one', () => {
+    expect(
+      agentBindings(WANTED).filter(
+        (binding) => !binding.member.startsWith('serviceAccount:'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('spells every role the way a policy spells one', () => {
+    expect(
+      agentBindings(WANTED).filter(
+        (binding) => !binding.role.startsWith('roles/'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('says of every binding what it unblocks', () => {
+    expect(
+      agentBindings(WANTED).filter(
+        (binding) => binding.unlocks.trim() === '',
+      ),
     ).toEqual([]);
   });
 });
