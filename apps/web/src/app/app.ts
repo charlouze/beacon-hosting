@@ -7,10 +7,17 @@ import {
   signal,
 } from '@angular/core';
 import type { FirebaseApp } from 'firebase/app';
-import { connectSessionRecord, type ClientSessionRecord } from '@beacon/session-record/client';
+import {
+  connectSessionRecord,
+  type ClientSessionRecord,
+  type ServerView,
+} from '@beacon/session-record/client';
 import { connectMembershipRecord, type Viewer } from '@beacon/membership-record/client';
-import { DEFAULT_SETTINGS, type Session, type SessionSettings } from '@beacon/session';
+import { DEFAULT_SETTINGS, type Game, type SessionSettings } from '@beacon/session';
+import { SignedOutComponent } from './access/signed-out.component';
+import { VisitorComponent } from './access/visitor.component';
 import { COMPILED_RULES_VERSION } from './rules-version';
+import { SessionPage } from './session/session.page';
 
 export interface FirebaseConnection {
   readonly app: FirebaseApp;
@@ -26,58 +33,75 @@ export interface FirebaseConnection {
 export const FIREBASE_CONNECTION = new InjectionToken<FirebaseConnection>('beacon.connection');
 
 /**
- * The tranche 2 driver, signed in since tranche 4. It is not the screen: the
- * visual world, the five states on one page, the countdown and the release
- * during boot are tranche 5, with the `impeccable` skill and the five firm
- * constraints of `.impeccable/mocks/decision/README.md`.
+ * Starting the tab over. A token and not a call to `location`, for the reason
+ * `CLOCK` is one: the browser's own globals are the one thing a test cannot
+ * replace, and the drift reload is exactly the behaviour that has to be
+ * proven.
+ */
+export const RELOAD = new InjectionToken<() => void>('beacon.reload', {
+  factory: () => () => location.reload(),
+});
+
+/**
+ * The shell, and nothing else: the two connections, the routing between signed
+ * out, visitor and member, the life of the subscriptions, the reload on
+ * version drift, and the passing of actions down to the records.
  *
- * Deliberately unstyled, so that nothing here survives into that work by
- * accident.
+ * Everything visible lives in a component. What the driver did in bare `<h1>`
+ * and `<button>` had no reason to survive — its own comment asked for that.
  */
 @Component({
   selector: 'beacon-root',
   standalone: true,
+  imports: [SessionPage, SignedOutComponent, VisitorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1>Beacon — driver</h1>
-
     @if (member(); as member) {
-      <p>Signed in as {{ member.name }} ({{ member.role }})</p>
-      <button type="button" (click)="signOut()">Sign out</button>
-
-      <p>State: {{ state() }}</p>
-      <p>Closing time: {{ closingTime() }}</p>
-
-      <button type="button" [disabled]="state() !== 'IDLE'" (click)="open()">Start a session</button>
-      <button type="button" [disabled]="!canExtend()" (click)="extend()">Extend by one hour</button>
-      <button type="button" [disabled]="!canStop()" (click)="stop()">Stop</button>
-
-      <p>
-        <label>Steam id <input #steam type="text" [value]="member.steamId ?? ''" /></label>
-        <button type="button" (click)="declareSteamId(steam.value)">Declare</button>
-      </p>
+      <beacon-session-page
+        [view]="view()"
+        [settings]="settings()"
+        [member]="member"
+        (opened)="open($event)"
+        (extended)="extend()"
+        (closed)="stop()"
+        (declared)="declareSteamId($event)"
+        (signedOut)="signOut()"
+      />
     } @else if (visitor(); as name) {
-      <p>{{ name }}: signed in, not a member</p>
-      <button type="button" (click)="signOut()">Sign out</button>
+      <beacon-visitor [name]="name" (signOut)="signOut()" />
     } @else {
-      <button type="button" (click)="signIn()">Sign in</button>
+      <beacon-signed-out (signIn)="signIn()" />
     }
 
     @if (error(); as message) {
-      <p role="alert">{{ message }}</p>
+      <p class="alert" role="alert">{{ message }}</p>
+    }
+  `,
+  styles: `
+    /* A refused write is shown, never swallowed. A band across the bottom, in
+       the one red, because it is a warning and warnings are what that red is
+       for. */
+    .alert {
+      position: fixed;
+      inset: auto 0 0 0;
+      background: var(--red);
+      color: var(--paper);
+      padding: 14px 24px;
+      font-size: 14px;
+      text-align: center;
     }
   `,
 })
 export class App {
   private readonly connection = inject(FIREBASE_CONNECTION);
   private readonly membership = connectMembershipRecord(this.connection);
+  private readonly reload = inject(RELOAD);
 
-  readonly session = signal<Session | null>(null);
+  readonly view = signal<ServerView | null>(null);
   readonly error = signal<string | null>(null);
   private readonly viewer = signal<Viewer>({ kind: 'signed-out' });
-  private readonly settings = signal<SessionSettings>(DEFAULT_SETTINGS);
+  readonly settings = signal<SessionSettings>(DEFAULT_SETTINGS);
 
-  private readonly clock = { now: () => new Date() };
   private subscriptions: (() => void)[] = [];
   private connected: ClientSessionRecord | null = null;
 
@@ -91,22 +115,6 @@ export class App {
     return viewer.kind === 'visitor' ? viewer.identity.name : null;
   });
 
-  readonly state = computed(() => this.session()?.state ?? 'unreadable');
-
-  readonly closingTime = computed(() => {
-    const session = this.session();
-    if (session === null || session.state === 'IDLE') return '—';
-    // Never the raw deadline: the domain bounds on read, so the countdown
-    // cannot walk backwards when the watchdog clamps a forged one (§4).
-    return session.displayedDeadline(this.clock, this.settings()).at.toISOString();
-  });
-
-  readonly canExtend = computed(() =>
-    (this.session()?.canExtend(this.clock, this.settings()) ?? false),
-  );
-
-  readonly canStop = computed(() => this.session()?.canRequestStop() ?? false);
-
   constructor() {
     this.membership.watchViewer(
       (viewer) => this.onViewer(viewer),
@@ -114,13 +122,13 @@ export class App {
     );
   }
 
-  open(): void {
+  open(game: Game): void {
     const member = this.member();
     if (member === null) return;
     this.run(() =>
       this.record().open({
         sessionId: crypto.randomUUID(),
-        game: 'enshrouded',
+        game,
         actor: { uid: member.uid, name: member.name },
       }),
     );
@@ -154,7 +162,7 @@ export class App {
    * Every document the session record reads is a member's (§5), so the
    * subscriptions live exactly as long as the membership does. A visitor left
    * subscribed to `server/current` would be refused by the rules for the whole
-   * life of the tab, and the driver would show an empty state rather than the
+   * life of the tab, and the screen would show an empty board rather than the
    * one thing that is true: it is not a member.
    */
   private onViewer(viewer: Viewer): void {
@@ -169,18 +177,18 @@ export class App {
     if (this.subscriptions.length > 0) return;
     const record = this.record();
     this.subscriptions = [
-      record.watch((view) => this.session.set(view?.session ?? null)),
+      record.watch((view) => this.view.set(view)),
       record.watchSettings((settings) => this.settings.set(settings)),
       // The humble gesture: a tab running yesterday's rules against today's
       // deployment cannot be reasoned back into agreement, it can only start
       // over.
-      record.watchVersionDrift(COMPILED_RULES_VERSION, () => location.reload()),
+      record.watchVersionDrift(COMPILED_RULES_VERSION, () => this.reload()),
     ];
   }
 
   private unfollow(): void {
     for (const stop of this.subscriptions.splice(0)) stop();
-    this.session.set(null);
+    this.view.set(null);
     // Dropped, not kept: the record holds one listener on `config/settings` it
     // opens in its own constructor and offers no way to close. Signing out
     // gets that read refused, which ends the listener for good — and a record
@@ -196,7 +204,7 @@ export class App {
     return this.connected;
   }
 
-  /** Shown rather than swallowed: a refused write is what a driver is for. */
+  /** Shown rather than swallowed: a refused write is what the screen owes back. */
   private run(action: () => Promise<void>): void {
     this.error.set(null);
     action().catch((cause: unknown) => this.error.set(String(cause)));
