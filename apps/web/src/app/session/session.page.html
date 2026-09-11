@@ -1,0 +1,45 @@
+<div class="board">
+  <div class="lede">
+    <div class="wordmark" data-field="wordmark">
+      Beacon @if (game(); as game) {<span>· {{ game }}</span>}
+    </div>
+    <div class="status" [attr.data-tone]="announced().tone">
+      <span class="dot" data-field="state-pip"></span>
+      <span data-field="state">{{ announced().label }}</span>
+    </div>
+  </div>
+  <div class="rule"></div>
+
+  @switch (state()) {
+    @case ('IDLE') {
+      <div data-state-body></div>
+    }
+    @case ('PROVISIONING') {
+      <div data-state-body></div>
+    }
+    @case ('RUNNING') {
+      <div data-state-body></div>
+    }
+    @case ('STOPPING') {
+      <div data-state-body></div>
+    }
+    @case ('FAILED') {
+      <div data-state-body></div>
+    }
+    @default {
+      <div class="mid" data-state-body>
+        <div class="unreadable">
+          <div class="big">The board cannot be read.</div>
+          <div class="sub">
+            Beacon does not know what the server is doing, so it will not guess. Reloading is worth
+            a try; if it says this again, something is wrong at the other end.
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <div class="quiet">
+    <button type="button" data-action="sign-out" (click)="signedOut.emit()">Sign out</button>
+  </div>
+</div>

@@ -1,4 +1,18 @@
-import { BOOT_WINDOW_MS, euroLabel, hourLabel, readyWindow, splitCountdown } from './format';
+import {
+  BOOT_WINDOW_MS,
+  euroLabel,
+  gameLabel,
+  hourLabel,
+  readyWindow,
+  splitCountdown,
+} from './format';
+
+describe('gameLabel', () => {
+  it('writes a game the way it is written on its own box', () => {
+    expect(gameLabel('enshrouded')).toBe('Enshrouded');
+    expect(gameLabel('sunkenland')).toBe('Sunkenland');
+  });
+});
 
 describe('splitCountdown', () => {
   it('separates the falling second, because it is the only thing that is red', () => {

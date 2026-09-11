@@ -1,0 +1,163 @@
+.board {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 64px 36px;
+}
+
+.lede {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wordmark {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.wordmark span {
+  font-weight: 500;
+  color: var(--mute);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The pip stays, its beat does not. The comp animated it; the contract says
+   the falling second is the only motion on the page, and the contract wins. */
+.status .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.status[data-tone='off'] {
+  color: var(--mute);
+}
+
+.status[data-tone='off'] .dot {
+  background: var(--quiet);
+}
+
+.status[data-tone='warn'] {
+  color: var(--red);
+}
+
+.rule {
+  margin-top: 22px;
+}
+
+[data-state-body] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Centred between its two rules, with as much air above as below. The reports
+   left this board a third emptier than the comp it inherits, and the freed
+   height dumped above the actions read as a board left unfinished. */
+.mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.unreadable {
+  padding: 52px 0 46px;
+}
+
+.unreadable .big {
+  font:
+    800 60px/1.02 var(--font-display);
+  letter-spacing: -0.035em;
+  max-width: 20ch;
+}
+
+.unreadable .sub {
+  margin-top: 22px;
+  font-size: 19px;
+  color: var(--mute);
+  max-width: 40ch;
+  line-height: 1.5;
+}
+
+/* What belongs to the person and not to the session. Quiet on purpose: the
+   state is what this page is for, and nothing here competes with it. */
+.quiet {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+.quiet button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: 600 11px/1 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.12s ease-out;
+}
+
+.quiet button:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .board {
+    padding: 26px 24px 24px;
+  }
+
+  .wordmark {
+    font-size: 13px;
+    letter-spacing: 0.26em;
+  }
+
+  .status {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+  }
+
+  .status .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 4 px across 390 px is a bar, not a rule. The phone comp carries the
+     middle weight here and reads the same. */
+  .rule {
+    margin-top: 18px;
+    border-top-width: var(--rule-mid);
+  }
+
+  .unreadable .big {
+    font-size: 33px;
+  }
+
+  .unreadable .sub {
+    font-size: 14.5px;
+  }
+}

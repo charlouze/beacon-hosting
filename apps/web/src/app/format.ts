@@ -1,3 +1,5 @@
+import type { Game } from '@beacon/session';
+
 /**
  * How the screen renders what it is given. Pure functions, no Angular, and no
  * reading of `Date.now()`: each one is handed the instant it needs, which is
@@ -37,6 +39,14 @@ export function splitCountdown(remainingMs: number): {
   const minutes = Math.floor((total % 3600) / 60);
   // The hours are not padded: this is a duration, not a clock face.
   return { hoursMinutes: `${hours}:${pad(minutes)}`, seconds: `:${pad(total % 60)}` };
+}
+
+/**
+ * A game's name as it is written on its own box. The code carries the
+ * lowercase token the document holds; nobody writes their game that way.
+ */
+export function gameLabel(game: Game): string {
+  return game.charAt(0).toUpperCase() + game.slice(1);
 }
 
 /** `HH:MM`, in the reader's own zone — a departure hour is read where it is read. */
