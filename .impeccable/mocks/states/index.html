@@ -1,0 +1,91 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — maquettes des états manquants</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { color-scheme:light; }
+  body {
+    background:#e7e4dc; color:#16181b;
+    font:16px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:48px 26px 80px;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+  .kk { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#6b6f75; display:block; }
+  h1 { font-size:15px; font-weight:800; letter-spacing:.28em; text-transform:uppercase; margin:10px 0 0; }
+  h1 span { font-weight:500; color:#6b6f75; letter-spacing:.1em; text-transform:none; }
+  h2 { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#16181b; margin:34px 0 12px; }
+  .rule { border-top:4px solid #16181b; margin:20px 0 0; }
+  .intro { padding:24px 0 8px; max-width:62ch; color:#4d4a44; font-size:15px; }
+  .intro + .intro { padding-top:0; }
+  .intro b { color:#16181b; }
+  code { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:13px; color:#16181b; }
+  ul.files { list-style:none; }
+  ul.files li a {
+    display:flex; align-items:baseline; gap:18px; padding:20px 2px;
+    border-bottom:1px solid rgba(22,24,27,.18); text-decoration:none; color:inherit;
+  }
+  ul.files li:first-child a { border-top:1px solid rgba(22,24,27,.18); }
+  ul.files li a:hover { background:rgba(18,69,127,.05); }
+  ul.files li a .n { font:800 22px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; width:36px; flex:none; color:#12457f; }
+  ul.files li a .t { flex:1; }
+  ul.files li a .t b { display:block; font-size:17px; font-weight:700; }
+  ul.files li a .t span { display:block; font-size:14px; color:#6b6f75; margin-top:4px; }
+  ul.files li a .go { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.2em; text-transform:uppercase; color:#d8232a; }
+  ol.ask { max-width:62ch; color:#4d4a44; font-size:15px; padding-left:20px; }
+  ol.ask li + li { margin-top:10px; }
+  ol.ask b { color:#16181b; }
+  .out { margin-top:34px; font-size:14px; color:#6b6f75; }
+</style>
+<div class="wrap">
+  <span class="kk">Beacon · tour des états manquants · 2026-09-11</span>
+  <h1>Maquettes <span>— les neuf états d'un seul écran</span></h1>
+  <div class="rule"></div>
+
+  <p class="intro">Le monde visuel ne rejoue pas : <b>The Departure Board</b>, contrat dans
+  <code>../../DIRECTION.md</code>, retenu au tour du 2026-09-02 dont la trace est dans
+  <code>../decision/</code>. Ce tour-ci dessine ce que ce tour-là n'avait pas dessiné — il en
+  couvrait deux états sur cinq — et recompose ce que les reports de périmètre laissent sans
+  donnée.</p>
+
+  <p class="intro"><b>Neuf compositions et non cinq.</b> Le §8 du spec sépare deux pannes que le
+  mot « panne » confondait : un démarrage refusé rend l'écran hors service avec un avertissement
+  et un bouton recliquable, là où <code>FAILED</code> veut dire qu'une machine est restée debout
+  et facture. Et le jeu qui se rejoint par une adresse n'avait jamais eu sa composition, les deux
+  fichiers conservés ne montrant que le cas sans adresse.</p>
+
+  <h2>Les planches</h2>
+  <ul class="files">
+    <li><a href="desktop.html"><span class="n">01</span><span class="t"><b>Écran large — 1440 px</b><span>Les neuf compositions, plus les deux questions ouvertes à l'échelle réelle.</span></span><span class="go">Ouvrir</span></a></li>
+    <li><a href="phone.html"><span class="n">02</span><span class="t"><b>Téléphone — 390 px</b><span>Les mêmes neuf, à la largeur du canapé de 20 h. L'autre moitié du produit.</span></span><span class="go">Ouvrir</span></a></li>
+  </ul>
+
+  <h2>Tranché le 2026-09-11</h2>
+  <ol class="ask">
+    <li><b>La pastille de statut reste</b>, son battement non. La contrainte n° 2 la refusait comme
+    marque de console cloud ; le comp approuvé en portait une, et c'est lui qui gagne. La variante
+    sans pastille reste visible en tête de la planche large, comme trace de ce qui a été refusé.</li>
+    <li><b>Les secondes restent en rouge de signalisation.</b> Le brief de surface autorisait le
+    virage au bleu ; il n'a pas lieu, et le bleu de quai garde l'adresse pour lui seul.</li>
+    <li><b>La ligne de prolongation se place au-dessus du bouton</b>, sur les deux largeurs :
+    l'annonce arrive avant que la main n'atteigne le bouton. C'est la trouvaille du Call Board,
+    adoptée sans son habillage, à la place du texte rouge qui s'excusait sous un bouton grisé.</li>
+  </ol>
+
+  <h2>La seule chose qui reste ouverte</h2>
+  <p class="intro"><b>La typographie</b>, et elle n'était pas dans ce tour : ces planches tournent sur
+  les polices système, ce qui est un repli et non un choix. Il faut une fonte auto-hébergée — donc un
+  binaire dans le dépôt et une licence à retenir — avec le décompte à 172 px pour juge. C'est un tour
+  à elle seule.</p>
+
+  <h2>Ce que ce tour a décidé en cours de route</h2>
+  <p class="intro"><b>La copie passe en anglais.</b> <code>CLAUDE.md</code> et
+  <code>PRODUCT.md</code> l'exigent tous les deux ; les maquettes de décision avaient été jugées
+  en français. Le registre du tableau de gare y survit sans effort — <code>OUT OF SERVICE</code>
+  et <code>IN SERVICE</code> sont les mots des panneaux.</p>
+  <p class="intro">Trois corrections du comp approuvé suivent de son propre contrat : le battement
+  de la pastille disparaît (« la seconde qui tombe est la seule animation de la page »),
+  « Prêt vers » quitte l'écran hors service pour le démarrage (une heure se constate après le
+  clic, elle ne se promet pas avant), et le pied ne porte plus que le coût de la session.</p>
+
+  <p class="out">Aucune dépendance externe : les deux planches s'ouvrent telles quelles dans un
+  navigateur.</p>
+</div>

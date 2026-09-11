@@ -1,0 +1,559 @@
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — the nine states, 390 px</title>
+<style>
+  :root {
+    --paper:#faf8f3; --ink:#16181b; --red:#d8232a; --blue:#12457f;
+    --rule:rgba(22,24,27,.18); --mute:#6b6f75;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:#e7e4dc; color:var(--ink);
+    font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:0 0 80px;
+  }
+  ::selection { background:rgba(216,35,42,.2); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
+  .note { max-width:760px; margin:0 auto; padding:28px 24px 8px; font-size:14px; color:#4d4a44; }
+  .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:var(--ink); }
+  .note p, .note li { max-width:66ch; }
+  .note p + p { margin-top:10px; }
+  .note ul { margin-top:8px; padding-left:18px; }
+  .note li + li { margin-top:6px; }
+
+  /* One true phone column, whatever the window does — a 390 px board that
+     reflows to desktop at 640 px is not a phone mock. The commentary is not
+     the product and gets its own width: read at 390 px it broke every label
+     onto two lines. */
+  .stage { width:620px; margin:0 auto; padding:24px 0 0; display:grid; gap:40px; }
+  .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin-bottom:10px; }
+  .label b { color:var(--ink); font-weight:700; }
+  .ask { font-size:12.5px; color:#4d4a44; margin:-4px 0 12px; }
+
+  /* ---------- the screen ---------- */
+  .screen {
+    width:390px; margin:0 auto;
+    background:var(--paper);
+    box-shadow:0 1px 2px rgba(0,0,0,.14), 0 18px 44px rgba(0,0,0,.16);
+    padding:26px 24px 24px;
+    display:flex; flex-direction:column;
+    min-height:660px;
+  }
+  .screen.short { min-height:520px; }
+  .lede { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .wordmark { font-size:13px; font-weight:800; letter-spacing:.26em; text-transform:uppercase; }
+  .wordmark span { font-weight:500; color:var(--mute); }
+  .status { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap; }
+  .status .dot { width:8px; height:8px; border-radius:50%; background:var(--red); }
+  .status.off { color:var(--mute); }
+  .status.off .dot { background:#b6b2a8; }
+  .status.warn { color:var(--red); }
+  .status.warn .dot { background:var(--red); }
+
+  .band { border-top:3px solid var(--ink); margin-top:18px; }
+  .band.thin { border-top-width:1px; border-color:var(--rule); }
+  .band.red { border-top:3px solid var(--red); }
+
+  .headline { padding:22px 0 18px; }
+  .k { font-size:10px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--mute); }
+  .k.red { color:var(--red); }
+  .clock {
+    font:800 84px/0.86 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-variant-numeric:tabular-nums; letter-spacing:-.035em; margin-top:10px;
+  }
+  .clock .sec { color:var(--red); }
+  /* A window, not an hour: 4 min 49 s and 7 min 58 s measured on the same size
+     in the same zone (probe/RESULTS.md, §S). Stacked here, because two times
+     and a dash do not fit 390 px at this weight. */
+  .clock.range { font-size:52px; line-height:1.04; letter-spacing:-.03em; }
+  .clock.range .to { color:var(--mute); }
+  .closes { display:flex; align-items:baseline; gap:10px; margin-top:14px; }
+  .closes .v { font:700 22px/1 ui-sans-serif, system-ui, sans-serif; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+
+  /* ---------- how to join ---------- */
+  .join { padding:16px 0 2px; }
+  .join > .k { display:block; margin-bottom:4px; }
+  .jrow { padding:13px 0; border-bottom:1px solid var(--rule); }
+  .jrow:last-child { border-bottom:0; }
+  .jrow .top { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:24px; }
+  .jrow .val {
+    margin-top:7px;
+    font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12px; line-height:1.5;
+    letter-spacing:.01em; overflow-wrap:break-word;
+  }
+  /* Each half stays whole so the line breaks on the ~, the only place it means something. */
+  .jrow .val .seg { white-space:nowrap; }
+  .jrow .val.plain { font-family:inherit; font-size:15px; letter-spacing:0; }
+  .jrow .val.host { color:var(--blue); font-weight:600; }
+  .jrow .val .tail { color:var(--mute); }
+
+  .row { display:flex; gap:14px; align-items:baseline; padding:13px 0; border-top:1px solid var(--rule); }
+  .row .k { width:86px; flex:none; padding-top:2px; }
+  .row .v { flex:1; font-size:15px; font-variant-numeric:tabular-nums; }
+
+  .copy {
+    font:600 10px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--mute); border:1px solid var(--rule); padding:5px 7px; background:transparent; cursor:pointer;
+    transition:color .12s ease-out, border-color .12s ease-out;
+  }
+  .copy:hover { color:var(--ink); border-color:var(--ink); }
+  .copy[data-done] { color:var(--red); border-color:var(--red); }
+
+  .plate {
+    margin-top:18px; border:1px solid var(--rule); background:rgba(18,69,127,.045);
+    padding:14px 15px; display:flex; flex-direction:column; gap:9px;
+  }
+  .plate .line { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .plate .v { font-weight:700; font-variant-numeric:tabular-nums; }
+
+  .money { display:flex; gap:26px; padding:16px 0 20px; }
+  .money div .k { display:block; }
+  .money div .v { font:700 19px/1.2 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:6px; }
+  .money div .v.red { color:var(--red); }
+
+  /* ---------- the game, chosen before opening ---------- */
+  .pick { margin-top:auto; padding-top:20px; }
+  .pick > .k { display:block; }
+  .pick .opts { display:flex; gap:9px; margin-top:9px; }
+  .pick button {
+    flex:1; padding:14px 8px; background:transparent; cursor:pointer;
+    border:2px solid #d3cfc4; color:var(--mute);
+    font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    transition:color .12s ease-out, border-color .12s ease-out;
+  }
+  .pick button:hover { color:var(--ink); border-color:#a8a49a; }
+  .pick button[aria-pressed="true"] {
+    color:var(--ink); border-color:var(--ink);
+    box-shadow:inset 0 -5px 0 var(--red);
+  }
+
+  .acts { display:flex; gap:10px; padding-top:14px; }
+  .acts.push { margin-top:auto; }
+  .btn {
+    flex:1; text-align:center; padding:16px 8px; border:2px solid var(--ink); background:var(--ink); color:var(--paper);
+    font:700 12px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn.ghost { background:transparent; color:var(--ink); }
+  .btn.off { border-color:#c9c5ba; color:#b3aea3; background:transparent; cursor:default; }
+  .hint { margin-top:11px; font-size:11.5px; color:var(--red); letter-spacing:.02em; }
+  .hint.grey { color:var(--mute); }
+
+  /* the extension window as an announced line, full width, above the hand */
+  .call { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:16px; padding-top:12px; border-top:1px solid var(--rule); }
+  .call .at { font:700 17px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+  .call .said { font-size:12px; color:var(--mute); }
+
+  .empty { padding:40px 0 6px; }
+  .empty .big { font:800 40px/1.06 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.02em; }
+  .empty .big.sm { font-size:33px; }
+  .empty .sub { margin-top:14px; font-size:14.5px; color:var(--mute); max-width:34ch; }
+
+  /* a refusal reported, and the release: the two blocks the phone needed most */
+  .warn { margin-top:22px; }
+  .warn .said { font-size:15px; margin-top:10px; }
+  .warn .said .quote { display:block; margin-top:6px; font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12px; color:var(--mute); }
+  .release { padding:18px 0 6px; }
+  .release .big { font:800 26px/1.14 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.015em; }
+  .release .sub { margin-top:12px; font-size:14.5px; color:var(--mute); line-height:1.55; }
+</style>
+
+<div class="note">
+  <h1>Beacon — les neuf états, 390 px</h1>
+  <p>Le téléphone n'est pas une réduction de l'écran large : c'est l'autre moitié du produit, et les deux
+  comptent autant. La scène est le canapé vers 20 h, quand la soirée se décide sur Discord et que quelqu'un
+  lance. <code>PRODUCT.md</code> en fait une contrainte, pas une préférence.</p>
+  <p>Les neuf compositions sont les mêmes que sur l'écran large, dans le même ordre, avec les mêmes
+  données. Ce qui change est ce que la largeur impose : le libellé passe au-dessus de la valeur dès qu'une
+  chaîne longue arrive, la coupure de l'identifiant tombe sur le <code>~</code> — seul endroit où elle
+  sépare deux choses plutôt que de couper un identifiant en deux —, et l'action primaire prend toute la
+  largeur en bas.</p>
+  <p>Ces planches tiennent à 390 px quelle que soit la fenêtre, volontairement. Les maquettes de décision
+  se rabattaient en disposition large au-delà de 640 px, et une planche de téléphone qui se relit en
+  desktop ne prouve rien sur le téléphone.</p>
+</div>
+
+<div class="stage">
+
+  <div>
+    <div class="label">1 · Hors service — <b>l'écran le plus souvent vu</b></div>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Nothing is running.</div>
+        <div class="sub">Last opened by Charlouze at 20:14. It closed itself, which is the whole idea.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Next session</span><span class="v">4 h, until 00:14</span></div>
+        <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+      </div>
+
+      <div class="pick">
+        <span class="k">Game</span>
+        <div class="opts" role="group" aria-label="Game for the next session">
+          <button type="button" aria-pressed="false">Enshrouded</button>
+          <button type="button" aria-pressed="true">Sunkenland</button>
+        </div>
+      </div>
+
+      <div class="acts"><div class="btn">Open the service</div></div>
+      <div class="hint grey">We’ll tell you the exact time once it’s on its way.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">2 · Hors service, après un refus — <b><code>IDLE</code> avec <code>lastError</code></b></div>
+    <p class="ask">Le bouton reste, et il change de mot. C'est le §8 : le refus d'un fournisseur ne laisse
+    rien derrière lui, et rien n'empêche de réessayer tout de suite.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big sm">It didn’t start.</div>
+        <div class="sub">Nothing was left running, and nothing is costing anything. Press again — a refusal
+        one minute is usually gone the next.</div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn">
+        <span class="k red">What the host said, at 20:14</span>
+        <div class="said">No capacity left for this machine size in the zone.
+          <span class="quote">— out of stock</span></div>
+      </div>
+
+      <div class="pick">
+        <span class="k">Game</span>
+        <div class="opts" role="group" aria-label="Game for the next session">
+          <button type="button" aria-pressed="false">Enshrouded</button>
+          <button type="button" aria-pressed="true">Sunkenland</button>
+        </div>
+      </div>
+
+      <div class="acts"><div class="btn">Try again</div></div>
+      <div class="hint grey">We’ll tell you the exact time once it’s on its way.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">3 · Démarrage — <b>l'écran qui libère</b></div>
+    <p class="ask">C'est ici que le téléphone compte le plus : on vient de cliquer depuis le canapé, et la
+    bonne chose à faire est de reposer le téléphone. La fourchette de disponibilité occupe donc la place du
+    décompte, et la page le dit en clair au lieu d'occuper l'attente. La fourchette, et non une heure :
+    deux sessions mesurées à 4 min 49 s et 7 min 58 s (<code>probe/RESULTS.md</code>, §S).</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Sunkenland</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="headline">
+        <div class="k">Ready between</div>
+        <div class="clock range">20:19<span class="to"> and </span>20:22</div>
+        <div class="closes"><span class="k">Closes at</span><span class="v">00:14</span></div>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="release">
+        <div class="big">Nothing to watch here.</div>
+        <div class="sub">Put the phone down and go back to your evening. The server will be up, and it
+        will close itself at 00:14 whether anyone comes back to this page or not. Five to eight minutes is
+        what it has taken so far, and it moves with the network.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:20px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.05</span></div>
+        <div><span class="k">Opened by</span><span class="v">Charlouze</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn ghost">Close it now</div></div>
+      <div class="hint grey">The first hour is charged either way.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">4 · En service, sans adresse — <b>le cas difficile, recomposé</b></div>
+    <p class="ask">Le comp approuvé, moins les cumuls reportés, plus la ligne annoncée à la place du texte
+    rouge qui s'excusait sous le bouton.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Sunkenland</span></div>
+        <div class="status"><span class="dot"></span>In service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="headline">
+        <div class="k">Time left</div>
+        <div class="clock" data-clock="10032">2:47<span class="sec">:12</span></div>
+        <div class="closes"><span class="k">Closes at</span><span class="v">00:30</span></div>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="join">
+        <span class="k">How to join</span>
+        <div class="jrow">
+          <div class="top">
+            <span class="k">Server identifier</span>
+            <button class="copy" data-copy="4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241613967341807">Copy</button>
+          </div>
+          <div class="val"><span class="seg">4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~</span><wbr><span class="seg tail">639241613967341807</span></div>
+        </div>
+        <div class="jrow">
+          <div class="top"><span class="k">Region</span></div>
+          <div class="val plain">Europe</div>
+        </div>
+        <div class="jrow">
+          <div class="top"><span class="k">Or in the list</span></div>
+          <div class="val plain">Beacon's World</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="k">Opened</span>
+        <span class="v">20:14 by Charlouze</span>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.13</span></div>
+      </div>
+
+      <div class="call">
+        <span class="k">Extension call</span>
+        <span class="at">00:00</span>
+        <span class="said">thirty minutes before closing</span>
+      </div>
+      <div class="acts push">
+        <div class="btn off">+ 1 hour</div>
+        <div class="btn ghost">Close</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · En service, avec une adresse — <b>la forme jamais dessinée</b></div>
+    <p class="ask">L'adresse et l'IP brute ensemble, toujours : le DNS peut tomber sans que la soirée soit
+    perdue, et c'est une exigence explicite du commanditaire. Ici la fenêtre est ouverte, donc la ligne
+    annoncée dit <b>now</b> et le bouton est vivant — c'est l'écran de l'alt-tab de 23 h 30, sauf qu'on
+    l'atteint aussi depuis le téléphone.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Enshrouded</span></div>
+        <div class="status"><span class="dot"></span>In service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="headline">
+        <div class="k">Time left</div>
+        <div class="clock" data-clock="1783">0:29<span class="sec">:43</span></div>
+        <div class="closes"><span class="k">Closes at</span><span class="v">00:14</span></div>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="join">
+        <span class="k">How to join</span>
+        <div class="jrow">
+          <div class="top">
+            <span class="k">Address</span>
+            <button class="copy" data-copy="enshrouded.beacon.charlouze.com:15637">Copy</button>
+          </div>
+          <div class="val host">enshrouded.beacon.charlouze.com</div>
+        </div>
+        <div class="jrow">
+          <div class="top">
+            <span class="k">Raw ip, if that fails</span>
+            <button class="copy" data-copy="51.159.84.12:15637">Copy</button>
+          </div>
+          <div class="val">51.159.84.12</div>
+        </div>
+        <!-- Printed once, not inside both values: each Copy still yields host
+             and port together, which is what gets pasted. -->
+        <div class="jrow">
+          <div class="top"><span class="k">Port</span></div>
+          <div class="val plain">15637</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="k">Opened</span>
+        <span class="v">20:14 by Charlouze</span>
+      </div>
+
+      <div class="band thin"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.22</span></div>
+      </div>
+
+      <div class="call">
+        <span class="k">Extension call</span>
+        <span class="at">now</span>
+        <span class="said">until it closes</span>
+      </div>
+      <div class="acts push">
+        <div class="btn">+ 1 hour</div>
+        <div class="btn ghost">Close</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">6 · Fermeture — <b>et la seule promesse interdite</b></div>
+    <div class="screen short">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Sunkenland</span></div>
+        <div class="status off"><span class="dot"></span>Closing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big sm">Closing down.</div>
+        <div class="sub">The machine is being destroyed — there is no paused server to come back to, and
+        that is on purpose.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:22px"></div>
+      <div class="release">
+        <div class="big">The world saves on its own schedule.</div>
+        <div class="sub">Every few minutes, and nothing here can force one. The last minutes of an evening
+        may not be in it — the same as if the machine had crashed.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:20px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.22</span></div>
+      </div>
+      <div class="hint grey" style="margin-top:auto">Nothing left to do here.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">7 · Non dégagé — <b><code>FAILED</code>, et le membre n'y peut rien</b></div>
+    <p class="ask">Aucun bouton, parce qu'aucun geste n'est utile : le watchdog retente toutes les cinq
+    minutes jusqu'à ce que ça passe. Le seul chiffre rouge du produit est ici, parce qu'il monte encore.</p>
+    <div class="screen short">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status warn"><span class="dot"></span>Not cleared</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big sm">A machine was left behind.</div>
+        <div class="sub">Last night’s server could not be taken down, so it is still being charged. Beacon
+        retries every five minutes on its own, and it does not give up.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Left behind since</span><span class="v">00:31</span></div>
+        <div class="line"><span class="k">Next retry</span><span class="v">within 5 min</span></div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn">
+        <span class="k red">What the host said, at 00:31</span>
+        <div class="said">The machine is still attached to a volume and will not delete.
+          <span class="quote">— precondition failed</span></div>
+      </div>
+
+      <div class="band thin" style="margin-top:20px"></div>
+      <div class="money">
+        <div><span class="k">Still being charged</span><span class="v red">€0.27</span></div>
+      </div>
+      <div class="hint grey" style="margin-top:auto">Nothing for you to do. Nobody can open a session until
+      it clears.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">8 · Déconnecté — <b>une seule porte</b></div>
+    <div class="screen short">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big sm">A game server that closes itself.</div>
+        <div class="sub">It opens for one evening, with its closing time already set. Anyone in the group
+        can open it, extend it, or close it early.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Group</span><span class="v">By invitation only</span></div>
+        <div class="line"><span class="k">Hosted in</span><span class="v">Paris, France</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn">Sign in with Google</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">9 · Visiteur — <b>connecté, pas sur la liste</b></div>
+    <div class="screen short">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status off">Not a member</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big sm">You’re signed in, but not on the list.</div>
+        <div class="sub">Beacon serves one closed group. Ask whoever runs it to add you, and this page will
+        look very different.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Signed in as</span><span class="v">Alex Durand</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn ghost">Sign out</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // The falling second is the only motion on the page, and only where something falls.
+  document.querySelectorAll('[data-clock]').forEach(el => {
+    let left = Number(el.dataset.clock);
+    setInterval(() => {
+      left = left > 0 ? left - 1 : 0;
+      const h = Math.floor(left / 3600);
+      const m = String(Math.floor(left % 3600 / 60)).padStart(2, '0');
+      const s = String(left % 60).padStart(2, '0');
+      el.innerHTML = h + ':' + m + '<span class="sec">:' + s + '</span>';
+    }, 1000);
+  });
+
+  // The choice records; it never opens anything on its own.
+  document.querySelectorAll('.pick .opts').forEach(group => {
+    group.addEventListener('click', e => {
+      const hit = e.target.closest('button');
+      if (!hit) return;
+      group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === hit)));
+    });
+  });
+
+  // Copying is the whole point of a string nobody reads.
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.copy;
+      if (value && navigator.clipboard) navigator.clipboard.writeText(value).catch(() => {});
+      const label = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.dataset.done = '';
+      setTimeout(() => { btn.textContent = label; delete btn.dataset.done; }, 1400);
+    });
+  });
+</script>
