@@ -2152,8 +2152,12 @@ sans retirer un geste.
 
 Les API correspondantes doivent être activées sur le projet — `run`,
 `compute`, `cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`,
-`pubsub`, `secretmanager`. La console le propose au premier refus ; un
-déploiement en identité fédérée, lui, se contente d'échouer.
+`pubsub`, `secretmanager`, et `cloudbilling`, que la CLI lit avant toute
+Function gen 2 pour vérifier que la facturation est active (trouvée par le
+déploiement du 2026-09-11, un cap après les agents ; la lecture ne demande
+que `resourcemanager.projects.get`, l'API désactivée ne répond juste à
+personne). La console le propose au premier refus ; un déploiement en
+identité fédérée, lui, se contente d'échouer.
 
 Et **`iamcredentials`**, qui n'est dans la liste ci-dessus d'aucun rôle parce
 qu'elle ne sert à aucune étape du déploiement : `google-github-actions/auth`
