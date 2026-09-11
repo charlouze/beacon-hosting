@@ -32,6 +32,29 @@ export interface SessionSettings {
  * compiled into a bundle would silently lie about the only figure this product
  * shows on money (§5).
  */
+/**
+ * What the next session would cost, at its full duration and the deployed
+ * default size. A quote, not a spend: the out-of-service screen shows it
+ * before anything has been opened.
+ *
+ * A question asked of the settings and not of a session, because there is no
+ * session to ask — `estimatedCost` sits on the aggregate, requires fields and
+ * throws on a session that does not exist. And here rather than in a
+ * component: §11 says a made-up figure on the only number this product shows
+ * about money would be worse than none, so the arithmetic of money lives in
+ * one place.
+ *
+ * Same started-hour floor and same refusal as `estimatedCost`, and one
+ * deliberate difference: no rounding to the cent. That one rounds because its
+ * figure is recorded — it becomes `costEuros` on `SessionStopped`. This one is
+ * only ever displayed, and the display rounds.
+ */
+export function forecastCost(settings: SessionSettings): number {
+  const rate = settings.tariffPerHour[settings.defaultInstanceSize];
+  if (rate === undefined) return 0;
+  return Math.max(1, Math.ceil(settings.sessionDurationMs / 3_600_000)) * rate;
+}
+
 export const DEFAULT_SETTINGS: SessionSettings = {
   sessionDurationMs: 4 * 60 * 60_000,
   extensionStepMs: 60 * 60_000,
