@@ -1,1 +1,176 @@
-/* You can add global styles to this file, and also import other style files */
+/**
+ * The world of `.impeccable/DIRECTION.md`, and nothing else. What lives here is
+ * what that contract names — the colours, the three rule weights, the display
+ * scales, the browser's own surfaces — plus the few classes that would
+ * otherwise be copied into five component sheets. Everything a single screen
+ * owns lives in that screen's own stylesheet.
+ *
+ * `world.spec.ts` reads this file and compares it to the contract. It is the
+ * only thing in the repository that can: a hex digit off by one breaks no
+ * build and shows to nobody.
+ */
+:root {
+  --paper: #faf8f3;
+  --ink: #16181b;
+  --red: #d8232a;
+  --blue: #12457f;
+  --rule: rgba(22, 24, 27, 0.18);
+  --mute: #6b6f75;
+
+  /* The quiet greys of the comp: an inert pip, an unselected control, a shut
+     button. Named here because a grey invented per component is how a world
+     stops being one. */
+  --quiet: #b6b2a8;
+  --edge: #d3cfc4;
+  --edge-live: #a8a49a;
+  --off-edge: #c9c5ba;
+  --off-ink: #b3aea3;
+
+  /* Three weights, and only three. 4 px carries the state, 3 px opens a
+     warning, 1 px separates values inside one field. */
+  --rule-heavy: 4px;
+  --rule-mid: 3px;
+  --rule-thin: 1px;
+
+  /* FIRST VIEWPORT fixes both, so they are tokens and not component values.
+     The countdown is the only thing entitled to 172 px; the boot window
+     descends to 112 px because that screen has no countdown to show. */
+  --display-countdown: 172px;
+  --display-window: 112px;
+
+  --font-ui: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* Constraint no. 1, firm over the whole surface: no dark anywhere. Declared
+     rather than left to the user agent, so a form control or a scrollbar
+     cannot come back dark on its own. */
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The browser's own surfaces carry the world too. A default focus ring is a
+   defect: it is the one piece of the interface the design system never wrote
+   and every keyboard user sees. */
+::selection {
+  background: rgba(216, 35, 42, 0.2);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+input {
+  caret-color: var(--red);
+}
+
+/* ---- the three rules, as bands across the full width ---- */
+.rule {
+  border-top: var(--rule-heavy) solid var(--ink);
+}
+
+.rule-mid {
+  border-top: var(--rule-mid) solid var(--ink);
+}
+
+.rule-thin {
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+/* ---- the two typographic voices every screen shares ---- */
+
+/** Spaced capitals: the key of a field, never its value. */
+.k {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.k[data-warn] {
+  color: var(--red);
+}
+
+/** Every figure that lines up under another one. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the primary action, which FIRST VIEWPORT names ---- */
+.btn {
+  padding: 22px 40px;
+  border: 2px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font: 700 14px/1 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btn.xl {
+  padding: 26px 54px;
+  font-size: 15px;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn:disabled {
+  border-color: var(--off-edge);
+  color: var(--off-ink);
+  background: transparent;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --display-countdown: 84px;
+    --display-window: 52px;
+  }
+
+  /* The phone's primary action is anchored full width at the bottom, which is
+     the other half of what FIRST VIEWPORT fixes. */
+  .btn {
+    flex: 1;
+    padding: 16px 8px;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-align: center;
+  }
+
+  .btn.xl {
+    padding: 18px 8px;
+    font-size: 12px;
+  }
+
+  .k {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+  }
+}

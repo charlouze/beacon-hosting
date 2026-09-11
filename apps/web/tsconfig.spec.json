@@ -2,7 +2,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "types": ["vitest/globals"],
+    // `node` is here and not in `tsconfig.app.json` on purpose: the world
+    // contract is checked by reading `styles.css` and `index.html` from disk,
+    // which is the only way anything in this repository can compare
+    // `DIRECTION.md` to what shipped. Application code still has no node.
+    "types": ["vitest/globals", "node"],
     "emitDeclarationOnly": false
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"]
