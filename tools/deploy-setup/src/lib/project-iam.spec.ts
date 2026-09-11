@@ -1,4 +1,8 @@
-import { rolesHeldBeyond, rolesMissingFrom } from './project-iam.js';
+import {
+  memberAppearsIn,
+  rolesHeldBeyond,
+  rolesMissingFrom,
+} from './project-iam.js';
 
 describe('rolesMissingFrom', () => {
   const member =
@@ -82,5 +86,45 @@ describe('rolesHeldBeyond', () => {
     });
 
     expect(rolesHeldBeyond(policy, member, ['roles/run.admin'])).toEqual([]);
+  });
+});
+
+// A member named anywhere in the policy exists — Google refuses to bind a
+// member that does not. Absence proves nothing, and that asymmetry is the
+// whole use: it decides when an agent must be materialised before being bound.
+describe('memberAppearsIn', () => {
+  const agent =
+    'serviceAccount:service-904867606206@gcp-sa-pubsub.iam.gserviceaccount.com';
+
+  it('finds a member bound under any role', () => {
+    const policy = JSON.stringify({
+      bindings: [{ role: 'roles/pubsub.serviceAgent', members: [agent] }],
+    });
+
+    expect(memberAppearsIn(policy, agent)).toBe(true);
+  });
+
+  it('does not find a member the policy never names', () => {
+    const policy = JSON.stringify({
+      bindings: [{ role: 'roles/owner', members: ['user:me@charlouze.com'] }],
+    });
+
+    expect(memberAppearsIn(policy, agent)).toBe(false);
+  });
+
+  // Existence is not a right: a conditional binding proves the member is
+  // there just as well as a plain one.
+  it('finds a member bound only under a condition', () => {
+    const policy = JSON.stringify({
+      bindings: [
+        {
+          role: 'roles/pubsub.serviceAgent',
+          members: [agent],
+          condition: { title: 'expires', expression: 'false' },
+        },
+      ],
+    });
+
+    expect(memberAppearsIn(policy, agent)).toBe(true);
   });
 });

@@ -3,11 +3,16 @@ import {
   faultsInProvider,
   principalSetFor,
 } from './federation.js';
-import { rolesHeldBeyond, rolesMissingFrom } from './project-iam.js';
+import {
+  memberAppearsIn,
+  rolesHeldBeyond,
+  rolesMissingFrom,
+} from './project-iam.js';
 import { servicesMissingFrom } from './services.js';
 import {
   accountEmail,
   accountMember,
+  agentBindings,
   roleNames,
   serviceNames,
   WANTED,
@@ -120,6 +125,60 @@ export function gesturesClosing(readings: Readings, wanted: Wanted): Gesture[] {
         wanted.project,
         `--member=${member}`,
         `--role=${role.name}`,
+        '--condition=None',
+      ],
+    });
+  }
+
+  // Not for the deployment account: `firebase deploy` grants these to
+  // Google's own service agents on the first deployment of an event-driven
+  // Function, by rewriting the project policy itself — with a right the
+  // deployment account must not hold. The CLI reads before it writes, so
+  // bindings already in place are what keeps that write unnecessary.
+  const unboundAgents = agentBindings(wanted).filter(
+    (binding) =>
+      rolesMissingFrom(readings.projectPolicy, binding.member, [binding.role])
+        .length > 0,
+  );
+  // A service identity exists only once asked for: on a fresh project, the
+  // binding below would be refused for naming an agent that is not there yet.
+  // A member the policy already names exists, whatever role names it — only
+  // one the policy never mentions may need materialising.
+  for (const service of new Set(
+    unboundAgents
+      .filter(
+        (binding) => !memberAppearsIn(readings.projectPolicy, binding.member),
+      )
+      .map((binding) => binding.identityOf)
+      .filter((identity): identity is string => identity !== undefined),
+  )) {
+    gestures.push({
+      why: `l’agent de ${service} doit exister avant d’être lié, et sur un projet neuf il n’existe pas encore`,
+      does:
+        `demande à Google de matérialiser l’identité de service de ${service}. Le geste est ` +
+        `idempotent : une identité déjà là est simplement retournée, rien n’est recréé. Il ` +
+        `passe par le composant beta de gcloud, à installer une fois si le geste le refuse : ` +
+        `gcloud components install beta, dans un terminal à soi`,
+      args: [
+        'beta',
+        'services',
+        'identity',
+        'create',
+        `--service=${service}`,
+        `--project=${wanted.project}`,
+      ],
+    });
+  }
+  for (const binding of unboundAgents) {
+    gestures.push({
+      why: `${binding.member} ne porte pas ${binding.role}, que firebase deploy tenterait d’accorder lui-même`,
+      does: `accorde ce rôle à l’agent de service de Google, ce qui débloque ${binding.unlocks}`,
+      args: [
+        'projects',
+        'add-iam-policy-binding',
+        wanted.project,
+        `--member=${binding.member}`,
+        `--role=${binding.role}`,
         '--condition=None',
       ],
     });

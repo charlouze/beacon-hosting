@@ -2118,10 +2118,42 @@ L'appel, lui, est inévitable : `firebase-functions` ≥ 5.1 déclare toujours u
 champ `extensions` dans son manifeste de découverte, même sans extension
 ([firebase-functions#1598](https://github.com/firebase/firebase-functions/issues/1598)).
 
+**Les agents de service de Google, ensuite — trouvés par le déploiement
+suivant, le 2026-09-11.** Au premier déploiement d'une Function à déclencheur,
+`firebase deploy` accorde lui-même trois liaisons aux agents de service du
+projet, en **réécrivant la politique IAM** — avec
+`resourcemanager.projects.setIamPolicy`, un droit que le compte de déploiement
+ne doit pas porter : `Error: We failed to modify the IAM policy for the
+project`. La CLI lit avant d'écrire (`checkIam.ts`) : les liaisons déjà en
+place, elle n'écrit rien. deploy-setup les pose donc d'avance, une par
+assentiment, comme les rôles.
+
+| Membre | Rôle | Ce qu'il débloque |
+|---|---|---|
+| `service-<nº>@gcp-sa-pubsub` | `roles/iam.serviceAccountTokenCreator` | la signature par Pub/Sub des jetons OIDC qui authentifient les appels du job d'`onSchedule` |
+| `<nº>-compute@developer` | `roles/run.invoker` | l'appel par Eventarc du service Cloud Run qu'est chaque Function gen 2 |
+| `<nº>-compute@developer` | `roles/eventarc.eventReceiver` | la réception des événements Firestore par `onServerStateChange` |
+
+Sur un projet neuf, ces agents **n'existent pas encore** — une liaison qui les
+nomme serait refusée. deploy-setup les fait donc exister avant de les lier :
+l'identité Pub/Sub par `gcloud beta services identity create` (idempotent —
+déjà là, elle est retournée ; le composant `beta` s'installe une fois, à la
+main : `gcloud components install beta`, gcloud refusant de le faire depuis
+un shell non interactif), le compte compute par l'activation de
+`compute.googleapis.com`, qui
+rejoint la liste des API pour cette raison. Le geste d'identité ne se propose
+que si la politique du projet ne nomme l'agent nulle part : un membre qu'elle
+nomme existe forcément, et la première passe sur le vrai projet a montré
+l'outil ouvrant sur un geste qui n'avait rien à faire.
+L'option d'un compte d'exécution créé exprès a été écartée : la CLI accorde
+ces liaisons aux agents par défaut inconditionnellement (`checkIam.ts`), quel
+que soit le compte que les Functions déclarent — on paierait un compte de plus
+sans retirer un geste.
+
 Les API correspondantes doivent être activées sur le projet — `run`,
-`cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`, `pubsub`,
-`secretmanager`. La console le propose au premier refus ; un déploiement en
-identité fédérée, lui, se contente d'échouer.
+`compute`, `cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`,
+`pubsub`, `secretmanager`. La console le propose au premier refus ; un
+déploiement en identité fédérée, lui, se contente d'échouer.
 
 Et **`iamcredentials`**, qui n'est dans la liste ci-dessus d'aucun rôle parce
 qu'elle ne sert à aucune étape du déploiement : `google-github-actions/auth`

@@ -1,14 +1,26 @@
 import { gesturesClosing, type Readings } from './gap.js';
-import { accountMember, roleNames, serviceNames, WANTED } from './wanted.js';
+import {
+  accountMember,
+  agentBindings,
+  roleNames,
+  serviceNames,
+  WANTED,
+} from './wanted.js';
 import { principalSetFor } from './federation.js';
 
 const settled: Readings = {
   accountExists: true,
   projectPolicy: JSON.stringify({
-    bindings: roleNames(WANTED).map((role) => ({
-      role,
-      members: [accountMember()],
-    })),
+    bindings: [
+      ...roleNames(WANTED).map((role) => ({
+        role,
+        members: [accountMember()],
+      })),
+      ...agentBindings(WANTED).map((binding) => ({
+        role: binding.role,
+        members: [binding.member],
+      })),
+    ],
   }),
   enabledServices: JSON.stringify(
     serviceNames(WANTED).map((service) => ({
@@ -80,11 +92,10 @@ describe('gesturesClosing', () => {
 
     expect(gestures[0]?.args).toContain('create');
     expect(gestures[0]?.args).toContain(WANTED.account);
-    expect(
-      gestures
-        .slice(1)
-        .every((gesture) => gesture.args.includes('add-iam-policy-binding')),
-    ).toBe(true);
+    const firstGrant = gestures.findIndex((gesture) =>
+      gesture.args.includes(`--member=${accountMember()}`),
+    );
+    expect(firstGrant).toBeGreaterThan(0);
   });
 
   it('names one gesture per missing role', () => {
@@ -93,13 +104,122 @@ describe('gesturesClosing', () => {
       {
         ...settled,
         projectPolicy: JSON.stringify({
-          bindings: kept.map((role) => ({ role, members: [accountMember()] })),
+          bindings: [
+            ...kept.map((role) => ({ role, members: [accountMember()] })),
+            ...agentBindings(WANTED).map((binding) => ({
+              role: binding.role,
+              members: [binding.member],
+            })),
+          ],
         }),
       },
       WANTED,
     );
 
     expect(gestures).toHaveLength(WANTED.roles.length - kept.length);
+  });
+
+  // `firebase deploy` grants these itself on the first deployment of an
+  // event-driven Function, by rewriting the project policy — with
+  // `resourcemanager.projects.setIamPolicy`, a right the deployment account
+  // must not hold. The CLI reads before it writes: bindings already in place,
+  // it writes nothing. These gestures are what keeps that write unnecessary.
+  it('proposes granting each service-agent binding firebase deploy would otherwise write itself', () => {
+    const gestures = gesturesClosing(
+      {
+        ...settled,
+        projectPolicy: JSON.stringify({
+          bindings: roleNames(WANTED).map((role) => ({
+            role,
+            members: [accountMember()],
+          })),
+        }),
+      },
+      WANTED,
+    );
+
+    for (const binding of agentBindings(WANTED)) {
+      expect(
+        gestures.some(
+          (gesture) =>
+            gesture.args.includes(`--member=${binding.member}`) &&
+            gesture.args.includes(`--role=${binding.role}`) &&
+            gesture.does.includes(binding.unlocks),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  // On a fresh project the Pub/Sub agent does not exist until Google
+  // materialises its identity — a binding naming it first would be refused.
+  // The gesture is idempotent: an identity already there is simply returned.
+  it('materialises the pub/sub identity before binding its agent', () => {
+    const gestures = gesturesClosing(
+      {
+        ...settled,
+        projectPolicy: JSON.stringify({
+          bindings: roleNames(WANTED).map((role) => ({
+            role,
+            members: [accountMember()],
+          })),
+        }),
+      },
+      WANTED,
+    );
+
+    const identity = gestures.findIndex((gesture) =>
+      gesture.args.includes('--service=pubsub.googleapis.com'),
+    );
+    const binding = gestures.findIndex((gesture) =>
+      gesture.args.join(' ').includes('@gcp-sa-pubsub'),
+    );
+    expect(identity).toBeGreaterThanOrEqual(0);
+    expect(binding).toBeGreaterThan(identity);
+    expect(gestures[identity]?.args).toContain('identity');
+  });
+
+  it('does not materialise an identity whose agent is already bound', () => {
+    expect(
+      gesturesClosing(settled, WANTED).filter((gesture) =>
+        gesture.args.includes('identity'),
+      ),
+    ).toEqual([]);
+  });
+
+  // Found on the first run against the real project: the agent existed there
+  // — bound as roles/pubsub.serviceAgent since the api was enabled — and the
+  // audit still led with a gesture that had nothing to do. A member the policy
+  // names exists; only one it never names may need materialising.
+  it('does not materialise an identity whose agent the policy already names', () => {
+    const gestures = gesturesClosing(
+      {
+        ...settled,
+        projectPolicy: JSON.stringify({
+          bindings: [
+            ...roleNames(WANTED).map((role) => ({
+              role,
+              members: [accountMember()],
+            })),
+            {
+              role: 'roles/pubsub.serviceAgent',
+              members: [
+                agentBindings(WANTED).map((binding) => binding.member)[0],
+              ],
+            },
+          ],
+        }),
+      },
+      WANTED,
+    );
+
+    expect(
+      gestures.filter((gesture) => gesture.args.includes('identity')),
+    ).toEqual([]);
+    expect(
+      gestures.filter((gesture) =>
+        gesture.args.includes('add-iam-policy-binding'),
+      ).length,
+    ).toBeGreaterThanOrEqual(agentBindings(WANTED).length);
   });
 
   // Each command is confirmed on its own, on the strength of this sentence.
@@ -150,6 +270,10 @@ describe('gesturesClosing', () => {
             ...roleNames(WANTED).map((role) => ({
               role,
               members: [accountMember()],
+            })),
+            ...agentBindings(WANTED).map((binding) => ({
+              role: binding.role,
+              members: [binding.member],
             })),
             {
               role: 'roles/firebase.developViewer',
