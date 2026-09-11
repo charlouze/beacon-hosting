@@ -10,7 +10,6 @@ import type { FirebaseApp } from 'firebase/app';
 import { connectSessionRecord, type ClientSessionRecord } from '@beacon/session-record/client';
 import { connectMembershipRecord, type Viewer } from '@beacon/membership-record/client';
 import { DEFAULT_SETTINGS, type Session, type SessionSettings } from '@beacon/session';
-import { JoinInfoComponent } from './join-info.component';
 import { COMPILED_RULES_VERSION } from './rules-version';
 
 export interface FirebaseConnection {
@@ -38,7 +37,6 @@ export const FIREBASE_CONNECTION = new InjectionToken<FirebaseConnection>('beaco
 @Component({
   selector: 'beacon-root',
   standalone: true,
-  imports: [JoinInfoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1>Beacon — driver</h1>
@@ -53,8 +51,6 @@ export const FIREBASE_CONNECTION = new InjectionToken<FirebaseConnection>('beaco
       <button type="button" [disabled]="state() !== 'IDLE'" (click)="open()">Start a session</button>
       <button type="button" [disabled]="!canExtend()" (click)="extend()">Extend by one hour</button>
       <button type="button" [disabled]="!canStop()" (click)="stop()">Stop</button>
-
-      <beacon-join-info [session]="session()" />
 
       <p>
         <label>Steam id <input #steam type="text" [value]="member.steamId ?? ''" /></label>

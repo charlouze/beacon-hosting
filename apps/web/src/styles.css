@@ -148,7 +148,81 @@ input {
   cursor: default;
 }
 
+/* ---- the join band, which FIRST VIEWPORT names ----
+   Three columns separated by vertical rules, on wide. Here rather than in a
+   component sheet because both shapes of join point wear it, and the day a
+   third game arrives it would be a third copy of the same grid. */
+.join-cols {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.join-cols > div {
+  padding: 20px 28px 22px;
+  border-left: var(--rule-thin) solid var(--rule);
+}
+
+.join-cols > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.join-cols .head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 20px;
+}
+
+.join-cols .v {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  margin-top: 10px;
+  overflow-wrap: break-word;
+}
+
+.join-cols .v.plain {
+  font-family: inherit;
+  font-size: 18px;
+}
+
+/* The quay blue marks the address, and marks nothing else in the system. */
+.join-cols .v.host {
+  color: var(--blue);
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
+  /* One column, the key above its value: a 55-character identifier and a
+     two-column row do not share 390 px. */
+  .join-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .join-cols > div {
+    padding: 13px 0;
+    border-left: 0;
+    border-bottom: var(--rule-thin) solid var(--rule);
+  }
+
+  .join-cols > div:last-child {
+    border-bottom: 0;
+  }
+
+  .join-cols .head {
+    justify-content: space-between;
+  }
+
+  .join-cols .v {
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 7px;
+  }
+
+  .join-cols .v.plain {
+    font-size: 15px;
+  }
+
   :root {
     --display-countdown: 84px;
     --display-window: 52px;
