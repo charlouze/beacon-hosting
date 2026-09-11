@@ -8,6 +8,7 @@ import { InServiceComponent } from './in-service.component';
 import { NotClearedComponent } from './not-cleared.component';
 import { OutOfServiceComponent } from './out-of-service.component';
 import { PreparingComponent } from './preparing.component';
+import { SteamDeclarationComponent } from './steam-declaration.component';
 
 /**
  * What the state is called on the board, and the tone it is announced in.
@@ -47,6 +48,7 @@ const STATES = {
     NotClearedComponent,
     OutOfServiceComponent,
     PreparingComponent,
+    SteamDeclarationComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './session.page.html',

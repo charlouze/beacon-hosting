@@ -10,6 +10,14 @@
   </div>
   <div class="rule"></div>
 
+  <!-- Under the 4 px rule and before the body while it is still being asked
+       for; a quiet control in the foot once it is known. The in-game role
+       does not depend on what is running, so it is offered in all five
+       states. -->
+  @if (member().steamId === null) {
+    <beacon-steam-declaration [steamId]="null" (declared)="declared.emit($event)" />
+  }
+
   @switch (state()) {
     @case ('IDLE') {
       <beacon-out-of-service
@@ -56,6 +64,9 @@
   }
 
   <div class="quiet">
+    @if (member().steamId; as steamId) {
+      <beacon-steam-declaration [steamId]="steamId" (declared)="declared.emit($event)" />
+    }
     <button type="button" data-action="sign-out" (click)="signedOut.emit()">Sign out</button>
   </div>
 </div>

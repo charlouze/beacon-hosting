@@ -1,0 +1,106 @@
+/* A full-width band under the 4 px rule, in the register of a notice board and
+   not of a warning. It asks; it does not interrupt. */
+.band {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  flex-wrap: wrap;
+  padding: 18px 0 20px;
+  border-bottom: var(--rule-thin) solid var(--rule);
+}
+
+.band p {
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--mute);
+  max-width: 54ch;
+}
+
+.entry {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.entry input {
+  font:
+    600 16px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  padding: 8px 2px;
+  min-width: 22ch;
+}
+
+.entry button {
+  padding: 10px 20px;
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font:
+    700 11px/1 var(--font-ui);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease-out;
+}
+
+.entry button:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Once declared it is the value that shows, and not a bare "change": a typo
+   costs the in-game role silently (§5), and nobody can correct what they
+   cannot re-read. */
+.quiet-control {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.quiet-control .k {
+  display: inline;
+}
+
+.quiet-control .value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.quiet-control button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font:
+    600 11px/1 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.12s ease-out;
+}
+
+.quiet-control button:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .band {
+    display: block;
+  }
+
+  .entry {
+    margin-top: 14px;
+  }
+
+  .entry input {
+    min-width: 0;
+    flex: 1;
+  }
+}
