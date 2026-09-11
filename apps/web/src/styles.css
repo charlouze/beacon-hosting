@@ -148,6 +148,83 @@ input {
   cursor: default;
 }
 
+/* ---- the board itself ----
+   Three components dress a board: the session page and the two access
+   screens. The chrome is theirs in common. */
+.board {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 64px 36px;
+}
+
+.lede {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wordmark {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.wordmark span {
+  font-weight: 500;
+  color: var(--mute);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The pip stays, its beat does not. The comp animated it; the contract says
+   the falling second is the only motion on the page, and the contract wins. */
+.status .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.status[data-tone='off'] {
+  color: var(--mute);
+}
+
+.status[data-tone='off'] .dot {
+  background: var(--quiet);
+}
+
+.status[data-tone='warn'] {
+  color: var(--red);
+}
+
+.board > .rule {
+  margin-top: 22px;
+}
+
+/* Centred between its two rules, with as much air above as below. The reports
+   left this board a third emptier than the comp it inherits, and the freed
+   height dumped above the actions read as a board left unfinished. */
+.mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* ---- the board's furniture ----
    FIRST VIEWPORT describes it: the hero band with the figure on the left and
    the hours on the right, the join band beneath, the primary action anchored
@@ -468,6 +545,32 @@ input {
   .k {
     font-size: 10px;
     letter-spacing: 0.22em;
+  }
+
+  .board {
+    padding: 26px 24px 24px;
+  }
+
+  .wordmark {
+    font-size: 13px;
+    letter-spacing: 0.26em;
+  }
+
+  .status {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+  }
+
+  .status .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 4 px across 390 px is a bar, not a rule. The phone comp carries the
+     middle weight here and reads the same. */
+  .board > .rule {
+    margin-top: 18px;
+    border-top-width: var(--rule-mid);
   }
 
   /* The phone is not a narrowed desktop: the hero stacks, the hours line up
