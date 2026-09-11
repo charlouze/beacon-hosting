@@ -137,6 +137,14 @@ export const WANTED = {
       unlocks: 'le sujet sur lequel ce job publie',
     },
     { name: 'secretmanager.googleapis.com', unlocks: 'les cinq secrets' },
+    // Lue, jamais écrite : la CLI demande si la facturation est active avant
+    // de déployer une Function gen 2, et l'API désactivée ne répond à
+    // personne, quels que soient les droits de l'appelant.
+    {
+      name: 'cloudbilling.googleapis.com',
+      unlocks:
+        'la vérification que la facturation est active, que firebase deploy exige avant toute Function gen 2',
+    },
   ],
 } as const;
 

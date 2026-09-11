@@ -37,6 +37,14 @@ describe('WANTED', () => {
     expect(serviceNames(WANTED)).toContain('compute.googleapis.com');
   });
 
+  // Read, never written: `firebase deploy` asks whether billing is active
+  // before deploying any gen 2 Function, and the answer needs only
+  // `resourcemanager.projects.get` — but the API answers nobody while
+  // disabled, whatever rights the caller holds.
+  it('enables cloudbilling, which firebase deploy reads before any gen 2 deploy', () => {
+    expect(serviceNames(WANTED)).toContain('cloudbilling.googleapis.com');
+  });
+
   // The operator confirms one command at a time, and confirms it on what this
   // string says. A role whose reason is empty asks them to grant an
   // administrator right on a project on the strength of its name alone — which
