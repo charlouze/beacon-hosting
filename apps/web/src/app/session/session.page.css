@@ -78,25 +78,6 @@
   justify-content: center;
 }
 
-.unreadable {
-  padding: 52px 0 46px;
-}
-
-.unreadable .big {
-  font:
-    800 60px/1.02 var(--font-display);
-  letter-spacing: -0.035em;
-  max-width: 20ch;
-}
-
-.unreadable .sub {
-  margin-top: 22px;
-  font-size: 19px;
-  color: var(--mute);
-  max-width: 40ch;
-  line-height: 1.5;
-}
-
 /* What belongs to the person and not to the session. Quiet on purpose: the
    state is what this page is for, and nothing here competes with it. */
 .quiet {

@@ -3,6 +3,7 @@ import type { Member } from '@beacon/membership-record/client';
 import type { ServerView } from '@beacon/session-record/client';
 import type { Game, SessionSettings } from '@beacon/session';
 import { gameLabel } from '../format';
+import { InServiceComponent } from './in-service.component';
 
 /**
  * What the state is called on the board, and the tone it is announced in.
@@ -36,6 +37,7 @@ const STATES = {
 @Component({
   selector: 'beacon-session-page',
   standalone: true,
+  imports: [InServiceComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './session.page.html',
   styleUrl: './session.page.css',

@@ -18,7 +18,13 @@
       <div data-state-body></div>
     }
     @case ('RUNNING') {
-      <div data-state-body></div>
+      <beacon-in-service
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (extended)="extended.emit()"
+        (closed)="closed.emit()"
+      />
     }
     @case ('STOPPING') {
       <div data-state-body></div>
@@ -28,8 +34,8 @@
     }
     @default {
       <div class="mid" data-state-body>
-        <div class="unreadable">
-          <div class="big">The board cannot be read.</div>
+        <div class="empty solo">
+          <div class="big sm">The board cannot be read.</div>
           <div class="sub">
             Beacon does not know what the server is doing, so it will not guess. Reloading is worth
             a try; if it says this again, something is wrong at the other end.

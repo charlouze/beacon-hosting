@@ -148,6 +148,228 @@ input {
   cursor: default;
 }
 
+/* ---- the board's furniture ----
+   FIRST VIEWPORT describes it: the hero band with the figure on the left and
+   the hours on the right, the join band beneath, the primary action anchored
+   in the foot. Five state screens wear the same furniture, and five copies of
+   it in five component sheets would be five places for the world to drift
+   apart. What a single screen owns alone stays in that screen's sheet. */
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 60px;
+  padding: 40px 0 44px;
+}
+
+/** The one figure entitled to the display scale, and the only thing that moves. */
+.clock {
+  font:
+    800 var(--display-countdown) / 0.82 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  margin-top: 16px;
+}
+
+.clock .sec {
+  color: var(--red);
+}
+
+/* A window, not an hour. The contract pins the display scale to the time
+   left, and the screen that shows a window has no time left to show. */
+.clock.range {
+  font-size: var(--display-window);
+  letter-spacing: -0.035em;
+}
+
+.clock.range .to {
+  color: var(--mute);
+}
+
+.hero .right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: 12px;
+}
+
+.hero .v {
+  font:
+    700 34px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+
+.hero .v.sm {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.blocklabel {
+  padding: 20px 0 0;
+}
+
+.foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  padding-top: 26px;
+  margin-top: auto;
+}
+
+.money {
+  display: flex;
+  gap: 56px;
+}
+
+.money .v {
+  font:
+    700 26px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  margin-top: 10px;
+}
+
+/* The one red figure of the product, because it is the only one still
+   climbing. Nothing is being compared here: it is a fact, not an argument. */
+.money .v[data-climbing='true'] {
+  color: var(--red);
+}
+
+.btncol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.acts {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+/* The extension window read as an announced programme line, above the hand
+   rather than as a greyed button's excuse. The Call Board's find, adopted
+   without its dressing. */
+.call {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+
+.call .at {
+  font:
+    700 22px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.call .said {
+  font-size: 14px;
+  color: var(--mute);
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.empty {
+  padding: 52px 0 46px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 80px;
+}
+
+.empty.solo {
+  display: block;
+}
+
+.big {
+  font:
+    800 76px/1.02 var(--font-display);
+  letter-spacing: -0.035em;
+  max-width: 13ch;
+}
+
+.big.sm {
+  font-size: 60px;
+  max-width: 20ch;
+}
+
+.sub {
+  margin-top: 22px;
+  font-size: 19px;
+  color: var(--mute);
+  max-width: 40ch;
+  line-height: 1.5;
+}
+
+/* A plate of stated facts beside the headline. The quay blue tints it and
+   marks nothing else. */
+.plate {
+  border: var(--rule-thin) solid var(--rule);
+  background: rgba(18, 69, 127, 0.045);
+  padding: 26px 30px;
+  min-width: 400px;
+}
+
+.plate .line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  padding: 11px 0;
+}
+
+.plate .line + .line {
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+.plate .v {
+  font:
+    700 20px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A refusal reported: the second of the two things the one red is for. */
+.warn {
+  border-top: var(--rule-mid) solid var(--red);
+  padding: 18px 0 0;
+  margin-top: 34px;
+}
+
+.warn .said {
+  font-size: 20px;
+  margin-top: 12px;
+  max-width: 62ch;
+}
+
+/* What the interface says instead of occupying a wait. */
+.release {
+  padding: 16px 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 80px;
+}
+
+.release .big {
+  font-size: 44px;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  max-width: 16ch;
+}
+
+.release .sub {
+  max-width: 44ch;
+  line-height: 1.55;
+  padding-top: 6px;
+  margin-top: 0;
+}
+
 /* ---- the join band, which FIRST VIEWPORT names ----
    Three columns separated by vertical rules, on wide. Here rather than in a
    component sheet because both shapes of join point wear it, and the day a
@@ -246,5 +468,148 @@ input {
   .k {
     font-size: 10px;
     letter-spacing: 0.22em;
+  }
+
+  /* The phone is not a narrowed desktop: the hero stacks, the hours line up
+     beneath the figure, and the actions take the full width at the bottom. */
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 22px 0 18px;
+  }
+
+  .hero .right {
+    text-align: left;
+    flex-direction: row;
+    gap: 28px;
+    padding-bottom: 0;
+  }
+
+  .hero .v {
+    font-size: 22px;
+    margin-top: 6px;
+  }
+
+  .hero .v.sm {
+    font-size: 15px;
+  }
+
+  .clock {
+    line-height: 0.86;
+    letter-spacing: -0.035em;
+    margin-top: 10px;
+  }
+
+  /* Two hours and a dash do not fit 390 px at this weight, so they stack. */
+  .clock.range {
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+
+  .clock.range .to {
+    display: block;
+    font-size: 0.5em;
+  }
+
+  .foot {
+    display: block;
+    padding-top: 16px;
+  }
+
+  .money {
+    gap: 26px;
+    padding-bottom: 16px;
+  }
+
+  .money .v {
+    font-size: 19px;
+    line-height: 1.2;
+    margin-top: 6px;
+  }
+
+  .btncol {
+    align-items: stretch;
+  }
+
+  .acts {
+    gap: 10px;
+  }
+
+  .call {
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: var(--rule-thin) solid var(--rule);
+  }
+
+  .call .at {
+    font-size: 17px;
+  }
+
+  .call .said {
+    font-size: 12px;
+  }
+
+  .hint {
+    margin-top: 11px;
+    font-size: 11.5px;
+  }
+
+  .empty {
+    display: block;
+    padding: 40px 0 6px;
+  }
+
+  .big {
+    font-size: 40px;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    max-width: none;
+  }
+
+  .big.sm {
+    font-size: 33px;
+  }
+
+  .sub {
+    margin-top: 14px;
+    font-size: 14.5px;
+    max-width: 34ch;
+  }
+
+  .plate {
+    margin-top: 18px;
+    min-width: 0;
+    padding: 14px 15px;
+  }
+
+  .plate .v {
+    font-size: 16px;
+  }
+
+  .warn {
+    margin-top: 22px;
+  }
+
+  .warn .said {
+    font-size: 15px;
+  }
+
+  .release {
+    display: block;
+    padding: 18px 0 6px;
+  }
+
+  .release .big {
+    font-size: 26px;
+    line-height: 1.14;
+    letter-spacing: -0.015em;
+  }
+
+  .release .sub {
+    margin-top: 12px;
+    padding-top: 0;
   }
 }
