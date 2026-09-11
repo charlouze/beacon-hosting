@@ -28,11 +28,10 @@ export const WANTED = {
    * `main.ts` exports — `onSchedule`, `onDocumentWritten`, `onRequest`.
    */
   roles: [
-    {
-      name: 'roles/firebasehosting.admin',
-      unlocks: 'la publication de dist/apps/web/browser',
-    },
-    { name: 'roles/firebaserules.admin', unlocks: 'firestore:rules' },
+    // Ni firebasehosting.admin ni firebaserules.admin : firebase.admin, exigé
+    // plus bas par la lecture des extensions, porte toutes leurs permissions.
+    // Les garder ferait relire à l'opérateur deux droits déjà accordés par un
+    // troisième, et masquerait le jour où firebase.admin cessera de suffire.
     {
       name: 'roles/datastore.owner',
       unlocks: 'firestore:indexes, et les écritures du semis et du tampon',
@@ -77,15 +76,21 @@ export const WANTED = {
       name: 'roles/serviceusage.serviceUsageConsumer',
       unlocks: 'le projet de quota des appels d’API',
     },
-    // Trouvé par le premier déploiement, le 2026-09-10 : `firebase deploy`
-    // demande à l'API des extensions quelles Functions déployées appartiennent
-    // à une extension, pour ne pas les supprimer — et il le fait avant de rien
-    // publier, donc un refus arrête tout au départ. La seule permission qui
-    // existe est `firebaseextensions.configs.list`, et ce rôle est le plus
-    // étroit des rôles prédéfinis qui la porte. Il est en lecture seule.
+    // Trouvé par le premier déploiement, le 2026-09-10, puis corrigé le même
+    // jour : `firebase deploy` demande à l'API des extensions quelles Functions
+    // déployées appartiennent à une extension, pour ne pas les supprimer — et
+    // il le fait avant de rien publier, donc un refus arrête tout au départ.
+    // L'API vérifie `firebaseextensions.instances.list`, une permission que
+    // l'IAM cache : absente des permissions octroyables, des métadonnées des
+    // rôles et du Policy Troubleshooter — qui répondait GRANTED pendant que
+    // l'API refusait `roles/firebase.developViewer`, essayé en premier. Seul
+    // ce rôle-ci la porte, un rôle personnalisé ne le peut pas, et rien de
+    // plus étroit n'existe : https://github.com/firebase/firebase-tools/issues/7754
     {
-      name: 'roles/firebase.developViewer',
-      unlocks: 'la lecture des extensions, que firebase deploy interroge avant de publier',
+      name: 'roles/firebase.admin',
+      unlocks:
+        'la lecture des extensions, que firebase deploy interroge avant de publier — ' +
+        'et avec elle la publication de dist/apps/web/browser et firestore:rules',
     },
   ],
 

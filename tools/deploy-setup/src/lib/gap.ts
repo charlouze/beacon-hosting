@@ -3,7 +3,7 @@ import {
   faultsInProvider,
   principalSetFor,
 } from './federation.js';
-import { rolesMissingFrom } from './project-iam.js';
+import { rolesHeldBeyond, rolesMissingFrom } from './project-iam.js';
 import { servicesMissingFrom } from './services.js';
 import {
   accountEmail,
@@ -210,6 +210,30 @@ export function gesturesClosing(readings: Readings, wanted: Wanted): Gesture[] {
         '--role=roles/iam.workloadIdentityUser',
         `--member=${principal}`,
         `--project=${wanted.project}`,
+      ],
+    });
+  }
+
+  // Last, after every grant: between two assents the account must never be
+  // able to do less than it could before — a removal confirmed before the
+  // grant that supersedes it would open exactly that window.
+  for (const role of rolesHeldBeyond(
+    readings.projectPolicy,
+    member,
+    roleNames(wanted),
+  )) {
+    gestures.push({
+      why: `le compte porte ${role}, que la liste ne veut plus`,
+      does:
+        `retire ce rôle du compte, sur tout le projet. Laissé en place, un droit que ` +
+        `plus rien ne justifie survivrait sans trace à la décision qui l’a retiré`,
+      args: [
+        'projects',
+        'remove-iam-policy-binding',
+        wanted.project,
+        `--member=${member}`,
+        `--role=${role}`,
+        '--condition=None',
       ],
     });
   }
