@@ -20,7 +20,12 @@
       />
     }
     @case ('PROVISIONING') {
-      <div data-state-body></div>
+      <beacon-preparing
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (closed)="closed.emit()"
+      />
     }
     @case ('RUNNING') {
       <beacon-in-service
