@@ -472,21 +472,31 @@ glossaire est la langue omniprésente :
 | Métier (français) | Code (anglais) | Ce que c'est |
 |---|---|---|
 | session | `Session` | une partie ouverte, de son démarrage à sa destruction |
-| échéance, *affichée* « heure de fermeture » | `Deadline`, libellé `Closing time` | l'instant auquel le serveur s'arrête |
+| échéance, *affichée* « heure de fermeture » | `Deadline`, libellé `Closes at` | l'instant auquel le serveur s'arrête |
+| temps restant | libellé `Time left` | ce que le décompte affiche : l'écart entre maintenant et l'échéance affichée |
 | prolongation | `extend()` | repousser l'échéance d'un pas, dans la fenêtre |
 | fenêtre de prolongation | `extensionWindow` | les 30 dernières minutes, seul moment où prolonger est possible |
+| appel de prolongation | libellé `Extension call` | l'annonce de l'instant où la fenêtre s'ouvre, lue comme une ligne de programme au-dessus du bouton. La raison d'un bouton fermé est toujours en clair, jamais dans un `title` |
+| durée d'une session | `sessionDurationMs`, libellé `Next session` | ce que dure une session à son ouverture, et la borne du clamp (§6) |
 | gabarit | `InstanceSize` | le calibre de la machine, `DEV1-L` par défaut. Le mot du fournisseur — `flavor` chez OpenStack, *commercial type* chez Scaleway — s'arrête à l'adapter et n'entre pas dans `session` |
 | sauvegarde | `Save` | un état du monde de jeu déposé dans le stockage objet |
 | jeu | `Game` | le jeu qu'une session ouvre, `enshrouded` ou `sunkenland` ; figé à l'ouverture |
-| point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre. Nom de domaine, IP brute et port pour Enshrouded ; identifiant de serveur, région et nom du monde pour Sunkenland |
+| point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre. Pour Enshrouded : `hostname`, libellé `Address` ; `address`, libellé `Raw ip, if that fails` ; `port`, libellé `Port`. Pour Sunkenland : `serverId`, libellé `Server identifier` ; `region`, libellé `Region` ; `worldName`, libellé `Or in the list`. Chaque jeu apporte sa forme (§4) |
 | identifiant Steam | `steamId` | le compte Steam d'un membre, demandé à son premier passage dans l'app. Sert à lui donner le rôle d'administrateur **dans le jeu**, à ne pas confondre avec le rôle `admin` de Beacon |
 | membre | `Member` | une personne autorisée, `player` ou `admin` |
-| l'ouvrant | `startedBy` | le membre qui a lancé la session |
-| hors service | `Idle` | aucune machine ; on peut ouvrir une session |
-| en préparation | `Provisioning` | la machine naît ; l'heure de disponibilité est annoncée |
-| en service | `Running` | le point de jonction est publié, l'échéance court |
-| en fermeture | `Stopping` | la save part, la machine va être détruite |
-| bloqué | `Failed` | le nettoyage n'a pas pu être garanti ; le watchdog y revient |
+| visiteur | `Visitor` | un compte authentifié qui n'est pas membre. Il ne lit rien (§5), et l'écran ne lui montre ni état, ni adresse, ni coût |
+| l'ouvrant | `startedBy` | le membre qui a lancé la session. C'est son `uid` : les règles l'exigent (§7), et le §5 interdit à un joueur de lire le document d'un autre membre — **son nom n'est donc lisible nulle part, et l'écran n'affiche que l'heure** |
+| heure d'ouverture | `startedAt`, libellé `Opened at` | l'instant où la session a été ouverte |
+| hors service | `Idle`, libellé `Out of service` | aucune machine ; on peut ouvrir une session |
+| en préparation | `Provisioning`, libellé `Preparing` | la machine naît ; la fourchette de disponibilité est annoncée |
+| en service | `Running`, libellé `In service` | le point de jonction est publié, l'échéance court |
+| en fermeture | `Stopping`, libellé `Closing` | la save part, la machine va être détruite |
+| bloqué | `Failed`, libellé `Not cleared` | le nettoyage n'a pas pu être garanti ; le watchdog y revient |
+| début d'état | `stateSince`, libellé `Left behind since` | l'instant où l'état courant a commencé. Les délais du §6 s'y mesurent, et c'est de lui que part la fourchette de disponibilité |
+| dernière erreur | `lastError`, libellé `What the host said` | ce que le fournisseur a répondu au dernier échec, borné et expurgé avant d'atteindre un champ lisible (§5) |
+| fourchette de disponibilité | `readyWindow`, libellé `Ready between` | les deux heures entre lesquelles le serveur devrait répondre. **Une fourchette et jamais une heure** : mesuré 4 min 49 s puis 7 min 58 s sur le même gabarit dans la même zone (`probe/RESULTS.md`, §S) |
+| coût de la session | `estimatedCost`, libellé `This session`, et `Still being charged` sur une machine restée debout | ce que la session ouverte a coûté à l'heure entamée (§11). Le second libellé est le seul chiffre rouge du produit, parce qu'il monte encore |
+| coût prévu | `forecastCost`, libellé `Estimated cost` | ce que coûterait la prochaine session à durée pleine. Un devis, pas une dépense |
 | réclamation | `Reclamation` | la décision de détruire ce qu'une session ne peut plus justifier : aucune intention ouverte, un délai d'état dépassé, ou un nettoyage à retenter |
 | remise d'équerre | `reconcile()` | ramener `server/current` à ce que le fournisseur déclare réellement |
 | volume orphelin | `ResourceStranded` | un disque détaché dont aucun tag ne dit l'origine : signalé à son apparition, jamais détruit |
@@ -496,11 +506,17 @@ qu'on peine à nommer dans les deux colonnes est le signe que le modèle est
 faux, pas que la traduction est difficile.
 
 **La colonne du milieu porte aussi le libellé affiché** quand il diffère du nom
-de code : les joueurs lisent « Closing time », le code manipule `Deadline`.
+de code : les joueurs lisent « Closes at », le code manipule `Deadline`.
 Échéance et heure de fermeture sont donc le même terme, le second habillant le
 premier — deux mots pour une chose ne sont tolérés qu'à cette condition. Les
 maquettes de `.impeccable/mocks/` affichent du texte français : contenu
 provisoire, à traduire à l'implémentation.
+
+`Closes at` et non `Closing time` : un nom de champ n'est pas un instant, et le
+comp approuvé écrit une préposition parce que c'est une heure de départ qui
+s'annonce. `Out of service` et `In service` ne sont pas davantage une
+traduction : ce sont les mots des panneaux de transport, et c'est le monde
+visuel retenu qui les appelle.
 
 ### Les ports
 
