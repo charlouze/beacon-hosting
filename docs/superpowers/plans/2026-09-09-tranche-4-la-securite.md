@@ -2095,7 +2095,7 @@ déclencheur pour chaque forme d'appel. `main.ts` en porte trois — `onSchedule
 | `roles/secretmanager.admin` | les cinq secrets de l'étape 5, que le déploiement rattache aux Functions |
 | `roles/iam.serviceAccountUser` | agir au nom du compte d'exécution des Functions |
 | `roles/serviceusage.serviceUsageConsumer` | le projet de quota des appels d'API |
-| `roles/firebase.developViewer` | la lecture des extensions, interrogée avant toute publication |
+| `roles/firebase.admin` | la lecture des extensions, interrogée avant toute publication |
 
 **Le dernier a été trouvé par le premier déploiement, le 2026-09-10**, et la
 liste était fausse jusque-là. `firebase deploy` demande à l'API des extensions
@@ -2106,9 +2106,19 @@ permission`, sur `firebaseextensions.googleapis.com`, juste après la
 compilation des règles. Rien n'était parti, ce qui est le moins mauvais
 moment pour échouer.
 
-La seule permission qui existe est `firebaseextensions.configs.list` —
-l'API expose `/instances`, l'IAM la nomme `configs` — et `firebase.developViewer`
-est le plus étroit des rôles prédéfinis qui la porte. Il est en lecture seule.
+L'API vérifie `firebaseextensions.instances.list`, une permission que l'IAM
+**cache** : absente des permissions octroyables, des métadonnées des rôles et
+du Policy Troubleshooter. Tout l'outillage IAM répondait donc `GRANTED` sur
+`roles/firebase.developViewer`, essayé en premier, pendant que l'API refusait
+— la mesure qui a tranché est un appel direct en usurpant le compte de
+déploiement, vingt-neuf minutes après l'octroi, quand la propagation ne
+pouvait plus être l'explication. Seul `roles/firebase.admin` porte cette
+permission, un rôle personnalisé ne peut pas la recevoir, et rien de plus
+étroit n'existe : c'est documenté par les mainteneurs dans
+[firebase-tools#7754](https://github.com/firebase/firebase-tools/issues/7754).
+L'appel, lui, est inévitable : `firebase-functions` ≥ 5.1 déclare toujours un
+champ `extensions` dans son manifeste de découverte, même sans extension
+([firebase-functions#1598](https://github.com/firebase/firebase-functions/issues/1598)).
 
 Les API correspondantes doivent être activées sur le projet — `run`,
 `cloudbuild`, `artifactregistry`, `eventarc`, `cloudscheduler`, `pubsub`,
