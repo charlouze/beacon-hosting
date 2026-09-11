@@ -2000,6 +2000,11 @@ dans
 [`2026-09-07-tranche-3-les-saves-session.md`](../plans/2026-09-07-tranche-3-les-saves-session.md),
 et les mesures faites sur le compte Scaleway le même jour.
 
+Puis la première mise en production, les 2026-09-10 et 11, relevée dans
+[`2026-09-11-tranche-4-session.md`](../plans/2026-09-11-tranche-4-session.md).
+Elle n'ouvre aucune question de jeu : ce qu'elle mesure est la chaîne de
+livraison elle-même, que rien jusque-là n'avait exercée.
+
 Puis les deux sessions Sunkenland du 2026-09-08, relevées dans
 [`2026-09-09-tranche-3-bis-session.md`](../plans/2026-09-09-tranche-3-bis-session.md) :
 elles ferment quatre questions que ce paragraphe portait encore, et en ouvrent
@@ -2045,6 +2050,10 @@ une que personne n'avait posée — le démarrage dépend de l'histoire du monde
 | Le canal à un seul verbe se comporte-t-il comme écrit ? | **Oui, observé à la seconde le 2026-09-08**, ce que la tranche 3 n'avait pas pu faire. Le drapeau vit **exactement 2 s** — un relevé toutes les 3 s ne le voit pas —, `beacon-stop.path` tire en moins d'une seconde, l'`ExecStartPost=` efface, et l'unité n'est **jamais** `failed`. Le jeu s'arrête en **1 s**, ce qui valide le `trap` amont : sans lui, `docker stop -t 90` aurait attendu 90 s puis tué de force, éventuellement au milieu d'une sauvegarde. |
 | Ce que coûte une sonde qui ne redevient jamais fausse | **Trois minutes de machine facturée par soirée**, mesurées deux fois : **177 s** et **179 s** entre l'arrêt du jeu et la `pre-shutdown`. Le fichier `serverid` survit à l'arrêt du conteneur, donc `stopAndPush` épuise toute sa fenêtre de grâce. Délibéré (§8) et loin sous le filet de `stoppingTimeoutMs`, mais absent des budgets jusqu'ici. |
 | Sous quelle forme le serveur Sunkenland annonce-t-il son identifiant ? | **Sur une seule ligne** — la forme de la section V, mesurée le 2026-09-08 : `Server Start Complete, Ready for Clients to Join. ServerID is '…'.` La section J en donnait une seconde forme, sur trois lignes, qui **ne sort pas**. La ligne d'état suivante porte `ServerID:` sans apostrophe, donc un filtre qui n'apparie que `ServerID is '` ne s'y trompe pas. |
+| Combien de temps une fusion met-elle à atteindre la production ? | **22 min 39 s**, mesuré le 2026-09-11 — dont **17 min 41 s d'attente d'un exécuteur GitHub**, qui est de loin la plus longue étape et ne dépend de rien qu'on écrive ici. Le job lui-même dure 4 min 58 s, `firebase deploy` 1 min 46 s, et les quatre étapes du §10 qui le suivent **16 s**. La barrière complète — lint, tests, build, typecheck de seize projets — coûte **1 min 47 s** : « les tests ralentissent le déploiement » n'a pas de prise, ils pèsent un dixième de l'attente. |
+| Combien de temps un rôle IAM Google met-il à prendre effet ? | **Jusqu'à vingt-neuf minutes**, mesuré le 2026-09-11 en appelant l'API en usurpant le compte de déploiement. Même leçon que sur Scaleway (ligne plus haut) et même piège : une mesure isolée après un geste IAM ne prouve rien, il faut une paire. Un déploiement qui échoue en 403 juste après un octroi n'est pas forcément mal configuré. |
+| La liste des droits qu'un déploiement exige se déduit-elle ? | **Non, et pas même en lisant l'IAM.** Quatre fusions consécutives ont été refusées, chacune révélant un droit que rien n'annonçait. Le cas limite : l'API des extensions vérifie `firebaseextensions.instances.list`, absente des permissions octroyables, des métadonnées des rôles, et du Policy Troubleshooter — qui répondait `GRANTED` pendant que l'API refusait. Seul `roles/firebase.admin` la porte ([firebase-tools#7754](https://github.com/firebase/firebase-tools/issues/7754)), et l'appel est inévitable : `firebase-functions` ≥ 5.1 déclare toujours un champ `extensions` ([firebase-functions#1598](https://github.com/firebase/firebase-functions/issues/1598)). `tools/deploy-setup` existe pour que cette liste, une fois payée, ne se repaie pas. |
+| L'appartenance prend-elle effet sans reconnexion, dans les deux sens ? | **Oui, les deux, constatés le 2026-09-11.** Un visiteur à qui un admin crée son `members/{uid}` devient membre **dans l'onglet déjà ouvert** ; et le document supprimé, ce même onglet **cesse d'afficher des droits**, toujours sans reconnexion. C'est exactement ce que le §5 achète en gardant le rôle en base plutôt qu'en *custom claim* — un claim aurait vécu jusqu'à l'expiration du jeton. Le retrait est la moitié qui compte pour la tranche 5, où un admin rétrograde quelqu'un depuis un écran et doit pouvoir croire ce qu'il voit. |
 
 ### Encore ouvert
 
@@ -2069,6 +2078,13 @@ tag est qu'un fournisseur ne fait pas ce qu'on suppose.
   pourquoi : la restauration d'un monde Enshrouded pèse 72 Ko et passe en une
   fraction de seconde. Le volume qui intéresse cette ligne est celui des 2,3 Go
   de fichiers de jeu, que seule la tranche 3 bis fera tirer par une machine.
+- **Combien de temps une règle Firestore déployée met-elle à prendre effet ?**
+  Personne ne l'a mesuré. La mise en production du 2026-09-11 a déployé les
+  règles et éprouvé leurs refus, mais plusieurs minutes séparaient les deux
+  gestes — assez pour qu'un délai de propagation passe inaperçu. La question
+  compte parce que la barrière du §10 suppose qu'une fusion rend les règles
+  effectives *avant* que quiconque s'y frotte, et rien ne l'a vérifié. Se mesure
+  en déployant une règle qui refuse tout et en la sollicitant à la seconde.
 - **La charge à quatre joueurs**, reportée faute de joueurs le soir de la sonde.
   Elle n'a plus d'enjeu de décision — les 2,6 cœurs mesurés à vide écartent déjà
   tout gabarit à 2 vCPU — mais elle affinera le dimensionnement. À un joueur,

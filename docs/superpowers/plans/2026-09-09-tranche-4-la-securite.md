@@ -2240,7 +2240,7 @@ valeur — ni à l'écran, ni dans un fichier, ni dans `argv`. `SCW_SECRET_KEY` 
 l'outil ne sait rien de l'hébergeur, et ne fige pas une coïncidence qui peut
 cesser.
 
-- [x] **Step 6: Protéger `main`** — faite le 2026-09-10, par un ruleset
+- [ ] **Step 6: Protéger `main`** — faite le 2026-09-10, par un ruleset
 
 Sans cette protection, la barrière du §10 se contourne d'un `git push` et tout
 le raisonnement de cette section tombe.
