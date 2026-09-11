@@ -37,10 +37,10 @@
       />
     }
     @case ('STOPPING') {
-      <div data-state-body></div>
+      <beacon-closing data-state-body [view]="view()!" [settings]="settings()" />
     }
     @case ('FAILED') {
-      <div data-state-body></div>
+      <beacon-not-cleared data-state-body [view]="view()!" [settings]="settings()" />
     }
     @default {
       <div class="mid" data-state-body>

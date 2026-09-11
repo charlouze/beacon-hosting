@@ -3,7 +3,9 @@ import type { Member } from '@beacon/membership-record/client';
 import type { ServerView } from '@beacon/session-record/client';
 import type { Game, SessionSettings } from '@beacon/session';
 import { gameLabel } from '../format';
+import { ClosingComponent } from './closing.component';
 import { InServiceComponent } from './in-service.component';
+import { NotClearedComponent } from './not-cleared.component';
 import { OutOfServiceComponent } from './out-of-service.component';
 import { PreparingComponent } from './preparing.component';
 
@@ -39,7 +41,13 @@ const STATES = {
 @Component({
   selector: 'beacon-session-page',
   standalone: true,
-  imports: [InServiceComponent, OutOfServiceComponent, PreparingComponent],
+  imports: [
+    ClosingComponent,
+    InServiceComponent,
+    NotClearedComponent,
+    OutOfServiceComponent,
+    PreparingComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './session.page.html',
   styleUrl: './session.page.css',
