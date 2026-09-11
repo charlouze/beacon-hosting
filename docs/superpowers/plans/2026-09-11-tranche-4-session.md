@@ -19,7 +19,8 @@ depuis la tranche 3.
 | Le déploiement lit sa propre adresse | ✅ `agentEndpoint` = `https://agentreport-mykl2oqx2a-ew.a.run.app`, **en une seule fusion** |
 | Le premier admin entre par la console | ✅ `{ role: 'admin', email: null, steamId: null }`, la forme que `libs/rules` épingle |
 | Le sujet déclare son propre `steamId` | ✅ l'écriture est passée depuis le pilote, ce qui valide toute la chaîne |
-| Un membre ajouté devient membre **sans se reconnecter** | ✅ constaté — c'est la propriété que le §5 achète en gardant le rôle en base |
+| Un membre ajouté devient membre **sans se reconnecter** | ✅ constaté dans l'onglet déjà ouvert |
+| Un membre dont le document est supprimé **cesse d'avoir des droits, en direct** | ✅ constaté dans le même onglet, sans reconnexion — c'est l'autre moitié de ce que le §5 achète en gardant le rôle en base plutôt qu'en *custom claim*, qui aurait vécu jusqu'à l'expiration du jeton |
 | Le refus est la mesure | ✅ une écriture de `{ steamId, role }` sur son propre document est refusée ; la même sans `role` passe |
 
 ## Les durées

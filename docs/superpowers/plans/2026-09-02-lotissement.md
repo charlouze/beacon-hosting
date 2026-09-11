@@ -73,7 +73,7 @@ un jeu par tranche.
 | 2 | Le cycle | Une session naît, se prolonge et meurt — sans interface | livrée |
 | 3 | Les saves | Le monde survit aux sessions | **livrée le 2026-09-07** |
 | 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | **livrée le 2026-09-08** |
-| 4 | La sécurité | Le système peut être exposé | à venir |
+| 4 | La sécurité | Le système peut être exposé | **livrée le 2026-09-11** |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
 | 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **proposée** |
@@ -272,7 +272,17 @@ règles, `libs/membership-record` qui en est la seule porte côté navigateur,
 lecture**. Le premier admin, lui, entre par la console une fois le système
 déployé : son `uid` Google n'existe pas avant (§5, §10).
 
-**Gate ferme : rien n'est déployé publiquement avant cette tranche.**
+**Gate levé le 2026-09-11.** Il se lève à la fusion, et pas autrement : la
+production *est* `main`, donc la pull request qui ferme la tranche est le geste
+qui expose le système. `beacon.charlouze.com` sert l'application depuis, un
+membre s'y connecte, et ce que les règles refusent a été mesuré — le relevé est
+dans [`2026-09-11-tranche-4-session.md`](2026-09-11-tranche-4-session.md).
+
+Ce que la tranche a laissé derrière elle et qui commande la 5 : la face
+écriture de `libs/membership-record` n'existe pas — ni liste, ni ajout, ni
+retrait, ni changement de rôle —, donc **un membre entre par la console**, le
+premier admin comme les suivants. Et le pilote est laid, et il est en ligne :
+la tranche 5 a maintenant un vrai utilisateur à servir.
 
 ### 5 · L'écran
 
@@ -382,19 +392,25 @@ celle qui en a besoin.
 | Workflow de construction du compagnon vers ghcr.io, tag immuable, test de fumée | 3 |
 | Tag immuable sur l'image amont dans le `cloud-init` | 0 |
 
-**Et il faut dire ce que cette ligne-là coûte, parce qu'elle ne se voit pas.**
-Le §10 pose que « le déploiement se fait à la fusion dans `main` » et que
-« `main` est donc toujours égal à ce qui tourne ». **Ce n'est pas vrai
-aujourd'hui, et ça ne le sera pas avant la tranche 4.** Le seul workflow du
-dépôt est celui des pull requests ; ce qui tourne en production y a été mis par
-un humain lançant `firebase deploy` depuis son poste — la tranche 1 le fait
-faire explicitement, pour les règles et les index.
+**Cette ligne-là a coûté quelque chose, et ce n'est plus le cas depuis le
+2026-09-11.** Le §10 pose que « le déploiement se fait à la fusion dans `main` »
+et que « `main` est donc toujours égal à ce qui tourne ». Ce n'était pas vrai
+jusqu'à la tranche 4 : le seul workflow du dépôt était celui des pull requests,
+et ce qui tournait en production y avait été mis par un humain lançant
+`firebase deploy` depuis son poste — la tranche 1 le fait faire explicitement,
+pour les règles et les index. **`main` pouvait donc différer de la production
+sans que rien ne le signale.**
 
-C'est une conséquence assumée du découpage, pas un oubli : les règles n'ont
-personne à filtrer avant la tranche 4, et un workflow qui déploierait des règles
-fermées ne prouverait rien. Mais **jusque-là, `main` peut différer de la
-production sans que rien ne le signale**, et une session qui lirait le §10 sans
-ce paragraphe croirait le contraire.
+C'était une conséquence assumée du découpage, pas un oubli : les règles n'avaient
+personne à filtrer avant la tranche 4, et un workflow qui aurait déployé des
+règles fermées n'aurait rien prouvé.
+
+**La tranche 4 l'a fait cesser**, et le paragraphe est corrigé plutôt que
+supprimé : une session qui lirait le §10 sans savoir que l'écart a existé ne
+comprendrait pas pourquoi les tranches 1 à 3 bis ont un relevé qui parle de
+déploiements manuels. Depuis la fusion qui a levé le gate, ce qui tourne porte
+la référence du commit déployé dans `config/settings.rulesVersion`, et un onglet
+resté ouvert se recharge quand elle bouge (§4).
 
 ## Ce qui reste ouvert
 
