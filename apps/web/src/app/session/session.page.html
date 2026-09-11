@@ -12,7 +12,12 @@
 
   @switch (state()) {
     @case ('IDLE') {
-      <div data-state-body></div>
+      <beacon-out-of-service
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (opened)="opened.emit($event)"
+      />
     }
     @case ('PROVISIONING') {
       <div data-state-body></div>
