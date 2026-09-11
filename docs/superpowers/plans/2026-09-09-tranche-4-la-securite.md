@@ -2083,8 +2083,6 @@ déclencheur pour chaque forme d'appel. `main.ts` en porte trois — `onSchedule
 
 | Rôle | Ce qu'il débloque |
 |---|---|
-| `roles/firebasehosting.admin` | la publication de `dist/apps/web/browser` |
-| `roles/firebaserules.admin` | `firestore:rules` |
 | `roles/datastore.owner` | `firestore:indexes`, et les écritures du semis et du tampon |
 | `roles/cloudfunctions.admin` | les Functions telles que la CLI les nomme |
 | `roles/run.admin` | gen 2 : chaque Function **est** un service Cloud Run, et `agentReport` y pose `invoker: 'public'` |
@@ -2095,7 +2093,7 @@ déclencheur pour chaque forme d'appel. `main.ts` en porte trois — `onSchedule
 | `roles/secretmanager.admin` | les cinq secrets de l'étape 5, que le déploiement rattache aux Functions |
 | `roles/iam.serviceAccountUser` | agir au nom du compte d'exécution des Functions |
 | `roles/serviceusage.serviceUsageConsumer` | le projet de quota des appels d'API |
-| `roles/firebase.admin` | la lecture des extensions, interrogée avant toute publication |
+| `roles/firebase.admin` | la lecture des extensions, interrogée avant toute publication — et avec elle la publication de `dist/apps/web/browser` et `firestore:rules`, qui n'ont plus leur rôle à part |
 
 **Le dernier a été trouvé par le premier déploiement, le 2026-09-10**, et la
 liste était fausse jusque-là. `firebase deploy` demande à l'API des extensions

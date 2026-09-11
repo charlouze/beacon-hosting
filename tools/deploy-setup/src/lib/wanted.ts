@@ -28,11 +28,10 @@ export const WANTED = {
    * `main.ts` exports — `onSchedule`, `onDocumentWritten`, `onRequest`.
    */
   roles: [
-    {
-      name: 'roles/firebasehosting.admin',
-      unlocks: 'la publication de dist/apps/web/browser',
-    },
-    { name: 'roles/firebaserules.admin', unlocks: 'firestore:rules' },
+    // Ni firebasehosting.admin ni firebaserules.admin : firebase.admin, exigé
+    // plus bas par la lecture des extensions, porte toutes leurs permissions.
+    // Les garder ferait relire à l'opérateur deux droits déjà accordés par un
+    // troisième, et masquerait le jour où firebase.admin cessera de suffire.
     {
       name: 'roles/datastore.owner',
       unlocks: 'firestore:indexes, et les écritures du semis et du tampon',
@@ -89,7 +88,9 @@ export const WANTED = {
     // plus étroit n'existe : https://github.com/firebase/firebase-tools/issues/7754
     {
       name: 'roles/firebase.admin',
-      unlocks: 'la lecture des extensions, que firebase deploy interroge avant de publier',
+      unlocks:
+        'la lecture des extensions, que firebase deploy interroge avant de publier — ' +
+        'et avec elle la publication de dist/apps/web/browser et firestore:rules',
     },
   ],
 

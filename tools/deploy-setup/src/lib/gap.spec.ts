@@ -137,6 +137,61 @@ describe('gesturesClosing', () => {
     ).toBe(true);
   });
 
+  // The project keeps every role a list once wanted, because the gestures only
+  // ever add — so a role the list stops wanting outlives the decision that
+  // retired it, silently, for ever. Found with roles/firebase.developViewer:
+  // replaced in the list, still bound on the project.
+  it('proposes removing a role the account holds that the list no longer wants', () => {
+    const gestures = gesturesClosing(
+      {
+        ...settled,
+        projectPolicy: JSON.stringify({
+          bindings: [
+            ...roleNames(WANTED).map((role) => ({
+              role,
+              members: [accountMember()],
+            })),
+            {
+              role: 'roles/firebase.developViewer',
+              members: [accountMember()],
+            },
+          ],
+        }),
+      },
+      WANTED,
+    );
+
+    expect(gestures).toHaveLength(1);
+    expect(gestures[0]?.args).toContain('remove-iam-policy-binding');
+    expect(gestures[0]?.args).toContain('--role=roles/firebase.developViewer');
+  });
+
+  // A removal confirmed before the grant that supersedes it leaves the account
+  // without the right for as long as the operator hesitates — the grants come
+  // first so that at no point between two assents the account can do less than
+  // it could before.
+  it('grants every missing role before it removes any', () => {
+    const gestures = gesturesClosing(
+      {
+        ...settled,
+        projectPolicy: JSON.stringify({
+          bindings: [
+            {
+              role: 'roles/firebase.developViewer',
+              members: [accountMember()],
+            },
+          ],
+        }),
+      },
+      WANTED,
+    );
+
+    const kinds = gestures.map((gesture) =>
+      gesture.args.includes('remove-iam-policy-binding') ? 'remove' : 'grant',
+    );
+    expect(kinds.indexOf('remove')).toBeGreaterThan(kinds.lastIndexOf('grant'));
+  });
+
   // The provider exists, so no `create` would ever run again — and its
   // condition is what decides whether every repository on GitHub can deploy.
   // Left to `create`, this is the one fault the tool would report for ever and
