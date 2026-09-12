@@ -20,7 +20,17 @@ async function connect(): Promise<FirebaseConnection> {
     // Unreachable is the same answer as unserved.
   }
   return {
-    app: initializeApp({ projectId: 'demo-beacon', apiKey: 'demo' }),
+    app: initializeApp({
+      projectId: 'demo-beacon',
+      apiKey: 'demo',
+      // Asserted and then ignored, and it has to be both. `_getRedirectUrl`
+      // refuses without it — `auth/auth-domain-config-required` — before it
+      // ever looks at whether an emulator is connected; `getHandlerBase` then
+      // drops it and sends the popup to the emulator's own widget. So the
+      // value is never dialled, and its absence made signing in impossible
+      // against the only preproduction this project has (§10).
+      authDomain: 'localhost',
+    }),
     emulator: { host: '127.0.0.1', port: 8080 },
   };
 }
