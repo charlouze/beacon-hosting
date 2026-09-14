@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game } from '@beacon/session';
-import { type BootRequest, renderCloudInit } from './catalog.js';
+import { type BootRequest, refuseWorldLayout, renderCloudInit } from './catalog.js';
 import { REQUEST } from './catalogue-fixtures.spec-helper.js';
 
 /**
@@ -95,5 +95,37 @@ describe('the frontier every boot crosses', () => {
     }
     expect(message).toContain('serverPassword');
     expect(message).not.toContain('hunter');
+  });
+});
+
+describe('refuseWorldLayout', () => {
+  const world = "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b";
+
+  // tar liste avec un ./ de tete, le catalogue juge sans. La normalisation est
+  // commune aux deux jeux, donc elle est ici et pas dans chaque entree.
+  it('normalise le ./ que tar met en tete avant de juger', () => {
+    expect(refuseWorldLayout('sunkenland', [`./${world}/World~0.json`])).toBeNull();
+    expect(refuseWorldLayout('sunkenland', [`${world}/World~0.json`])).toBeNull();
+  });
+
+  it('juge chaque jeu par sa propre entree', () => {
+    expect(refuseWorldLayout('enshrouded', ['./3ad85aea', './3ad85aea-index'])).toBeNull();
+    expect(refuseWorldLayout('enshrouded', [`./${world}/World~0.json`])).not.toBeNull();
+  });
+
+  it('refuse l archive vide, quel que soit le jeu', () => {
+    expect(refuseWorldLayout('sunkenland', [])).not.toBeNull();
+    expect(refuseWorldLayout('enshrouded', [])).not.toBeNull();
+  });
+
+  it('refuse une archive qui ne contient que le marqueur racine de tar comme si elle etait vide', () => {
+    expect(refuseWorldLayout('sunkenland', ['./'])).not.toBeNull();
+    expect(refuseWorldLayout('enshrouded', ['./'])).not.toBeNull();
+  });
+
+  it('ne fait pas figurer le marqueur racine ./ dans la liste que porte le refus', () => {
+    const refusal = refuseWorldLayout('enshrouded', ['./', `./${world}/World~0.json`]);
+    expect(refusal).not.toMatch(/entr(y|ies) \(,/);
+    expect(refusal).not.toContain('(, ');
   });
 });

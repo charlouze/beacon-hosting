@@ -50,6 +50,14 @@ const WORLD_GUID = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
 /** What players read in the server list — their recourse if the identifier is lost (§2). */
 const WORLD_NAME = "Beacon's World";
 
+/**
+ * Measured, `probe/RESULTS.md`: character folders carry the exact same
+ * `<name>~<guid>` shape as a world folder. This is the one discriminant
+ * between them, so `worldLayoutRefusal` below requires it rather than trust
+ * the shape alone.
+ */
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Measured: the region the server registers in, and the one a client filters by. */
 const REGION = 'eu';
 
@@ -480,5 +488,43 @@ export const sunkenland: GameCatalogEntry = {
       return null;
     }
     return { game: GAME, serverId, region: REGION, worldName: WORLD_NAME };
+  },
+
+  worldLayoutRefusal(entries: readonly string[]): string | null {
+    if (entries.length === 0) {
+      return 'the archive is empty: no world folder at all';
+    }
+    const topLevel = new Set<string>();
+    for (const entry of entries) {
+      const slash = entry.indexOf('/');
+      topLevel.add(slash === -1 ? entry : entry.slice(0, slash));
+    }
+    // <name>~<guid> is the shape, but character folders wear it too — the
+    // guid check alone cannot tell a world from a parent-directory mistake
+    // like "Worlds", which does not even carry a tilde.
+    const named = [...topLevel].filter((folder) => {
+      const tilde = folder.lastIndexOf('~');
+      return tilde !== -1 && GUID_RE.test(folder.slice(tilde + 1));
+    });
+    if (named.length === 0) {
+      return `found top-level entr${topLevel.size === 1 ? 'y' : 'ies'} ${[...topLevel].join(', ')}, none shaped like "<name>~<guid>": the archive may have been built from the parent directory`;
+    }
+    // §8: exactly one such folder, and not merely one of them holding a world.
+    // The entry point on the machine counts folders, not worlds — a character
+    // folder travelling alongside the world makes it exit 1 on every boot,
+    // forever. Accepting it here would be an adoption that reports success and
+    // denies every session after it, on the one gesture that has no undo.
+    if (named.length > 1) {
+      return `found ${named.length} "<name>~<guid>" folders (${named.join(', ')}): the machine boots on exactly one, so it would refuse this archive on every session`;
+    }
+    const worlds = named.filter((folder) =>
+      entries.some(
+        (entry) => entry.startsWith(`${folder}/`) && /^World~.*\.json$/.test(entry.slice(folder.length + 1)),
+      ),
+    );
+    if (worlds.length === 0) {
+      return `found ${named.join(', ')} but no World~*.json inside: cannot tell a world folder from a character folder`;
+    }
+    return null;
   },
 };

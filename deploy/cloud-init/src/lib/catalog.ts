@@ -85,6 +85,15 @@ export interface GameCatalogEntry {
    * proof, and it is the most a value that exists only on the machine allows.
    */
   joinInfo(facts: JoinFacts): JoinInfo | null;
+  /**
+   * The measured trap this whole function exists to catch: an archive built
+   * from the wrong directory — `-C` one level too high — produces
+   * `Worlds/Worlds/<monde>`, and the game does not refuse it. It boots a blank
+   * world instead, someone plays on it, and that evening's push becomes the
+   * newest save. Null means the layout starts at the right level; anything
+   * else is the sentence an administrator reads before they adopt.
+   */
+  worldLayoutRefusal(entries: readonly string[]): string | null;
 }
 
 /**
@@ -198,3 +207,15 @@ export const renderCloudInit = (game: Game, request: BootRequest): string => {
 };
 
 export const renderCompose = (game: Game): string => catalogFor(game).compose();
+
+/**
+ * `tar tzf` lists every entry with a leading `./`, and no entry has to know
+ * that three times over. Normalisation lives here, once, and each game's
+ * entry judges paths that never carry it. `./` alone is tar's marker for the
+ * archive root, never an entry a game's world could consist of, so it does not
+ * survive normalisation — an archive that held only it still judges empty.
+ */
+export const refuseWorldLayout = (game: Game, entries: readonly string[]): string | null =>
+  catalogFor(game).worldLayoutRefusal(
+    entries.map((entry) => entry.replace(/^\.\//, '')).filter((entry) => entry !== ''),
+  );

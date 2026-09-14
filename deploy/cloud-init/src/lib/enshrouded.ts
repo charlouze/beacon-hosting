@@ -195,4 +195,23 @@ export const enshrouded: GameCatalogEntry = {
       port: 15637,
     };
   },
+
+  worldLayoutRefusal(entries: readonly string[]): string | null {
+    if (entries.length === 0) {
+      return 'the archive is empty: no save file at all';
+    }
+    // A `<hex>-index` at the archive root, not nested — a `-C` one level too
+    // high buries it under a folder, and that alone is the parent-directory
+    // trap: this never opens the index to read `.latest`, which would be
+    // judging completeness rather than layout.
+    const indexes = entries.filter((entry) => !entry.includes('/') && entry.endsWith('-index'));
+    if (indexes.length === 0) {
+      return `found ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.join(', ')}) but no "<hex>-index" at the archive root`;
+    }
+    const orphaned = indexes.filter((index) => !entries.includes(index.slice(0, -'-index'.length)));
+    if (orphaned.length > 0) {
+      return `${orphaned.join(', ')} names no matching save file at the archive root`;
+    }
+    return null;
+  },
 };

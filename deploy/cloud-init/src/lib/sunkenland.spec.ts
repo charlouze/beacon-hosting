@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
+import { catalogFor, refuseWorldLayout, renderCloudInit, renderCompose } from './catalog.js';
 import { REQUEST, serviceBlock } from './catalogue-fixtures.spec-helper.js';
-import { SERVERID_FILTER } from './sunkenland.js';
+import { SERVERID_FILTER, sunkenland } from './sunkenland.js';
 
 /**
  * The filter is bash, and reading it proves nothing about what it matches: the
@@ -337,5 +337,94 @@ describe('the sunkenland catalogue entry', () => {
   // port made optional (§4).
   it('announces no hostname, so nothing points a dns record at it', () => {
     expect(catalogFor('sunkenland').hostname).toBeNull();
+  });
+});
+
+describe('worldLayoutRefusal', () => {
+  it('accepte un monde a la racine', () => {
+    expect(
+      sunkenland.worldLayoutRefusal([
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json",
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~1.json",
+      ]),
+    ).toBeNull();
+  });
+
+  // Le piege mesure, et celui qui coute un monde : le serveur ne refuse pas
+  // cette archive, il genere un monde vierge par-dessus.
+  it('refuse une archive construite depuis le dossier parent', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      "Worlds/Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json",
+    ]);
+    expect(refusal).toMatch(/Worlds/);
+  });
+
+  // Characters/ porte exactement la meme forme <nom>~<GUID>. Sans le
+  // World~*.json, on adopte un personnage en croyant adopter un monde.
+  it('refuse un dossier de personnages, qui a la meme forme', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      'Charlouze~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/Character~0.json',
+    ]);
+    expect(refusal).toMatch(/World~/);
+  });
+
+  it('refuse deux mondes, faute de savoir lequel adopter', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      'A~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json',
+      'B~5eb62c95-35df-56af-af9f-99c4d8b4cd4c/World~0.json',
+    ]);
+    expect(refusal).toMatch(/2|deux|two/i);
+  });
+
+  // Le §8 dit « exactement un dossier <nom>~<GUID> a la racine » : le dossier
+  // de personnages en est un deuxieme, et le point d'entree compte des
+  // dossiers, pas des mondes. L'accepter ici, c'est adopter une archive sur
+  // laquelle aucune session ne demarrera jamais.
+  it('refuse un dossier de personnages a cote du monde, que la machine compterait', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json",
+      'Charlouze~5eb62c95-35df-56af-af9f-99c4d8b4cd4c/Character~0.json',
+    ]);
+    expect(refusal).toMatch(/Charlouze~5eb62c95-35df-56af-af9f-99c4d8b4cd4c/);
+  });
+
+  it('refuse une archive vide', () => {
+    expect(sunkenland.worldLayoutRefusal([])).not.toBeNull();
+  });
+
+  it('refuse un guid qui n en est pas un', () => {
+    expect(sunkenland.worldLayoutRefusal(['A~pas-un-guid/World~0.json'])).not.toBeNull();
+  });
+});
+
+/**
+ * Le compagnon ne peut pas dependre de ce catalogue en retour (scope:catalog
+ * ne remonte pas vers scope:app), donc cette liste n'a pas d'endroit ou vivre
+ * en partage : elle est dupliquee ici et dans
+ * `deploy/companion/src/lib/world-identity.spec.ts`, sous
+ * `describe('l accord entre le compagnon et le catalogue')`.
+ *
+ * Quatre lecteurs parsent le meme nom de dossier `<nom>~<GUID>` : ce
+ * catalogue (`refuseWorldLayout`, avant que l'archive parte), le point
+ * d'entree bash de la machine, le compagnon (`readWorldIdentity`, apres la
+ * restauration) et `world-depot`. Une divergence entre catalogue et
+ * compagnon est une archive que l'adoption accepte et qu'aucune session ne
+ * pourra jamais ouvrir : ce catalogue plus permissif dit oui puis rapporte
+ * `failed` un soir, le compagnon plus permissif refuse une archive saine.
+ *
+ * Si cette liste change, la liste jumelle doit changer avec elle.
+ */
+describe('l accord entre le compagnon et le catalogue', () => {
+  const GUID = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
+  const names: readonly [string, boolean][] = [
+    [`Beacon's World~${GUID}`, true],
+    [`A~B~${GUID}`, true],
+    ['Worlds', false],
+    ['Mon~monde', false],
+    [GUID, false],
+  ];
+
+  it.each(names)('%s : le catalogue tranche comme le compagnon', (folder, accepted) => {
+    expect(refuseWorldLayout('sunkenland', [`${folder}/World~0.json`]) === null).toBe(accepted);
   });
 });
