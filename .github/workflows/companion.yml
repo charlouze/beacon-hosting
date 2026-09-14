@@ -12,8 +12,9 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   publish:
@@ -52,6 +53,77 @@ jobs:
           push: true
           tags: ghcr.io/charlouze/beacon-companion:${{ steps.version.outputs.value }}
 
-      # The digest is what the cloud-init references, never the tag. Printed
-      # here because a human copies it into the catalogue by hand, in a commit.
+      # The digest is what the cloud-init references, never the tag.
       - run: echo "digest ${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # Read from `main` and never from the tag's commit: what production
+      # renders is `main`'s catalogue, so `main`'s line is the only one worth
+      # comparing. A tag posted on an older commit would otherwise compare
+      # against a digest nothing deploys.
+      - id: pinned
+        run: |
+          git fetch --depth=1 origin main
+          value=$(git show origin/main:deploy/cloud-init/src/lib/companion-image.ts |
+            grep -o 'sha256:[0-9a-f]\{64\}')
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      # Publishing the same bytes twice is the ordinary case of a re-run: no
+      # pull request, because there is nothing to change.
+      - if: steps.pinned.outputs.value == steps.push.outputs.digest
+        run: echo "catalogue already pins this digest, nothing to open" >> "$GITHUB_STEP_SUMMARY"
+
+      # The step that closes the gap this project paid for once: a companion was
+      # published, the catalogue kept pinning the previous image, and a Function
+      # that already expected the new report met the old companion. Every
+      # Sunkenland session stayed `provisioning` until someone thought of the one
+      # line nobody had been told to change.
+      #
+      # A pull request, not a push to `main`: the merge stays the deployment and
+      # stays a human's decision (§10). What disappears is the copy-paste, never
+      # the gate.
+      #
+      # Caveat worth knowing before relying on it: a pull request opened with
+      # `GITHUB_TOKEN` does not trigger `pull_request` workflows, so `verify`
+      # will not run on it. Closing and reopening it by hand does trigger them —
+      # as would swapping this token for a personal one, at the cost of a secret
+      # to hold.
+      - if: steps.pinned.outputs.value != steps.push.outputs.digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          branch="companion-image-${VERSION}"
+          file=deploy/cloud-init/src/lib/companion-image.ts
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$branch" origin/main
+          sed -i "s|beacon-companion@sha256:[0-9a-f]\{64\}|beacon-companion@${DIGEST}|" "$file"
+
+          git commit -q -m "build(cloud-init): epingle le compagnon ${VERSION}" -- "$file"
+          # Forced because re-running a tag must update its branch rather than
+          # fail on one that already exists.
+          git push -q --force-with-lease origin "$branch"
+
+          # `--head` alone answers whether the pull request is already open: a
+          # re-run then updates the branch it already has, and opening a second
+          # one would split the review in two.
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$branch" \
+              --title "build(cloud-init): epingle le compagnon ${VERSION}" \
+              --body "$(printf '%s\n' \
+                "L'image \`${VERSION}\` vient d'etre publiee et le catalogue epingle encore la precedente." \
+                '' \
+                'Tant que cette ligne ne bouge pas, les machines demarrent le compagnon'  \
+                "d'avant — et une Function qui attend deja son nouveau rapport ne publie" \
+                'aucun point de jonction.' \
+                '' \
+                "Digest : \`${DIGEST}\`" \
+                '' \
+                '> Ouverte par `companion.yml` apres la barriere du test de fumee.' \
+                "> \`verify\` ne s'est pas declenche : une pull request ouverte par le" \
+                '> `GITHUB_TOKEN` ne declenche pas les workflows `pull_request`. La fermer' \
+                '> et la rouvrir les lance.')"
+          fi
