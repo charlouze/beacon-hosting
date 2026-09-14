@@ -6,6 +6,22 @@ name: deploy
 on:
   push:
     branches: [main]
+    # Un lot qui ne touche que du markdown ne produit rien à publier : ni règle,
+    # ni index, ni Function, ni bundle. Le déployer ferait tourner un `firebase
+    # deploy` complet pour republier à l'identique, et surtout réécrirait
+    # `config/settings.rulesVersion` avec un commit dont le bundle n'a pas
+    # changé — le garde de dérive du §4 recharge alors chaque onglet ouvert pour
+    # une virgule dans un plan.
+    #
+    # GitHub ne saute le lot que si **tous** ses fichiers correspondent : un
+    # commit qui touche du code et sa doc déploie, comme avant.
+    #
+    # Ce filtre est ici et **pas dans `pull-request.yml`** : les tests doivent
+    # tourner sur toute pull request, y compris documentaire. Un dépôt qui
+    # cesserait de vérifier un lot parce qu'il a l'air inoffensif est un dépôt
+    # qui découvre ses liens le jour où l'un d'eux casse.
+    paths-ignore:
+      - '**.md'
 
 concurrency:
   group: deploy

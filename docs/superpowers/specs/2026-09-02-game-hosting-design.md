@@ -1827,8 +1827,36 @@ que les joueurs utilisent.
 
 **Le déploiement se fait à la fusion dans `main`**, par GitHub Actions. `main`
 est donc toujours égal à ce qui tourne : aucun écart possible entre le dépôt et
-la production, et personne ne peut oublier de déployer. Le workflow s'arrête à
-la première étape rouge :
+la production, et personne ne peut oublier de déployer.
+
+**Une exception depuis le 2026-09-14, et elle est étroite** : un lot dont
+**tous** les fichiers sont du markdown ne déclenche pas le workflow. Il ne
+produit rien à publier — ni règle, ni index, ni Function, ni bundle —, donc le
+déployer republierait l'identique. Ce qui a décidé n'est pas le temps de
+calcul : c'est que le déploiement réécrit `config/settings.rulesVersion`, et
+que le garde de dérive du §4 recharge alors **tous les onglets ouverts** pour
+une virgule dans un plan.
+
+Ce que la phrase ci-dessus devient exactement : `main` reste égal à ce qui
+tourne **pour tout ce qui se déploie**, et peut porter de la documentation plus
+récente que le dernier déploiement. Aucun onglet ne le voit, puisque ni le
+bundle ni `rulesVersion` n'ont bougé — ils restent d'accord, ce qui est
+précisément la propriété que le §4 protège.
+
+Ce que ça coûte, et il faut le savoir avant d'en dépendre : **un lot
+documentaire ne rattrape plus un déploiement précédent qui aurait échoué.**
+Jusqu'ici n'importe quelle fusion relançait le workflow complet et réparait un
+rouge au passage ; ce n'est plus vrai de celles-là. Après un déploiement rouge,
+c'est une fusion qui touche du code qui répare, ou la relance du workflow à la
+main.
+
+Le filtre est sur le déploiement seul, **jamais sur la CI de pull request** :
+les tests tournent sur toute pull request, y compris documentaire. Un dépôt qui
+cesserait de vérifier un lot parce qu'il a l'air inoffensif est un dépôt qui
+découvre ses liens le jour où l'un d'eux casse — et `apps/web` porte déjà un
+test qui lit d'autres fichiers du dépôt pour les comparer.
+
+Le workflow s'arrête à la première étape rouge :
 
 1. lint, tests unitaires de `libs/*`, build ;
 2. **tests des règles Firestore contre l'émulateur** — c'est une barrière : les
