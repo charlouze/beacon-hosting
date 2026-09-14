@@ -45,7 +45,8 @@ run = "npx nx run @beacon/functions:seed"
 [tasks.stamp]
 description = "Tamponne rulesVersion et agentEndpoint dans l'emulateur"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
-run = "npx nx run @beacon/functions:stamp -- dev {{arg(name='endpoint')}}"
+usage = '''arg "<endpoint>" help="L'url du tunnel du jour, ou la machine ira rapporter"'''
+run = "npx nx run @beacon/functions:stamp -- dev {{ usage.endpoint }}"
 
 # Le build efface `dist/`, et l'emulateur y cherche deux fichiers : `.env` pour
 # les parametres, `.secret.local` pour les secrets — `defineSecret` ne lit pas
