@@ -45,7 +45,8 @@ run = "npx nx run @beacon/functions:seed"
 [tasks.stamp]
 description = "Tamponne rulesVersion et agentEndpoint dans l'emulateur"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
-run = "npx nx run @beacon/functions:stamp -- dev {{arg(name='endpoint')}}"
+usage = '''arg "<endpoint>" help="L'url du tunnel du jour, ou la machine ira rapporter"'''
+run = "npx nx run @beacon/functions:stamp -- dev {{ usage.endpoint }}"
 
 # Le build efface `dist/`, et l'emulateur y cherche deux fichiers : `.env` pour
 # les parametres, `.secret.local` pour les secrets — `defineSecret` ne lit pas
@@ -76,6 +77,46 @@ run = "npx firebase emulators:start --config firebase.dev.json --project demo-be
 [tasks.serve]
 description = "Sert le pilote, qui ne parle qu'a l'emulateur"
 run = "npx nx serve web"
+
+# Les quatre personnes que l'emulateur ne peut pas inventer seul. Le semis n'en
+# cree aucune — en production le premier uid n'existe qu'apres une connexion —
+# et cette contrainte-la ne protege rien en local. Elles portent un fournisseur
+# `google.com` parce que c'est la seule connexion que l'app propose.
+[tasks.personas]
+description = "Seme admin, player, rookie et visitor dans l'emulateur Auth et dans members"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
+run = "npx nx run @beacon/functions:personas"
+
+# Le tableau n'a pas de route : l'ecran affiche est une lecture de
+# `server/current`. Le choisir, c'est donc ecrire ce document — et l'onglet
+# ouvert suit sans rechargement, puisqu'il y est abonne.
+[tasks.screen]
+description = "Met le serveur dans l'etat que l'ecran a voir demande (idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
+usage = 'arg "<screen>" help="idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
+run = "npx nx run @beacon/functions:screen -- {{ usage.screen }}"
+
+# Regarder des ecrans ne demande ni tunnel, ni Functions, ni machine : seulement
+# les deux emulateurs que l'app interroge, et de quoi s'y connecter. D'ou
+# `emulators:exec` plutot que `emulators:start` — il tient les emulateurs le
+# temps d'une commande, donc l'ordre semis, personas, pilote est garanti par la
+# structure, et Ctrl-C sur le pilote les arrete tous les trois.
+#
+# `--ui` parce que `exec` ne la lance pas, la ou `start` la lance : c'est la
+# seule difference genante entre les deux, et l'ui est ou l'on va lire ce qu'une
+# session vient d'ecrire.
+[tasks.dev]
+description = "Monte Firestore et Auth avec leur ui, seme tout, et sert le pilote — l'emulateur seul, rien de facturable"
+run = 'npx firebase emulators:exec --config firebase.dev.json --project demo-beacon --only firestore,auth --ui "mise run dev-app"'
+
+[tasks.dev-app]
+description = "Ce que `dev` lance une fois les emulateurs debout — pas a appeler seul"
+hide = true
+run = [
+  "npx nx run @beacon/functions:seed",
+  "npx nx run @beacon/functions:personas",
+  "npx nx serve web",
+]
 
 # Les sept gestes d'une soiree d'essai, dans le seul ordre qui marche. L'ordre
 # n'est pas un confort : `apps/functions/dist/.env` est une copie que le build

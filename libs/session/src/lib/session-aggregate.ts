@@ -118,6 +118,13 @@ export class Session {
     return this.required().startedBy;
   }
 
+  /** Null on a session that does not exist, like `sessionId` and `game`: the
+   * out-of-service screen reads this object without knowing whether it carries
+   * one. */
+  get startedAt(): Date | null {
+    return this.fields === null ? null : new Date(this.fields.startedAt.getTime());
+  }
+
   get instanceSize(): InstanceSize | null {
     return this.fields?.instanceSize ?? null;
   }

@@ -113,4 +113,29 @@ describe('Session', () => {
     });
     expect(session.estimatedCost(at('2026-09-06T21:00:00Z'), S)).toBe(0);
   });
+
+  // The screen names the hour a session was opened, as it already names who
+  // opened it. Two fields of the same nature, from the same document, for the
+  // same line: one without the other was an oversight, not a decision.
+  it('names the hour a session was opened, as it already names who opened it', () => {
+    const startedAt = new Date('2026-09-12T20:14:00');
+    const session = Session.from({
+      state: 'RUNNING',
+      sessionId: 'sess1',
+      game: 'sunkenland',
+      startedBy: 'Charlouze',
+      startedAt,
+      deadline: Deadline.at(new Date('2026-09-13T00:14:00')),
+      instanceSize: 'DEV1-L',
+      hasJoinInfo: true,
+    });
+    expect(session.startedAt).toEqual(startedAt);
+  });
+
+  // Null and not a throw, like `sessionId` and `game` before it: the
+  // out-of-service screen reads this object without knowing whether it carries
+  // a session at all.
+  it('says nothing about an hour no session has', () => {
+    expect(Session.idle().startedAt).toBeNull();
+  });
 });

@@ -26,6 +26,22 @@ export interface ServerFacts {
   readonly references: { readonly instanceId: string; readonly ipId: string };
 }
 
+/**
+ * What publishing a join point writes, as fields. Extracted from `publish` so
+ * that the round trip can call the very function the writer calls: a test that
+ * recopied this object by hand would only prove that the two copies agree with
+ * each other.
+ */
+export function factsPatch(facts: ServerFacts): Record<string, unknown> {
+  return {
+    ip: facts.ip,
+    joinInfo: facts.joinInfo,
+    instanceSize: facts.instanceSize,
+    instanceId: facts.references.instanceId,
+    ipId: facts.references.ipId,
+  };
+}
+
 export interface ServerStateStore {
   read(): Promise<ServerRecord | null>;
   /** The same document, as the domain reads it. Null when it is unreadable. */
@@ -93,11 +109,7 @@ export function serverStateStore(db: Firestore): ServerStateStore {
         {
           state: 'RUNNING',
           stateSince: Timestamp.fromDate(at),
-          ip: facts.ip,
-          joinInfo: facts.joinInfo,
-          instanceSize: facts.instanceSize,
-          instanceId: facts.references.instanceId,
-          ipId: facts.references.ipId,
+          ...factsPatch(facts),
         },
         { merge: true },
       );

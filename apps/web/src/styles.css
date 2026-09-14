@@ -1,1 +1,718 @@
-/* You can add global styles to this file, and also import other style files */
+/**
+ * The world of `.impeccable/DIRECTION.md`, and nothing else. What lives here is
+ * what that contract names — the colours, the three rule weights, the display
+ * scales, the browser's own surfaces — plus the few classes that would
+ * otherwise be copied into five component sheets. Everything a single screen
+ * owns lives in that screen's own stylesheet.
+ *
+ * `world.spec.ts` reads this file and compares it to the contract. It is the
+ * only thing in the repository that can: a hex digit off by one breaks no
+ * build and shows to nobody.
+ */
+:root {
+  --paper: #faf8f3;
+  --ink: #16181b;
+  --red: #d8232a;
+  --blue: #12457f;
+  --rule: rgba(22, 24, 27, 0.18);
+  --mute: #6b6f75;
+
+  /* The quiet greys of the comp: an inert pip, an unselected control, a shut
+     button. Named here because a grey invented per component is how a world
+     stops being one. */
+  --quiet: #b6b2a8;
+  --edge: #d3cfc4;
+  --edge-live: #a8a49a;
+  --off-edge: #c9c5ba;
+  --off-ink: #b3aea3;
+
+  /* Three weights, and only three. 4 px carries the state, 3 px opens a
+     warning, 1 px separates values inside one field. */
+  --rule-heavy: 4px;
+  --rule-mid: 3px;
+  --rule-thin: 1px;
+
+  /* FIRST VIEWPORT fixes both, so they are tokens and not component values.
+     The countdown is the only thing entitled to 172 px; the boot window
+     descends to 112 px because that screen has no countdown to show. */
+  --display-countdown: 172px;
+  --display-window: 112px;
+
+  --font-ui: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* Constraint no. 1, firm over the whole surface: no dark anywhere. Declared
+     rather than left to the user agent, so a form control or a scrollbar
+     cannot come back dark on its own. */
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The browser's own surfaces carry the world too. A default focus ring is a
+   defect: it is the one piece of the interface the design system never wrote
+   and every keyboard user sees. */
+::selection {
+  background: rgba(216, 35, 42, 0.2);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+input {
+  caret-color: var(--red);
+}
+
+/* ---- the three rules, as bands across the full width ---- */
+.rule {
+  border-top: var(--rule-heavy) solid var(--ink);
+}
+
+.rule-mid {
+  border-top: var(--rule-mid) solid var(--ink);
+}
+
+.rule-thin {
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+/* ---- the two typographic voices every screen shares ---- */
+
+/** Spaced capitals: the key of a field, never its value. */
+.k {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.k[data-warn] {
+  color: var(--red);
+}
+
+/** Every figure that lines up under another one. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the primary action, which FIRST VIEWPORT names ---- */
+.btn {
+  padding: 22px 40px;
+  border: 2px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font: 700 14px/1 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btn.xl {
+  padding: 26px 54px;
+  font-size: 15px;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn:disabled {
+  border-color: var(--off-edge);
+  color: var(--off-ink);
+  background: transparent;
+  cursor: default;
+}
+
+/* ---- the board itself ----
+   Three components dress a board: the session page and the two access
+   screens. The chrome is theirs in common. */
+.board {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 64px 36px;
+}
+
+.lede {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wordmark {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.wordmark span {
+  font-weight: 500;
+  color: var(--mute);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The pip stays, its beat does not. The comp animated it; the contract says
+   the falling second is the only motion on the page, and the contract wins. */
+.status .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.status[data-tone='off'] {
+  color: var(--mute);
+}
+
+.status[data-tone='off'] .dot {
+  background: var(--quiet);
+}
+
+.status[data-tone='warn'] {
+  color: var(--red);
+}
+
+.board > .rule {
+  margin-top: 22px;
+}
+
+/* Centred between its two rules, with as much air above as below. The reports
+   left this board a third emptier than the comp it inherits, and the freed
+   height dumped above the actions read as a board left unfinished. */
+.mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ---- the board's furniture ----
+   FIRST VIEWPORT describes it: the hero band with the figure on the left and
+   the hours on the right, the join band beneath, the primary action anchored
+   in the foot. Five state screens wear the same furniture, and five copies of
+   it in five component sheets would be five places for the world to drift
+   apart. What a single screen owns alone stays in that screen's sheet. */
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 60px;
+  padding: 40px 0 44px;
+}
+
+/** The one figure entitled to the display scale, and the only thing that moves. */
+.clock {
+  font:
+    800 var(--display-countdown) / 0.82 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  margin-top: 16px;
+}
+
+.clock .sec {
+  color: var(--red);
+}
+
+/* A window, not an hour. The contract pins the display scale to the time
+   left, and the screen that shows a window has no time left to show. */
+.clock.range {
+  font-size: var(--display-window);
+  letter-spacing: -0.035em;
+}
+
+.clock.range .to {
+  color: var(--mute);
+}
+
+.hero .right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: 12px;
+}
+
+.hero .v {
+  font:
+    700 34px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+
+.hero .v.sm {
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.blocklabel {
+  padding: 20px 0 0;
+}
+
+.foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  padding-top: 26px;
+  margin-top: auto;
+}
+
+.money {
+  display: flex;
+  gap: 56px;
+}
+
+.money .v {
+  font:
+    700 26px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  margin-top: 10px;
+}
+
+/* The one red figure of the product, because it is the only one still
+   climbing. Nothing is being compared here: it is a fact, not an argument. */
+.money .v[data-climbing='true'] {
+  color: var(--red);
+}
+
+.btncol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.acts {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+/* The extension window read as an announced programme line, above the hand
+   rather than as a greyed button's excuse. The Call Board's find, adopted
+   without its dressing. */
+.call {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+
+.call .at {
+  font:
+    700 22px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.call .said {
+  font-size: 14px;
+  color: var(--mute);
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.empty {
+  padding: 52px 0 46px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 80px;
+}
+
+.empty.solo {
+  display: block;
+}
+
+.big {
+  font:
+    800 76px/1.02 var(--font-display);
+  letter-spacing: -0.035em;
+  max-width: 13ch;
+}
+
+.big.sm {
+  font-size: 60px;
+  max-width: 20ch;
+}
+
+.sub {
+  margin-top: 22px;
+  font-size: 19px;
+  color: var(--mute);
+  max-width: 40ch;
+  line-height: 1.5;
+}
+
+/* A plate of stated facts beside the headline. The quay blue tints it and
+   marks nothing else. */
+.plate {
+  border: var(--rule-thin) solid var(--rule);
+  background: rgba(18, 69, 127, 0.045);
+  padding: 26px 30px;
+  min-width: 400px;
+}
+
+.plate .line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  padding: 11px 0;
+}
+
+.plate .line + .line {
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+.plate .v {
+  font:
+    700 20px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A refusal reported: the second of the two things the one red is for. */
+.warn {
+  border-top: var(--rule-mid) solid var(--red);
+  padding: 18px 0 0;
+  margin-top: 34px;
+}
+
+.warn .said {
+  font-size: 20px;
+  margin-top: 12px;
+  max-width: 62ch;
+}
+
+/* What the interface says instead of occupying a wait. */
+.release {
+  padding: 16px 0 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 80px;
+}
+
+.release .big {
+  font-size: 44px;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  max-width: 16ch;
+}
+
+.release .sub {
+  max-width: 44ch;
+  line-height: 1.55;
+  padding-top: 6px;
+  margin-top: 0;
+}
+
+/* ---- the join band, which FIRST VIEWPORT names ----
+   Three columns separated by vertical rules, on wide. Here rather than in a
+   component sheet because both shapes of join point wear it, and the day a
+   third game arrives it would be a third copy of the same grid. */
+.join-cols {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.join-cols > div {
+  padding: 20px 28px 22px;
+  border-left: var(--rule-thin) solid var(--rule);
+}
+
+.join-cols > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.join-cols .head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 20px;
+}
+
+.join-cols .v {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  margin-top: 10px;
+  overflow-wrap: break-word;
+}
+
+.join-cols .v.plain {
+  font-family: inherit;
+  font-size: 18px;
+}
+
+/* The quay blue marks the address, and marks nothing else in the system. */
+.join-cols .v.host {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  /* One column, the key above its value: a 55-character identifier and a
+     two-column row do not share 390 px. */
+  .join-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .join-cols > div {
+    padding: 13px 0;
+    border-left: 0;
+    border-bottom: var(--rule-thin) solid var(--rule);
+  }
+
+  .join-cols > div:last-child {
+    border-bottom: 0;
+  }
+
+  .join-cols .head {
+    justify-content: space-between;
+  }
+
+  .join-cols .v {
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 7px;
+  }
+
+  .join-cols .v.plain {
+    font-size: 15px;
+  }
+
+  :root {
+    --display-countdown: 84px;
+    --display-window: 52px;
+  }
+
+  /* The phone's primary action is anchored full width at the bottom, which is
+     the other half of what FIRST VIEWPORT fixes. */
+  .btn {
+    flex: 1;
+    padding: 16px 8px;
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-align: center;
+  }
+
+  .btn.xl {
+    padding: 18px 8px;
+    font-size: 12px;
+  }
+
+  .k {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+  }
+
+  .board {
+    padding: 26px 24px 24px;
+  }
+
+  .wordmark {
+    font-size: 13px;
+    letter-spacing: 0.26em;
+  }
+
+  .status {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+  }
+
+  .status .dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 4 px across 390 px is a bar, not a rule. The phone comp carries the
+     middle weight here and reads the same. */
+  .board > .rule {
+    margin-top: 18px;
+    border-top-width: var(--rule-mid);
+  }
+
+  /* The phone is not a narrowed desktop: the hero stacks, the hours line up
+     beneath the figure, and the actions take the full width at the bottom. */
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 22px 0 18px;
+  }
+
+  .hero .right {
+    text-align: left;
+    flex-direction: row;
+    gap: 28px;
+    padding-bottom: 0;
+  }
+
+  .hero .v {
+    font-size: 22px;
+    margin-top: 6px;
+  }
+
+  .hero .v.sm {
+    font-size: 15px;
+  }
+
+  .clock {
+    line-height: 0.86;
+    letter-spacing: -0.035em;
+    margin-top: 10px;
+  }
+
+  /* Two hours and a dash do not fit 390 px at this weight, so they stack. */
+  .clock.range {
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+
+  .clock.range .to {
+    display: block;
+    font-size: 0.5em;
+  }
+
+  .foot {
+    display: block;
+    padding-top: 16px;
+  }
+
+  .money {
+    gap: 26px;
+    padding-bottom: 16px;
+  }
+
+  .money .v {
+    font-size: 19px;
+    line-height: 1.2;
+    margin-top: 6px;
+  }
+
+  .btncol {
+    align-items: stretch;
+  }
+
+  .acts {
+    gap: 10px;
+  }
+
+  .call {
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: var(--rule-thin) solid var(--rule);
+  }
+
+  .call .at {
+    font-size: 17px;
+  }
+
+  .call .said {
+    font-size: 12px;
+  }
+
+  .hint {
+    margin-top: 11px;
+    font-size: 11.5px;
+  }
+
+  .empty {
+    display: block;
+    padding: 40px 0 6px;
+  }
+
+  .big {
+    font-size: 40px;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    max-width: none;
+  }
+
+  .big.sm {
+    font-size: 33px;
+  }
+
+  .sub {
+    margin-top: 14px;
+    font-size: 14.5px;
+    max-width: 34ch;
+  }
+
+  .plate {
+    margin-top: 18px;
+    min-width: 0;
+    padding: 14px 15px;
+  }
+
+  .plate .v {
+    font-size: 16px;
+  }
+
+  .warn {
+    margin-top: 22px;
+  }
+
+  .warn .said {
+    font-size: 15px;
+  }
+
+  .release {
+    display: block;
+    padding: 18px 0 6px;
+  }
+
+  .release .big {
+    font-size: 26px;
+    line-height: 1.14;
+    letter-spacing: -0.015em;
+  }
+
+  .release .sub {
+    margin-top: 12px;
+    padding-top: 0;
+  }
+}

@@ -91,6 +91,60 @@ export function sessionFrom(data: Record<string, unknown>): Session | null {
   });
 }
 
+/**
+ * `server/current` as the *screen* reads it, and nothing more. §4: of the
+ * reserved facts, three are displayed — the `ip`, which the screen shows
+ * beside the domain name, the `joinInfo`, which it makes readable and
+ * copyable, and `lastError`, which says a previous attempt failed.
+ *
+ * A second reading of the same document, for a second reader. The domain still
+ * sees none of these: `Session` keeps its `hasJoinInfo` boolean, because
+ * `RUNNING` means the join point exists and the model has no business knowing
+ * what it contains.
+ */
+export interface DisplayedFacts {
+  readonly ip: string | null;
+  readonly joinInfo: JoinInfo | null;
+  readonly lastError: string | null;
+}
+
+/**
+ * The same discipline as `sessionFrom`: what the vocabulary does not recognise
+ * becomes null, never an invented object. A half-written shape is refused
+ * whole — the screen prints every field it is handed, so half a join point
+ * would be a line telling a player to copy `undefined`.
+ */
+function joinInfoFrom(value: unknown): JoinInfo | null {
+  const data = (value ?? {}) as Record<string, unknown>;
+  const game = data['game'];
+  if (!isGame(game)) return null;
+
+  const text = (key: string): string | null =>
+    typeof data[key] === 'string' ? (data[key] as string) : null;
+
+  if (game === 'enshrouded') {
+    const hostname = text('hostname');
+    const address = text('address');
+    const port = data['port'];
+    if (hostname === null || address === null || typeof port !== 'number') return null;
+    return { game, hostname, address, port };
+  }
+
+  const serverId = text('serverId');
+  const region = text('region');
+  const worldName = text('worldName');
+  if (serverId === null || region === null || worldName === null) return null;
+  return { game, serverId, region, worldName };
+}
+
+export function displayedFactsFrom(data: Record<string, unknown>): DisplayedFacts {
+  return {
+    ip: typeof data['ip'] === 'string' ? data['ip'] : null,
+    joinInfo: joinInfoFrom(data['joinInfo']),
+    lastError: typeof data['lastError'] === 'string' ? data['lastError'] : null,
+  };
+}
+
 export function settingsFrom(data: Record<string, unknown>): SessionSettings {
   const number = (key: keyof SessionSettings, fallback: number): number =>
     typeof data[key] === 'number' ? (data[key] as number) : fallback;

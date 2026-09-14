@@ -1,0 +1,72 @@
+<div class="board">
+  <div class="lede">
+    <div class="wordmark" data-field="wordmark">
+      Beacon @if (game(); as game) {<span>· {{ game }}</span>}
+    </div>
+    <div class="status" [attr.data-tone]="announced().tone">
+      <span class="dot" data-field="state-pip"></span>
+      <span data-field="state">{{ announced().label }}</span>
+    </div>
+  </div>
+  <div class="rule"></div>
+
+  <!-- Under the 4 px rule and before the body while it is still being asked
+       for; a quiet control in the foot once it is known. The in-game role
+       does not depend on what is running, so it is offered in all five
+       states. -->
+  @if (member().steamId === null) {
+    <beacon-steam-declaration [steamId]="null" (declared)="declared.emit($event)" />
+  }
+
+  @switch (state()) {
+    @case ('IDLE') {
+      <beacon-out-of-service
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (opened)="opened.emit($event)"
+      />
+    }
+    @case ('PROVISIONING') {
+      <beacon-preparing
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (closed)="closed.emit()"
+      />
+    }
+    @case ('RUNNING') {
+      <beacon-in-service
+        data-state-body
+        [view]="view()!"
+        [settings]="settings()"
+        (extended)="extended.emit()"
+        (closed)="closed.emit()"
+      />
+    }
+    @case ('STOPPING') {
+      <beacon-closing data-state-body [view]="view()!" [settings]="settings()" />
+    }
+    @case ('FAILED') {
+      <beacon-not-cleared data-state-body [view]="view()!" [settings]="settings()" />
+    }
+    @default {
+      <div class="mid" data-state-body>
+        <div class="empty solo">
+          <div class="big sm">The board cannot be read.</div>
+          <div class="sub">
+            Beacon does not know what the server is doing, so it will not guess. Reloading is worth
+            a try; if it says this again, something is wrong at the other end.
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <div class="quiet">
+    @if (member().steamId; as steamId) {
+      <beacon-steam-declaration [steamId]="steamId" (declared)="declared.emit($event)" />
+    }
+    <button type="button" data-action="sign-out" (click)="signedOut.emit()">Sign out</button>
+  </div>
+</div>

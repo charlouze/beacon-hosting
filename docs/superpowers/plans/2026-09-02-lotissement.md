@@ -74,9 +74,10 @@ un jeu par tranche.
 | 3 | Les saves | Le monde survit aux sessions | **livrée le 2026-09-07** |
 | 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | **livrée le 2026-09-08** |
 | 4 | La sécurité | Le système peut être exposé | **livrée le 2026-09-11** |
-| 5 | L'écran | Le produit décrit dans `.impeccable/` | à venir |
+| 5 | L'écran | Le produit décrit dans `.impeccable/` | maquettes validées le 2026-09-11 |
 | 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | acceptée le 2026-09-11, **avant la 6** |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
+| 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
 
 ### 0 · Sonder
 
@@ -288,8 +289,39 @@ la tranche 5 a maintenant un vrai utilisateur à servir.
 
 Le monde visuel retenu — The Departure Board, voir
 [`.impeccable/mocks/decision/README.md`](../../../.impeccable/mocks/decision/README.md)
-— les cinq états sur un seul écran, le décompte, l'affichage du coût, et la
-libération pendant les quatre minutes de démarrage.
+— les états sur un seul écran, le décompte, l'affichage du coût, et la
+libération pendant le démarrage. **Pas « les quatre minutes »** : la durée n'a
+jamais été mesurée, l'estimation précédait le changement d'hébergeur, et le
+brief de surface la retire — la contrainte porte sur le comportement, pas sur le
+nombre.
+
+**Neuf compositions, et non cinq**, tranchées au tour de maquettes du
+2026-09-11 dont la trace est
+[`.impeccable/mocks/states/README.md`](../../../.impeccable/mocks/states/README.md).
+Le §8 du spec distingue deux choses que le mot « panne » confondait : un
+démarrage refusé rend `IDLE` avec `lastError` et un bouton immédiatement
+recliquable, là où `FAILED` veut dire qu'une machine est restée debout et
+facture — et que le membre n'a rien à y faire. S'y ajoutent la forme
+« adresse + IP brute + port » du premier jeu, que les fichiers conservés du tour
+de décision ne montraient nulle part, l'écran déconnecté, et le visiteur non
+membre.
+
+**Deux pièces de plomberie, et pas une de plus.** La vue en lecture seule de
+`ServerFacts` sur la face client de `libs/session-record` — `ip`, `joinInfo`,
+`lastError` —, que le §4 promet déjà et dont le client ne calcule aujourd'hui
+qu'un `hasJoinInfo` booléen ; et le second composant de point de jonction, que
+`join-info.component.ts` se donne en rendez-vous. Tout le reste existe depuis
+les tranches 2 à 4.
+
+**La copie de l'interface passe en anglais**, décidé le 2026-09-11 :
+`CLAUDE.md` et `PRODUCT.md` l'exigeaient tous les deux, et les maquettes de
+décision avaient été jugées en français. Conséquence qui ne se voit pas dans une
+maquette : **tout terme visible doit entrer au glossaire du §4 du spec.**
+
+**Quatre reports, qui font la tranche 8.** Ils sont ce qui garde cette tranche
+livrable, et ils retirent de l'écran approuvé le pied de cumuls, la ligne de
+dernière soirée, la dernière sauvegarde et le nom du monde. Le pied ne porte
+plus que le coût de la session.
 
 ### 6 · L'infra en code
 
@@ -395,6 +427,34 @@ cet argument voulait éviter est déjà dû, quel que soit l'ordre.
 Ce qui reste vrai, et qui compte davantage : cette tranche est **la seule
 opération du système qui écrase**, et ce que le §8 devient alors se décide dans
 le spec avant qu'un plan s'écrive.
+
+### 8 · Ce que la 5 n'a pas pris
+
+**Née le 2026-09-11, en cadrant la tranche 5.** Quatre surfaces que l'écran de
+session laisse en console, reportées ensemble et pour la même raison : chacune
+demandait une face de lecture ou d'écriture qui n'existe pas, et les quatre
+réunies auraient fait de la 5 deux tranches déguisées en une.
+
+| Ce qui manque | Ce qu'il faut pour l'avoir | Ce que ça coûte de ne pas l'avoir |
+|---|---|---|
+| **La face écriture des membres** — lister, inviter, retirer, changer le rôle | Quatre méthodes sur `ClientMembershipRecord` et un écran. **Les règles de la tranche 4 l'autorisent déjà** : `adminEnrols`, `adminManagesMembership`, `allow delete: if isAdmin()`, et un admin peut lister | Tout membre entre par la console Firebase, le premier admin comme les suivants |
+| **Les réglages** `config/settings` et le **choix du gabarit** | Un écran d'admin, et `instanceSize` que `ownsEveryTouchedField` réserve déjà à l'admin | Durée de session, pas de prolongation, fenêtre et tarifs se changent en console. Le gabarit garde son défaut |
+| **Les cumuls sur `events`** — le mois, les heures jouées, le nombre de soirées, la dernière soirée fermée | Une face de lecture par requête sur `events`, que tout membre est déjà autorisé à lire (§5), et que le §11 prévoit | **`PRODUCT.md` annonce « le coût estimé de la session en cours et le cumul du mois »** : c'est une capacité produit annoncée qui n'est pas livrée, et non un chiffre de maquette en moins |
+| **La lecture des `saves`** — la dernière sauvegarde, sa date et sa taille | Une règle de lecture pour les membres et une face de lecture. Le §5 l'a prévu textuellement : « à ouvrir aux membres le jour où l'interface les montrera » | La seule ligne de l'écran qui rassurait sur ce que le produit protège vraiment n'existe pas |
+
+**Elle ne débloque rien, et c'est pourquoi elle attend.** Aucun joueur n'en est
+empêché de jouer : le §2 veut que n'importe qui démarre, prolonge et arrête, et
+c'est vrai sans une seule de ces quatre surfaces. Ce qu'elle coûte est de la
+manœuvre en console pour une seule personne, et un écart assumé entre ce que
+`PRODUCT.md` annonce et ce que l'écran montre.
+
+**L'ordre à l'intérieur n'est pas indifférent.** Les cumuls sont les seuls à
+figurer dans la comp approuvée du tour de décision — ils ont été dessinés, jugés,
+puis retirés ; les trois autres n'ont jamais eu de maquette. Un tour de
+maquettes est donc dû pour les surfaces d'administration, pas pour le pied de
+cumuls, qui se relit dans
+[`.impeccable/mocks/decision/desktop.html`](../../../.impeccable/mocks/decision/desktop.html)
+tel qu'il avait été approuvé.
 
 ## La livraison ne fait pas de tranche
 

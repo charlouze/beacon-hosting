@@ -17,6 +17,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import {
+  displayedFactsFrom,
   EVENTS,
   openingFields,
   rulesVersionFrom,
@@ -24,13 +25,35 @@ import {
   settingsFrom,
   SERVER_DOC,
   SETTINGS_DOC,
+  toDate,
   TTL_DAYS,
+  type DisplayedFacts,
 } from './fields.js';
+
+export type { DisplayedFacts };
 
 export interface OpenRequest {
   readonly sessionId: string;
   readonly game: Game;
   readonly actor: Actor;
+}
+
+/**
+ * One snapshot of `server/current`, as the screen needs it: what the domain
+ * reads, the three facts §4 says are displayed, and the instant the current
+ * state began.
+ *
+ * `stateSince` travels with them and is not a catch-all. The boot screen
+ * announces a window computed from the instant the state began, and the
+ * aggregate does not carry that field — `startedAt` is the session's opening,
+ * which is the same instant today and will not be the day one state precedes
+ * another. The admin face already reads it; this is the same translation
+ * offered to the second transport.
+ */
+export interface ServerView {
+  readonly session: Session;
+  readonly facts: DisplayedFacts;
+  readonly stateSince: Date | null;
 }
 
 /**
@@ -40,7 +63,17 @@ export interface OpenRequest {
  * one that calls `getFirestore`.
  */
 export interface ClientSessionRecord {
-  watch(onSession: (session: Session | null) => void): () => void;
+  /**
+   * One subscription and not two. A separate `watchFacts()` would be a second
+   * `onSnapshot` on the same document, free to lag behind the first — exactly
+   * the defect this record refuses below for `config/settings`. A session and
+   * the facts that go with it come from the same snapshot or they are not
+   * consistent.
+   *
+   * Null when `sessionFrom` returns null, which is to say when the document is
+   * unreadable — and the screen says so rather than showing an empty board.
+   */
+  watch(onView: (view: ServerView | null) => void): () => void;
   watchSettings(onSettings: (settings: SessionSettings) => void): () => void;
   /**
    * Calls back at most once, when the deployed rules version stops matching
@@ -125,8 +158,16 @@ export function clientSessionRecord(
   }
 
   return {
-    watch(onSession) {
-      return onSnapshot(server(), (snapshot) => onSession(sessionFrom(snapshot.data() ?? {})));
+    watch(onView) {
+      return onSnapshot(server(), (snapshot) => {
+        const data = snapshot.data() ?? {};
+        const session = sessionFrom(data);
+        onView(
+          session === null
+            ? null
+            : { session, facts: displayedFactsFrom(data), stateSince: toDate(data['stateSince']) },
+        );
+      });
     },
 
     watchSettings(onSettings) {

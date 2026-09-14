@@ -30,3 +30,26 @@ détruit ce qu'aucune intention de création ouverte n'explique.
 
 Les maquettes s'ouvrent depuis `.impeccable/mocks/decision/index.html`, sans
 aucune dépendance externe.
+
+## Regarder les écrans
+
+```bash
+mise run dev                  # Firestore, Auth, le semis, les personas, le pilote
+mise run screen -- expiring   # dans un second terminal
+```
+
+`mise run dev` ne monte que les deux émulateurs que l'app interroge, avec leur
+UI sur <http://localhost:4000> — ni Functions, ni tunnel, ni machine. Rien n'y
+est facturable.
+
+Se connecter en Google dans l'émulateur avec `admin@dev.beacon`,
+`player@dev.beacon`, `rookie@dev.beacon` (celui à qui le Steam n'a pas encore
+été demandé) ou `visitor@dev.beacon` (celui à qui la porte reste fermée).
+
+L'app n'a pas de route : l'écran affiché est une lecture de `server/current`.
+`mise run screen` écrit ce document, et l'onglet ouvert suit sans rechargement —
+`idle`, `preparing`, `running`, `running-sunkenland`, `expiring`, `closing`,
+`failed`, `unreadable`.
+
+Pour une vraie machine et une vraie session, c'est `mise run session` qui monte
+le tunnel et les Functions ; voir `tools/dev-session/README.md`.
