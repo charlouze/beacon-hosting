@@ -158,7 +158,16 @@ output +=
   '\n' +
   '  # Not in the catalogue: what backs the companion\'s own bucket in this harness.\n' +
   '  bucket:\n' +
-  '    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e\n' +
+  '    # quay.io and not docker.io: minio withdrew from the hub, and `minio/minio`\n' +
+  '    # there answers "repository does not exist" even for `:latest`. The digest\n' +
+  '    # is byte for byte the one that was pinned before — only the registry that\n' +
+  '    # serves it moved, so what this harness runs has not changed.\n' +
+  '    #\n' +
+  '    # A local docker cache hid this: the smoke test kept passing on a machine\n' +
+  '    # that had already pulled the image, and failed the day CI pulled it cold —\n' +
+  '    # which is the publication of the companion image, the one place a failure\n' +
+  '    # blocks production.\n' +
+  '    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e\n' +
   '    command: ["server", "/data"]\n' +
   '    environment:\n' +
   '      MINIO_ROOT_USER: smoke\n' +
