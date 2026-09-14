@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADMIN_REMOTE, adminCredentialsFrom, describeRemote } from './admin-credentials.js';
+import { ADMIN_REMOTE, adminCredentialsFrom, describeRemote } from './admin-key.js';
 
 const ADMIN_SECRET = 'the-admin-secret-nothing-may-ever-print';
 const MACHINE_SECRET = 'the-machine-secret-that-cannot-write';

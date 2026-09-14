@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { Game } from '@beacon/session';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import { ADMIN_REMOTE, type AdminCredentials, adminCredentialsFrom, describeRemote } from './admin-credentials.js';
+import { ADMIN_REMOTE, type AdminCredentials, adminCredentialsFrom, describeRemote } from '@beacon/admin-key';
 import { SERVER_BINARY, type PushGameFilesDeps, gameArchiveKeyFor } from './game-depot.js';
 import {
   type DiscoveredSteamAccount,

@@ -50,6 +50,9 @@
     },
     {
       "path": "./tools/deploy-setup"
+    },
+    {
+      "path": "./libs/admin-key"
     }
   ],
   "compilerOptions": {}

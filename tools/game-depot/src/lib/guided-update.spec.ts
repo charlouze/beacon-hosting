@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import type { AdminCredentials } from './admin-credentials.js';
+import type { AdminCredentials } from '@beacon/admin-key';
 import { SERVER_BINARY, gameArchiveKeyFor } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import { type GuidedUpdatePorts, runGuidedUpdate } from './guided-update.js';
