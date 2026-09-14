@@ -433,6 +433,44 @@ describe('worldLayoutRefusal', () => {
     ).toBeNull();
   });
 
+  // Mesure en production le 2026-09-14, et paye deux sessions. Un monde ne
+  // devient dedie qu'une fois ce fichier retire : tant qu'il est la, le serveur
+  // lit ses reglages d'hote — capacite 0, verrou « amis Steam » sur une machine
+  // qui n'a pas de compte Steam — et son enregistrement Photon n'aboutit jamais.
+  // Rien n'echoue au depot : l'archive est par ailleurs valide.
+  it('refuse un monde qui porte encore sa configuration de partie hebergee', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      "Lyrkhan's World~3bbc6576-938f-4290-bfd0-081424ca1a82/World~0.json",
+      "Lyrkhan's World~3bbc6576-938f-4290-bfd0-081424ca1a82/StartGameConfig.json",
+    ]);
+    expect(refusal).toMatch(/StartGameConfig\.json/);
+  });
+
+  // Un refus qui ne dit que ce qui cloche fait relancer la meme commande. Les
+  // deux mondes qui ont demarre ne portaient pas ce fichier : le geste est de
+  // le supprimer, et c'est ca que le message doit porter.
+  it('dit quoi faire, pas seulement ce qui cloche', () => {
+    const refusal = sunkenland.worldLayoutRefusal([
+      "Lyrkhan's World~3bbc6576-938f-4290-bfd0-081424ca1a82/World~0.json",
+      "Lyrkhan's World~3bbc6576-938f-4290-bfd0-081424ca1a82/StartGameConfig.json",
+    ]);
+    expect(refusal).toMatch(/delete/i);
+  });
+
+  // Mesure : les deux archives qui ont demarre en dedie portent Cache.json et
+  // WorldSetting.json, et rien entre les deux. Ce qui se retire est ce seul
+  // fichier, pas tout ce qui n'est pas un World~*.json.
+  it('laisse passer les autres fichiers que le monde porte', () => {
+    expect(
+      sunkenland.worldLayoutRefusal([
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json",
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/World~0.json.meta",
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/Cache.json",
+        "Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b/WorldSetting.json",
+      ]),
+    ).toBeNull();
+  });
+
   // Le piege mesure, et celui qui coute un monde : le serveur ne refuse pas
   // cette archive, il genere un monde vierge par-dessus.
   it('refuse une archive construite depuis le dossier parent', () => {

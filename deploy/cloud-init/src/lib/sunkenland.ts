@@ -547,6 +547,22 @@ export const sunkenland: GameCatalogEntry = {
     if (worlds.length === 0) {
       return `found ${named.join(', ')} but no World~*.json inside: cannot tell a world folder from a character folder`;
     }
+    // Measured in production on 2026-09-14, and it cost two sessions. A world
+    // played as a player-hosted game keeps its own StartGameConfig, and the
+    // dedicated server reads it in place of its command line: capacity 0, and a
+    // "Steam friends only" lock on a machine whose Steam id is the invalid one.
+    // Its Photon registration then never completes, so the server appears in no
+    // list — and nothing fails at the deposit, because the archive is otherwise
+    // valid. Caught here or not at all.
+    //
+    // Measured on the other side too: the two archives that did boot carry
+    // Cache.json and WorldSetting.json and nothing between them. So this names
+    // the one file to remove, rather than ruling on everything a world may hold
+    // — which would be completeness, and the §8 puts that out of reach.
+    const hostedConfig = 'StartGameConfig.json';
+    if (entries.includes(`${worlds[0]}/${hostedConfig}`)) {
+      return `found ${hostedConfig} in ${worlds[0]}: that world was played as a player-hosted game, and the dedicated server reads those settings instead of its command line — delete ${hostedConfig} inside the world folder, then adopt again`;
+    }
     return null;
   },
 };
