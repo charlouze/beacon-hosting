@@ -49,8 +49,8 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Langue | Code et interface en anglais ; spec et documentation en français | L'expert du domaine lit lui-même le TypeScript, donc il n'y a pas de fossé de traduction à combler. Le glossaire de §4 fait le pont, et tout terme visible dans l'interface doit y figurer. |
 | Stockage des saves | Scaleway Object Storage, `fr-par` | Français, même région que l'instance, donc transferts internes. C'est cette justification qui l'a fait suivre l'instance : laissé chez OVH, il devenait un transfert entre fournisseurs. Du S3 dans les deux cas, l'adapter ne change que d'endpoint. |
 | Fichiers du serveur | **Selon le jeu.** Enshrouded : téléchargés par SteamCMD à chaque démarrage. Sunkenland : déposés une fois dans le stockage objet, restaurés comme une sauvegarde | Le téléchargement à chaud évite ~8 Go de stockage permanent, et reste le bon choix tant que SteamCMD se connecte anonymement. **Le serveur dédié de Sunkenland exige un compte qui possède le jeu** — mesuré, `Missing configuration` en anonyme, et le manuel de l'éditeur le disait avant nous. Le télécharger à chaud imposerait un secret Steam sur la VM, que le §7 tient pour l'élément le moins fiable du système. Ses 2,3 Go passent donc par le seau, même région, par le chemin que `SaveStore` construit déjà. Une image privée sur un registre a été écartée sur le coût : 0,50 $/Go de transfert sortant chez GitHub, soit ~10 $/mois pour huit soirées — davantage que le serveur dédié qu'on remplace. |
-| Amorçage d'un monde Sunkenland | Créé dans le client par un joueur, déposé une fois dans le seau par un administrateur, hors interface | Le serveur dédié **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à cet instant et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. C'est le même geste hors interface que la restauration d'une ancienne sauvegarde (§13). Le client écrit ses mondes dans `SteamCloudData/<steamID64>/Worlds` et le serveur les lit dans `Worlds` : `-steamID` réconcilierait les deux, **et n'est délibérément pas utilisé** — voir §12. Le dépôt est donc une copie vers `saves/<jeu>/`, jamais un dossier réarrangé. |
-| Dépôt des fichiers de jeu | Une commande d'administration, `tools/game-depot`, à deux gestes : `push` et `update` — **jamais `purge`** | Le dépôt et le rafraîchissement sont le même besoin vu à deux moments ; en faire deux scripts aurait multiplié les endroits où l'on peut se tromper de préfixe. **Elle ne connaît pas le préfixe des sauvegardes** — pas par prudence, par construction : la seule protection qui tienne contre l'effacement du seul actif irremplaçable du système est de ne pas lui donner l'adresse. **La purge, que cette ligne prévoyait, a été écartée le 2026-09-08** : la seule chose qui supprime dans ce système est une règle de cycle de vie de seau (§8), et ces fichiers sous licence ne se redéposent que depuis une machine qui possède le jeu. `update` est né du constat que le geste se refait **à chaque mise à jour** du serveur dédié : il résout la clé d'administration, cherche l'installation dans les bibliothèques Steam, et imprime la commande `steamcmd` exacte quand il ne la trouve pas. |
+| Adoption et restitution d'un monde | Une commande d'administration, `tools/world-depot`, à deux gestes symétriques : `adopt` et `retrieve`. Hors interface, depuis la machine d'un administrateur | **Décision révisée le 2026-09-14**, la première ne connaissait que l'amorçage et ne le voyait qu'en aller. Un monde ne se retélécharge pas : il naît dans le client d'un joueur ou chez un autre hébergeur, et le système doit donc savoir l'adopter **et** le rendre — sans quoi entrer dans Beacon est une porte à sens unique. Le serveur dédié Sunkenland **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à la création et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. **C'est pourquoi l'identité du monde n'est plus une constante du catalogue mais se lit sur le disque** (§6) : adopter deviendrait sinon un geste à deux temps, dont le second est un déploiement. Le client écrit ses mondes dans `SteamCloudData/<steamID64>/Worlds` et le serveur les lit dans `Worlds` : `-steamID` réconcilierait les deux, **et n'est délibérément pas utilisé** — voir §12. L'adoption est donc une copie vers `saves/<jeu>/`, jamais un dossier réarrangé. |
+| Dépôt des fichiers de jeu | Une commande d'administration, `tools/game-depot`, à deux gestes : `push` et `update` — **jamais `purge`** | Le dépôt et le rafraîchissement sont le même besoin vu à deux moments ; en faire deux scripts aurait multiplié les endroits où l'on peut se tromper de préfixe. **Elle ne connaît pas le préfixe des sauvegardes** — pas par prudence, par construction : la seule protection qui tienne contre l'effacement du seul actif irremplaçable du système est de ne pas lui donner l'adresse. `tools/world-depot`, qui la connaît, est **un outil séparé pour cette raison exacte** et non malgré elle : il n'atteint le seau qu'à travers le port `SaveStore`, qui n'a aucun verbe destructeur à lui offrir (§8), là où celle-ci manipule un client de transfert brut. **La purge, que cette ligne prévoyait, a été écartée le 2026-09-08** : la seule chose qui supprime dans ce système est une règle de cycle de vie de seau (§8), et ces fichiers sous licence ne se redéposent que depuis une machine qui possède le jeu. `update` est né du constat que le geste se refait **à chaque mise à jour** du serveur dédié : il résout la clé d'administration, cherche l'installation dans les bibliothèques Steam, et imprime la commande `steamcmd` exacte quand il ne la trouve pas. |
 | Mise à jour du jeu Sunkenland | `tools/game-depot push`, lancée à la main par un administrateur. **La dérive est acceptée en v1** | Rafraîchir le dépôt demande le compte Steam, qui ne réside que sur la machine de l'administrateur (§7) ; l'automatiser reviendrait à le confier à un runner ou à une VM. Les clients se mettent à jour seuls, le dépôt non, et le décalage se découvre en tentant de rejoindre — le coût direct est une heure facturée et **une minute de rafraîchissement**, chronométré le 2026-09-05 : 2,3 Go déposés en 64 s depuis la machine de l'administrateur. Ce qu'on accepte réellement n'est pas là : c'est que la corvée ne peut être faite que par qui détient le compte, ce qui rouvre une dépendance à l'administrateur que le produit refuse partout ailleurs. Assumé pour une v1, à rouvrir si ça mord. |
 | DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com`. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur ou la liste — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. **Mesuré le 2026-09-05 et non plus déduit** : derrière le NAT de Scaleway, sans `-publicip` ni `-publicport`, un joueur trouve le serveur dans la liste et y entre. La découverte passe par Photon, le transport par de l'UDP direct. Ce jeu a donc besoin d'une IP publique, **pas d'une IP stable**. |
 | Conteneur du jeu | Enshrouded : `mornedhels/enshrouded-server`, telle quelle. Sunkenland : `melle2/sunkenland-ds`, **mais son script de démarrage ne suffit pas** | La première gère déjà SteamCMD, Wine, supervisord, l'auto-update et des backups avec rotation ; la forker nous priverait des mises à jour amont pour un bénéfice nul. La seconde apporte Wine, Xvfb et SteamCMD, mais son script ignore les options dont Beacon a besoin — `-autoSaveIntervalInSeconds`, `-adminSteamIDs` — et son `+login anonymous` ne peut pas fonctionner pour cette app. **Notre script est monté dans l'image, pas construit dedans** — mesuré le 2026-09-05, en local puis sur une VM. Ni fork ni image maison n'ont donc à exister : l'image reste consommée à son digest et son point d'entrée est remplacé par un fichier. Deux contraintes qu'elle impose et qu'il faut respecter : le serveur tourne en **uid 7000**, donc le dossier des mondes restauré doit lui appartenir, faute de quoi l'autosave n'écrit rien sans rien dire ; et son `trap` doit être repris, un `exec` en PID 1 ne recevant jamais `SIGTERM`. |
@@ -307,6 +307,11 @@ tools/
                        de jeu dans le seau, JAMAIS de purge. NE CONNAÎT PAS le
                        préfixe des sauvegardes, et c'est sa principale
                        caractéristique
+  world-depot/         commande d'administration : adopt et retrieve d'un
+                       monde. Il connaît le préfixe des sauvegardes, et c'est
+                       pourquoi il est SÉPARÉ de game-depot ; il n'y touche
+                       qu'à travers le port SaveStore, qui n'a pas de verbe
+                       destructeur à lui offrir
 firestore.rules        autorisations du front — sécurité seule, testée par ses refus
 firestore.indexes.json
 ```
@@ -480,6 +485,9 @@ glossaire est la langue omniprésente :
 | durée d'une session | `sessionDurationMs`, libellé `Next session` | ce que dure une session à son ouverture, et la borne du clamp (§6) |
 | gabarit | `InstanceSize` | le calibre de la machine, `DEV1-L` par défaut. Le mot du fournisseur — `flavor` chez OpenStack, *commercial type* chez Scaleway — s'arrête à l'adapter et n'entre pas dans `session` |
 | sauvegarde | `Save` | un état du monde de jeu déposé dans le stockage objet |
+| monde | `World` | ce à quoi les joueurs tiennent, et la seule donnée irremplaçable du système (§8). Une sauvegarde est un de ses états ; le monde est ce qui persiste à travers eux. Pour Sunkenland il porte une identité que rien ne recrée — un GUID et un nom, lus sur le disque (§6) —, pour Enshrouded il n'en porte aucune |
+| adopter un monde | `adopt` | faire entrer dans le système un monde venu d'ailleurs, en le déposant comme une sauvegarde d'origine `manual`. **La seule opération du système qui recouvre** (§8) |
+| rendre un monde | `retrieve` | ressortir du système le monde qui y vit, sur la machine de l'administrateur. Ne retire rien du seau : c'est une copie, et c'est ce qui rend l'adoption acceptable |
 | jeu | `Game` | le jeu qu'une session ouvre, `enshrouded` ou `sunkenland` ; figé à l'ouverture |
 | point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre. Pour Enshrouded : `hostname`, libellé `Address` ; `address`, libellé `Raw ip, if that fails` ; `port`, libellé `Port`. Pour Sunkenland : `serverId`, libellé `Server identifier` ; `region`, libellé `Region` ; `worldName`, libellé `Or in the list`. Chaque jeu apporte sa forme (§4) |
 | identifiant Steam | `steamId` | le compte Steam d'un membre, demandé à son premier passage dans l'app. Sert à lui donner le rôle d'administrateur **dans le jeu**, à ne pas confondre avec le rôle `admin` de Beacon |
@@ -1308,16 +1316,45 @@ jamais bloqué ».
    recalculer.** L'identifiant de serveur ne vient que de la VM, et le §7 tient
    la VM pour l'élément le moins fiable du système : le principe « ne jamais
    suivre ce que l'agent déclare » ne peut donc pas s'appliquer tel quel. Il se
-   remplace par une vérification, et elle est gratuite. **L'identifiant vaut
-   `<GUID du monde>~<instant de démarrage>`**, et le plan de contrôle connaît le
-   GUID du monde — c'est lui qui l'a passé au conteneur. La Function rejette donc
-   tout identifiant dont le préfixe ne correspond pas.
+   remplace par une vérification. **L'identifiant vaut
+   `<GUID du monde>~<instant de démarrage>`**, et le GUID attendu est celui du
+   monde restauré : tout identifiant dont le préfixe ne correspond pas est
+   rejeté.
+
+   **Qui détient ce GUID a changé le 2026-09-14, et c'est une descente, pas un
+   abandon.** Il était une constante du catalogue, que le plan de contrôle
+   passait au conteneur et pouvait donc comparer lui-même. Depuis que le monde
+   s'adopte (§2), l'identité se lit sur le disque : le point d'entrée démarre sur
+   le dossier `<nom>~<GUID>` que la restauration vient de poser, et le catalogue
+   ne nomme plus aucun GUID. La comparaison descend donc au compagnon, qui est
+   le seul à connaître le monde réellement restauré.
+
+   **Elle y est meilleure, et pour la raison que le §8 donne déjà** — « la
+   protection réelle est en 1, pas en 3 ». La Function comparait à ce que le
+   catalogue *disait* ; le compagnon compare à ce qui est *sur le disque*. Le
+   cas que cette défense existe pour attraper est « le serveur a généré un monde
+   vierge », et c'est précisément le cas qu'une constante ne voyait pas : un
+   catalogue et un seau désynchronisés donnaient un démarrage sur monde vierge
+   dont le GUID annoncé était pourtant conforme.
+
+   Deux conséquences suivent, et la seconde durcit une défense molle. Le nom du
+   monde publié dans le point de jonction devient lui aussi un fait de la
+   machine, lu au même endroit. Et **l'absence de tout dossier `<nom>~<GUID>`
+   après la restauration cesse d'être un avertissement pour devenir un refus de
+   démarrer** : jusqu'ici le point d'entrée l'imprimait et lançait le serveur
+   quand même, ce qui est exactement le chemin vers le monde vierge que
+   l'alinéa précédent décrit.
 
    Ce qu'une VM compromise peut encore faire, avec cette vérification en place,
    est envoyer les joueurs vers un autre serveur **portant le même monde**. Ce
-   qu'elle ne peut plus faire est les envoyer n'importe où. C'est une réduction
-   du dommage, pas une preuve, et c'est le maximum atteignable pour une donnée
-   qui n'existe que sur la machine.
+   qu'elle ne peut plus faire est les envoyer n'importe où. Ce que la descente
+   change de ce calcul : la VM fournit désormais les deux termes de la
+   comparaison, là où l'un venait du plan de contrôle. Elle ne s'en affaiblit
+   pas pour autant — une VM qui ment sur les deux ment sur un monde qu'elle a
+   elle-même restauré, donc sur une archive qu'elle est allée chercher dans le
+   seau avec la clé en lecture seule du §7, et le dommage reste borné au même
+   ensemble. C'est une réduction du dommage, pas une preuve, et c'est le maximum
+   atteignable pour une donnée qui n'existe que sur la machine.
 8. L'UI affiche le point de jonction et le compte à rebours. Ce qu'il contient
    dépend du jeu — nom de domaine, IP brute et port ici, identifiant de serveur,
    région et nom du monde là — mais l'écran n'a qu'une chose à faire dans les
@@ -1670,6 +1707,8 @@ l'instance, et le watchdog balaie les IP non réclamées.
 | L'agent ne répond jamais | Timeout `PROVISIONING`, destruction |
 | DynHost échoue | La session **n'est pas** interrompue : l'UI affiche l'IP brute |
 | Restauration de save impossible | L'agent refuse de démarrer et remonte l'erreur. **Règle d'or : ne jamais écraser une save existante par une save vide** |
+| Monde adopté par-dessus le mauvais monde | Rien n'est effacé : la sauvegarde précédente reste dans le seau, sous sa clé, et `retrieve` va la chercher. Ce qui se répare est donc l'adoption, pas la perte — il n'y en a pas. Voir « L'adoption, la seule opération qui recouvre » ci-dessous |
+| Archive adoptée qui ne porte aucun monde | `Save.of()` refuse sous le plancher, et le point d'entrée refuse de démarrer s'il ne trouve aucun dossier `<nom>~<GUID>` après restauration (§6). Les deux sont antérieurs à toute session : personne ne joue dans le monde vierge, donc rien ne se pousse par-dessus |
 | Crash de la machine | Au pire la cadence de sauvegarde du jeu : 10 minutes pour Enshrouded, 5 pour Sunkenland (§2). **Pour Sunkenland, c'est aussi le pire cas d'une fin de session normale** — rien ne permet de provoquer une sauvegarde, donc l'arrêt propre ne fait pas mieux que le crash |
 
 ### Où la règle d'or s'applique vraiment
@@ -1722,6 +1761,92 @@ que la tranche 0 donnait comme « plus petit monde réel » **aurait refusé une
 sauvegarde légitime**, produisant la panne exacte que cette section existe pour
 empêcher. Mesurer la complétude d'un monde demanderait de le comprendre, ce que
 le §4 refuse au système : c'est donc une limite, pas une dette.
+
+### L'adoption, la seule opération qui recouvre
+
+La section ci-dessus tient parce que rien dans ce système ne choisit quelle
+sauvegarde cesse d'être la bonne : chaque poussée écrit une clé neuve, et la
+plus récente gagne parce qu'elle est la plus récente. **Adopter un monde rompt
+cela**, et il faut l'écrire ici plutôt que le découvrir : un administrateur
+dépose délibérément quelque chose qui deviendra la sauvegarde la plus récente,
+et le monde d'avant cesse d'être celui qu'on restaure. Personne n'efface, la
+clé précédente est toujours dans le seau, et le monde est perdu quand même si
+personne ne sait qu'elle y est.
+
+C'est la même forme que le piège de la première ligne de défense — une perte
+sans écriture fautive — et elle mérite le même traitement : la nommer, pas la
+colmater.
+
+**Ce qui la rend acceptable n'est pas une garde, c'est la symétrie.** `retrieve`
+existe, il ressort le monde en place sur la machine de l'administrateur, et il
+ne retire rien du seau. Un monde adopté par-dessus le mauvais monde n'est donc
+pas un incident : c'est un `retrieve` de la clé précédente, puis un `adopt`.
+Tant que la restitution existe, recouvrir est réversible ; c'est elle qui paie
+l'adoption, et c'est pourquoi le §2 les décide ensemble et pourquoi aucune des
+deux ne se livre sans l'autre.
+
+**Cette phrase impose deux choses à `retrieve`, et elles ne vont pas de soi.**
+
+D'abord, **il rend par défaut exactement ce que la prochaine session
+restaurerait** — la plus récente par `createdAt`, toutes origines confondues.
+Pas « la plus récente selon l'ordre que l'adapter annonce » : `runRestore`
+recalcule déjà le maximum plutôt que de prendre `saves[0]`, précisément pour ne
+pas faire dépendre une restauration d'un invariant qu'il ne peut pas vérifier.
+Si `retrieve` choisissait autrement, l'administrateur croirait tenir le monde du
+serveur et en tiendrait un autre. **Le choix est donc un seul calcul, dans le
+module `saves` de `libs/session`, que le compagnon et `world-depot` appellent
+tous les deux** — c'est du domaine, pas de la commodité, et le projet a déjà
+payé une fois pour une règle écrite à deux endroits sans que rien ne casse quand
+elles divergent (`objectKeyFor`, voir §5).
+
+Ensuite, **il doit pouvoir en nommer une autre**, sans quoi la réparation
+décrite au paragraphe précédent n'existe pas : réparer demande la clé
+*précédente*, pas la dernière, qui est justement celle qu'on veut défaire.
+`retrieve` liste donc l'historique d'un jeu et accepte qu'on désigne une
+sauvegarde. C'est aussi ce qui rend vraie la ligne du §13 sur la restauration
+d'une ancienne sauvegarde hors interface.
+
+Ce que cela n'autorise pas : rien ici ne *remet* une ancienne sauvegarde en
+place sur le serveur. `retrieve` la descend sur une machine ; la remettre en jeu
+est un `adopt`, avec sa confirmation et ses vérifications. Les deux gestes
+restent les deux gestes.
+
+**Trois propriétés la bornent, et aucune n'est nouvelle.**
+
+1. **`SaveStore` n'acquiert aucun verbe.** `adopt` est un `deposit`, `retrieve`
+   est un `list` puis un `fetch` — les trois verbes que le port porte déjà. La
+   garantie « aucun code du projet ne supprime une sauvegarde » n'est donc pas
+   une discipline que `world-depot` s'imposerait : c'est une propriété de sa
+   seule porte d'entrée, qui n'a rien de destructeur à lui offrir. C'est la
+   raison pour laquelle l'outil passe par l'adapter plutôt que par un client S3
+   à lui, et elle vaut plus que la forme de clé unifiée qu'elle apporte au
+   passage.
+2. **Le plancher garde l'adoption sans qu'on l'écrive.** `Save.of()` refuse
+   toute archive sous `SAVE_FLOOR_BYTES`, donc adopter un dossier vide est
+   impossible par construction. La troisième ligne de défense couvre un chemin
+   pour lequel elle n'avait pas été conçue.
+3. **L'outil nomme à voix haute ce qu'il recouvre.** Avant de déposer, il
+   annonce la sauvegarde actuellement la plus récente — sa date, sa taille, et
+   pour Sunkenland le nom et le GUID du monde qu'elle porte — et demande. Un
+   outil qui dépose sans le dire est un outil qu'on lance deux fois par accident.
+
+**Un monde adopté est visible à la restauration et invisible à l'audit**, et
+c'est à écrire parce que rien ne le signale. L'objet porte l'origine `manual`,
+donc `list()` le voit et la session suivante le restaure comme n'importe quelle
+sauvegarde. Mais `saves/{id}` (§5) n'est écrit que par les Functions, sur
+rapport de l'agent : une adoption ne produit aucun document, donc aucune trace
+dans l'audit et rien dans les cumuls du §11. L'écart est assumé — faire écrire
+un document à un outil d'administration lui demanderait un identifiant Firebase
+que le §7 lui refuse — mais il veut dire qu'un monde peut changer sans que
+l'historique en porte la moindre ligne.
+
+**Ce que cette section ne prétend pas.** L'adoption reste le seul geste du
+système dont une erreur demande de savoir qu'on peut la réparer. Le seau garde
+la clé précédente, mais une règle de cycle de vie finira par l'élaguer — c'est
+la seule chose qui supprime ici (§8, défense 2), et elle ne fait pas d'exception
+pour un monde qu'on aurait voulu reprendre six mois plus tard. La réversibilité
+a donc une durée, et elle est celle de la règle d'élagage du préfixe, pas
+l'éternité.
 
 ## 9. Stratégie de test
 
@@ -2152,9 +2277,15 @@ pas mesurée — les quatre autres sont passées au tableau ci-dessus.
 - Tout jeu autre qu'Enshrouded et Sunkenland.
 - Les notifications hors de l'interface web (Discord, e-mail).
 - La restauration d'une ancienne sauvegarde depuis l'UI — les saves sont
-  historisées et récupérables manuellement, l'interface viendra plus tard.
-- **L'amorçage d'un monde Sunkenland depuis l'UI.** Il se crée dans le client du
-  jeu et se dépose à la main dans le seau ; c'est un geste unique par monde.
+  historisées, `tools/world-depot retrieve` les ressort, et l'interface viendra
+  plus tard.
+- **L'adoption et la restitution d'un monde depuis l'UI.** Les deux gestes
+  existent — `tools/world-depot`, §2 — mais depuis la machine d'un
+  administrateur, pas depuis un écran. Ce n'est pas une commodité manquante :
+  l'adoption est la seule opération du système qui recouvre (§8), et lui donner
+  une surface d'interface la rendrait atteignable par un clic là où elle demande
+  un geste délibéré. Ce que la v1 laisse de côté est donc le confort, pas la
+  capacité.
 - **Le rafraîchissement automatique des fichiers de Sunkenland.** Il demande le
   compte Steam, qui reste sur la machine de l'administrateur (§2, §7).
 - **La détection d'un décalage de version avant une session.** L'identifiant de
