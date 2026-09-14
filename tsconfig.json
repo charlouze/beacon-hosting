@@ -53,6 +53,9 @@
     },
     {
       "path": "./libs/admin-key"
+    },
+    {
+      "path": "./tools/world-depot"
     }
   ],
   "compilerOptions": {}
