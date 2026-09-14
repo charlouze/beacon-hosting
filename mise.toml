@@ -96,6 +96,28 @@ env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST 
 usage = 'arg "<screen>" help="idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
 run = "npx nx run @beacon/functions:screen -- {{ usage.screen }}"
 
+# Regarder des ecrans ne demande ni tunnel, ni Functions, ni machine : seulement
+# les deux emulateurs que l'app interroge, et de quoi s'y connecter. D'ou
+# `emulators:exec` plutot que `emulators:start` — il tient les emulateurs le
+# temps d'une commande, donc l'ordre semis, personas, pilote est garanti par la
+# structure, et Ctrl-C sur le pilote les arrete tous les trois.
+#
+# `--ui` parce que `exec` ne la lance pas, la ou `start` la lance : c'est la
+# seule difference genante entre les deux, et l'ui est ou l'on va lire ce qu'une
+# session vient d'ecrire.
+[tasks.dev]
+description = "Monte Firestore et Auth avec leur ui, seme tout, et sert le pilote — l'emulateur seul, rien de facturable"
+run = 'npx firebase emulators:exec --config firebase.dev.json --project demo-beacon --only firestore,auth --ui "mise run dev-app"'
+
+[tasks.dev-app]
+description = "Ce que `dev` lance une fois les emulateurs debout — pas a appeler seul"
+hide = true
+run = [
+  "npx nx run @beacon/functions:seed",
+  "npx nx run @beacon/functions:personas",
+  "npx nx serve web",
+]
+
 # Les sept gestes d'une soiree d'essai, dans le seul ordre qui marche. L'ordre
 # n'est pas un confort : `apps/functions/dist/.env` est une copie que le build
 # repose, et l'emulateur ne la lit qu'au demarrage. Reecrire apres avoir
