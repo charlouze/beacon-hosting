@@ -11,10 +11,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+# `contents: write` to push the branch that re-pins the digest, and nothing
+# more: this workflow opens no pull request, so it needs no right over them.
 permissions:
   contents: write
   packages: write
-  pull-requests: write
 
 jobs:
   publish:
@@ -78,18 +79,26 @@ jobs:
       # Sunkenland session stayed `provisioning` until someone thought of the one
       # line nobody had been told to change.
       #
-      # A pull request, not a push to `main`: the merge stays the deployment and
-      # stays a human's decision (§10). What disappears is the copy-paste, never
-      # the gate.
+      # It pushes a branch and stops there. It does not open the pull request,
+      # and does not push to `main`: the merge stays the deployment and stays a
+      # human's decision (§10). What disappears is the copy-paste, never the gate.
       #
-      # Caveat worth knowing before relying on it: a pull request opened with
-      # `GITHUB_TOKEN` does not trigger `pull_request` workflows, so `verify`
-      # will not run on it. Closing and reopening it by hand does trigger them —
-      # as would swapping this token for a personal one, at the cost of a secret
-      # to hold.
+      # Why the human opens it, rather than this workflow — two reasons, and the
+      # first was learned the hard way on `companion-v0.5`:
+      #
+      #   1. `gh pr create` failed with "GitHub Actions is not permitted to
+      #      create or approve pull requests", a repository setting that is off
+      #      by default. The image was already published by then, so the run went
+      #      red on a job that had done its work.
+      #   2. A pull request opened by the `GITHUB_TOKEN` does not trigger
+      #      `pull_request` workflows, so `verify` — a required check — would
+      #      never run on it and the merge button would stay blocked until a
+      #      human closed and reopened it.
+      #
+      # Opened by a human, both problems are gone: no setting to widen, no token
+      # to hold, and `verify` runs the way it does on every other pull request.
       - if: steps.pinned.outputs.value != steps.push.outputs.digest
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST: ${{ steps.push.outputs.digest }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
@@ -107,23 +116,35 @@ jobs:
           # fail on one that already exists.
           git push -q --force-with-lease origin "$branch"
 
-          # `--head` alone answers whether the pull request is already open: a
-          # re-run then updates the branch it already has, and opening a second
-          # one would split the review in two.
-          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
-            gh pr create --base main --head "$branch" \
-              --title "build(cloud-init): epingle le compagnon ${VERSION}" \
-              --body "$(printf '%s\n' \
-                "L'image \`${VERSION}\` vient d'etre publiee et le catalogue epingle encore la precedente." \
-                '' \
-                'Tant que cette ligne ne bouge pas, les machines demarrent le compagnon'  \
-                "d'avant — et une Function qui attend deja son nouveau rapport ne publie" \
-                'aucun point de jonction.' \
-                '' \
-                "Digest : \`${DIGEST}\`" \
-                '' \
-                '> Ouverte par `companion.yml` apres la barriere du test de fumee.' \
-                "> \`verify\` ne s'est pas declenche : une pull request ouverte par le" \
-                '> `GITHUB_TOKEN` ne declenche pas les workflows `pull_request`. La fermer' \
-                '> et la rouvrir les lance.')"
-          fi
+          title="build(cloud-init): epingle le compagnon ${VERSION}"
+          body=$(printf '%s\n' \
+            "L'image \`${VERSION}\` vient d'etre publiee et le catalogue epinglait encore la precedente." \
+            '' \
+            'Tant que cette ligne ne bouge pas, les machines demarrent le compagnon' \
+            "d'avant — et une Function qui attend deja son nouveau rapport ne publie" \
+            'aucun point de jonction.' \
+            '' \
+            "Digest : \`${DIGEST}\`" \
+            '' \
+            'Branche poussee par `companion.yml`, apres la barriere du test de fumee.')
+
+          # Pre-filled through the compare URL rather than left to be retyped:
+          # what makes this worth reading is the paragraph saying what breaks
+          # while the line has not moved, and a summary that asked for it to be
+          # written by hand would get an empty body every time.
+          encode() { printf '%s' "$1" | jq -sRr @uri; }
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          url="${url}&title=$(encode "$title")&body=$(encode "$body")"
+
+          {
+            printf '## Le catalogue epingle encore l image precedente\n\n'
+            printf 'Branche poussee : `%s`\n\n' "$branch"
+            # The url is wrapped in <> because a markdown link ends at the first
+            # `)`, and the title carries one: `build(cloud-init)`. `@uri` does
+            # encode parentheses, so this changes nothing today — it is there so
+            # that an encoder which stopped doing it would not silently truncate
+            # the one link this summary exists to offer.
+            printf '**[Ouvrir la pull request](<%s>)** — pre-remplie. Ouverte par un humain,\n' "$url"
+            printf 'elle declenche `verify`, qui est une verification requise.\n\n'
+            printf 'Sinon, depuis le depot :\n\n```\ngh pr create --base main --head %s\n```\n' "$branch"
+          } >> "$GITHUB_STEP_SUMMARY"
