@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -24,6 +24,79 @@ function runFilter(log: string): { copied: string; written: string | null } {
     return { copied: run.stdout, written: null };
   }
 }
+
+/**
+ * La derivation du monde est du bash, et la lire ne prouve rien : le defaut
+ * qu'elle porte est un glob qui compte un fichier pour un dossier. Elle est
+ * donc extraite du script rendu et executee sur un vrai dossier — le meme
+ * decoupage que `runFilter`, pour la meme raison.
+ */
+function runWorldDerivation(entries: readonly { name: string; directory: boolean }[]): {
+  status: number | null;
+  output: string;
+} {
+  const dir = mkdtempSync(join(tmpdir(), 'beacon-worlds-'));
+  mkdirSync(join(dir, 'worlds'));
+  for (const entry of entries) {
+    if (entry.directory) mkdirSync(join(dir, 'worlds', entry.name));
+    else writeFileSync(join(dir, 'worlds', entry.name), '');
+  }
+
+  const lines = sunkenland
+    .render(REQUEST)
+    .split('\n')
+    .map((line) => line.replace(/^ {6}/, ''));
+  const start = lines.indexOf('shopt -s nullglob');
+  const end = lines.findIndex((line) => line.includes('beacon: opening'));
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  const fragment = ['set -uo pipefail', 'WORLD_DIR=worlds', ...lines.slice(start, end + 1)].join('\n');
+
+  writeFileSync(join(dir, 'derive.sh'), fragment);
+  const run = spawnSync('bash', ['derive.sh'], { cwd: dir, encoding: 'utf8' });
+  return { status: run.status, output: run.stdout + run.stderr };
+}
+
+const GUID = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
+
+describe('la derivation du monde sur la machine', () => {
+  it('ouvre le monde pose, espace et apostrophe compris', () => {
+    const run = runWorldDerivation([{ name: `Beacon's World~${GUID}`, directory: true }]);
+    expect(run.status).toBe(0);
+    expect(run.output).toContain(`beacon: opening Beacon's World~${GUID}`);
+  });
+
+  // Le glob n'est pas un glob de dossiers : un fichier pose a cote du monde
+  // faisait compter deux, et la session mourait du delai d'approvisionnement
+  // avec `found 2` au fond d'un journal.
+  it('ne compte pas un fichier pose a cote du monde', () => {
+    const run = runWorldDerivation([
+      { name: `Beacon's World~${GUID}`, directory: true },
+      { name: 'notes~1.txt', directory: false },
+    ]);
+    expect(run.status).toBe(0);
+    expect(run.output).toContain(`beacon: opening Beacon's World~${GUID}`);
+  });
+
+  it('refuse deux dossiers, parce qu il n arbitre pas', () => {
+    const run = runWorldDerivation([
+      { name: `Beacon's World~${GUID}`, directory: true },
+      { name: 'Charlouze~5eb62c95-35df-56af-af9f-99c4d8b4cd4c', directory: true },
+    ]);
+    expect(run.status).toBe(1);
+  });
+
+  it('refuse un dossier vide', () => {
+    expect(runWorldDerivation([]).status).toBe(1);
+  });
+
+  // Le nom d'un monde peut porter un tilde : c'est le dernier qui separe.
+  it('prend le dernier tilde quand le nom du monde en porte un', () => {
+    const run = runWorldDerivation([{ name: `A~B~${GUID}`, directory: true }]);
+    expect(run.status).toBe(0);
+    expect(run.output).toContain(`beacon: opening A~B~${GUID}`);
+  });
+});
 
 describe('the sunkenland catalogue entry', () => {
   // §10, on the image we borrow exactly as on our own.
@@ -203,18 +276,6 @@ describe('the sunkenland catalogue entry', () => {
     expect(runFilter('beacon: launching with -batchmode\n').written).toBeNull();
   });
 
-  // `WORLD_GUID: ${WORLD_GUID}` in the compose is a TypeScript interpolation on
-  // purpose, one backslash away from being a shell one. Escaped like the lines
-  // around it, the document would carry the literal, compose would interpolate
-  // an empty variable, and every other test here would still pass — `joinInfo`
-  // reads the constant, never the document. This is the value the whole
-  // join-point check rests on, and nothing else pins it.
-  it('writes the world guid into the document, not a variable named after it', () => {
-    expect(renderCloudInit('sunkenland', REQUEST)).toContain(
-      'WORLD_GUID: 4db51c84-24cf-459e-9e9e-88b8c3a7ce3b',
-    );
-  });
-
   // The one measured case, byte for byte as the constant rendered it. What was
   // proved on 2026-09-05 was a save triggered from the game console by this
   // account, and nothing about the shape of a list.
@@ -305,38 +366,60 @@ describe('the sunkenland catalogue entry', () => {
     expect(rendered).toContain('\n      wait\n');
   });
 
-  // §4: what the player copies. A server identifier, a region and the world's
-  // name — never an address.
-  it('yields the join point a player copies, from what the machine declared', () => {
-    expect(
-      catalogFor('sunkenland').joinInfo({
-        address: '51.15.42.7',
-        serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638',
-      }),
-    ).toEqual({
-      game: 'sunkenland',
-      serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638',
-      region: 'eu',
-      worldName: "Beacon's World",
-    });
-  });
-
-  // §6: the Function cannot recompute this identifier, but it knows the
-  // world's guid — it is the one that passed it to the container. The prefix
-  // is the check, and it is free.
-  it('refuses an identifier that does not name the world it booted', () => {
-    const entry = catalogFor('sunkenland');
-    expect(
-      entry.joinInfo({ address: '51.15.42.7', serverId: 'deadbeef~639242318300625638' }),
-    ).toBeNull();
-    expect(entry.joinInfo({ address: '51.15.42.7' })).toBeNull();
-  });
-
   // Nothing to point at: discovery goes through Photon and transport through
   // direct UDP that NAT traverses. A port one does not call costs less than a
   // port made optional (§4).
   it('announces no hostname, so nothing points a dns record at it', () => {
     expect(catalogFor('sunkenland').hostname).toBeNull();
+  });
+});
+
+describe('joinInfo', () => {
+  const world = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
+
+  it('publie le point de jonction avec le nom que la machine a lu', () => {
+    const info = sunkenland.joinInfo({
+      address: '51.15.42.7',
+      serverId: `${world.guid}~2026-09-14T20-00-00Z`,
+      world,
+    });
+    expect(info).toEqual({
+      game: 'sunkenland',
+      serverId: `${world.guid}~2026-09-14T20-00-00Z`,
+      region: 'eu',
+      worldName: "Beacon's World",
+    });
+  });
+
+  // La defense n'a pas disparu : elle compare desormais les deux valeurs du
+  // rapport entre elles. Ce qu'elle attrape ici est un compagnon bogue, pas une
+  // vm malveillante — celle-la est arretee plus tot, sur le disque.
+  it('refuse un identifiant qui ne nomme pas le monde annonce', () => {
+    expect(
+      sunkenland.joinInfo({ address: '51.15.42.7', serverId: '00000000-0000-0000-0000-000000000000~x', world }),
+    ).toBeNull();
+  });
+
+  it('refuse quand aucun monde n est annonce', () => {
+    expect(sunkenland.joinInfo({ address: '51.15.42.7', serverId: `${world.guid}~x` })).toBeNull();
+  });
+
+  it('refuse quand aucun identifiant n est annonce', () => {
+    expect(sunkenland.joinInfo({ address: '51.15.42.7', world })).toBeNull();
+  });
+});
+
+describe('le script de demarrage', () => {
+  it('ne compile plus aucun guid', () => {
+    expect(sunkenland.compose()).not.toMatch(/4db51c84/);
+    expect(sunkenland.render(REQUEST)).not.toMatch(/4db51c84/);
+  });
+
+  // La ligne 208 imprimait un avertissement et lançait le serveur : c'est le
+  // chemin vers le monde vierge que le §8 existe pour fermer.
+  it('sort non nul quand aucun monde n a ete restaure', () => {
+    const script = sunkenland.render(REQUEST);
+    expect(script).toMatch(/exit 1/);
   });
 });
 

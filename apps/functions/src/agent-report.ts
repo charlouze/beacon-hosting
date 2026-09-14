@@ -126,7 +126,14 @@ async function becomeRunning(
   }
 
   const entry = catalogFor(session.game);
-  const joinInfo = entry.joinInfo({ address: facts.ip, serverId: report.serverId });
+  // The world travels with the identifier because it no longer exists anywhere
+  // else: the machine reads it off the folder it restored, and the entry checks
+  // the two against each other.
+  const joinInfo = entry.joinInfo({
+    address: facts.ip,
+    serverId: report.serverId,
+    world: report.world,
+  });
   // The catalogue refused: whatever the machine declared does not name the
   // world this session booted. Checked before the dns pointing below — a
   // hostname pointed for a session that will not publish a join point is work

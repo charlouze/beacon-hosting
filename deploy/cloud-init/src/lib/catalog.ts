@@ -54,6 +54,12 @@ export interface JoinFacts {
   readonly address: string;
   /** What the machine declared (§7). Present only for a game that announces one. */
   readonly serverId?: string;
+  /**
+   * The world the machine read off its own disk, name and guid together. It is
+   * what a player looks for in the server list, and the only thing an entry can
+   * check an identifier against now that no guid is compiled in.
+   */
+  readonly world?: { readonly name: string; readonly guid: string };
 }
 
 /**
@@ -73,8 +79,9 @@ export interface GameCatalogEntry {
   render(request: BootRequest): string;
   /**
    * Null is a refusal, not an error to report: §6 wants the control plane to
-   * reject an identifier whose prefix does not name the world it booted, and
-   * the world guid is game knowledge that §4 keeps out of everything else. So
+   * reject an identifier whose prefix does not name the world the same report
+   * announces, and what makes that a check rather than a formality is game
+   * knowledge §4 keeps out of everything else. So
    * the entry decides, and the one caller merely notices that nothing came
    * back — a session with no join point dies of the provisioning delay, which
    * already exists and covers exactly this.

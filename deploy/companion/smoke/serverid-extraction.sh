@@ -119,7 +119,7 @@ printf '%s\n' "$WORLD_GUID~639242328214082922" | cmp -s - "$work/crlf.id" ||
 # marker would write a truncated one and this stack would go green on it.
 cat > "$work/silent.log" <<'LOG'
 beacon: launching with -batchmode -nographics -worldGuid 4db51c84-24cf-459e-9e9e-88b8c3a7ce3b
-beacon: no folder matching 4db51c84-24cf-459e-9e9e-88b8c3a7ce3b under /sunkenland/Worlds
+beacon: opening Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b
 WorldName:Beacon's World, ServerID:4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241566479961657, Region:eu, IsPublic:True, Current/MaxPlayer 1/4
 LOG
 
