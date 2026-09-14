@@ -41,6 +41,13 @@ export interface AgentReport {
   readonly serverId?: string;
   /** On `failed`: why. Bounded, like every string a client writes (§5). */
   readonly detail?: string;
+  /**
+   * On `ready`: the world the machine restored. Both members travel together
+   * — a guid without a name would publish a join point without the recourse
+   * the §2 guarantees to players, the name in the list when the identifier
+   * gets lost.
+   */
+  readonly world?: { readonly name: string; readonly guid: string };
 }
 
 /**
@@ -91,6 +98,7 @@ export function parseReport(body: unknown): AgentReport | null {
     serverId?: string;
     save?: { objectKey: string; sizeBytes: number; origin: SaveOrigin };
     detail?: string;
+    world?: { name: string; guid: string };
   } = { sessionId: raw['sessionId'], phase: raw['phase'] as AgentPhase };
 
   if (raw['ip'] !== undefined) {
@@ -122,6 +130,14 @@ export function parseReport(body: unknown): AgentReport | null {
       sizeBytes,
       origin: save['origin'] as SaveOrigin,
     };
+  }
+
+  if (raw['world'] !== undefined) {
+    const world = raw['world'] as Record<string, unknown> | null;
+    if (typeof world !== 'object' || world === null) return null;
+    if (!isBoundedString(world['name'])) return null;
+    if (!isBoundedString(world['guid'])) return null;
+    report.world = { name: world['name'], guid: world['guid'] };
   }
 
   return report;

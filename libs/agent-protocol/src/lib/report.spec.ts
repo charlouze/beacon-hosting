@@ -121,4 +121,32 @@ describe('parseReport', () => {
     expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: '' })).toBeNull();
     expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: 42 })).toBeNull();
   });
+
+  it('lit le monde que la machine declare avoir restaure', () => {
+    const world = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
+    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: `${world.guid}~12h`, world })).toEqual({
+      sessionId: 's1',
+      phase: 'ready',
+      serverId: `${world.guid}~12h`,
+      world,
+    });
+  });
+
+  // Un guid sans nom publierait un point de jonction sans le recours du §2 :
+  // le nom dans la liste est ce qui reste quand l'identifiant se perd.
+  it('refuse un monde a moitie declare', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'ready', world: { guid: 'g' } })).toBeNull();
+    expect(parseReport({ sessionId: 's1', phase: 'ready', world: { name: 'n' } })).toBeNull();
+  });
+
+  it('refuse un monde qui n est pas un objet', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'ready', world: 'Beacon' })).toBeNull();
+    expect(parseReport({ sessionId: 's1', phase: 'ready', world: null })).toBeNull();
+  });
+
+  it('refuse un nom de monde sans borne', () => {
+    expect(
+      parseReport({ sessionId: 's1', phase: 'ready', world: { name: 'x'.repeat(1025), guid: 'g' } }),
+    ).toBeNull();
+  });
 });
