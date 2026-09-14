@@ -7,6 +7,7 @@ import { buildSaveStore } from './lib/container.js';
 import { pushSave, stopAndPush, type PushDeps } from './lib/push.js';
 import { probeFor } from './lib/readiness.js';
 import { httpReporter } from './lib/reporter.js';
+import { readWorldIdentity } from './lib/world-identity.js';
 
 const config = readConfig(process.env);
 // The probe already comes wired to whichever mechanism the catalogue named —
@@ -38,4 +39,6 @@ await runAgentLoop({
   clock: { now: () => new Date() },
   reportIntervalMs: REPORT_INTERVAL_MS,
   pushIntervalMs: config.pushIntervalMs,
+  // The disk this machine itself restored into, not a catalogue constant.
+  readWorld: () => readWorldIdentity(config.saveDir),
 });
