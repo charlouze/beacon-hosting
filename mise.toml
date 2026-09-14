@@ -86,6 +86,15 @@ description = "Seme admin, player, rookie et visitor dans l'emulateur Auth et da
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
 run = "npx nx run @beacon/functions:personas"
 
+# Le tableau n'a pas de route : l'ecran affiche est une lecture de
+# `server/current`. Le choisir, c'est donc ecrire ce document — et l'onglet
+# ouvert suit sans rechargement, puisqu'il y est abonne.
+[tasks.screen]
+description = "Met le serveur dans l'etat que l'ecran a voir demande (idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
+env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
+usage = 'arg "<screen>" help="idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
+run = "npx nx run @beacon/functions:screen -- {{ usage.screen }}"
+
 # Les sept gestes d'une soiree d'essai, dans le seul ordre qui marche. L'ordre
 # n'est pas un confort : `apps/functions/dist/.env` est une copie que le build
 # repose, et l'emulateur ne la lit qu'au demarrage. Reecrire apres avoir
