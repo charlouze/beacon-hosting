@@ -1811,7 +1811,7 @@ place sur le serveur. `retrieve` la descend sur une machine ; la remettre en jeu
 est un `adopt`, avec sa confirmation et ses vérifications. Les deux gestes
 restent les deux gestes.
 
-**Trois propriétés la bornent, et aucune n'est nouvelle.**
+**Quatre propriétés la bornent, et seule la dernière est nouvelle.**
 
 1. **`SaveStore` n'acquiert aucun verbe.** `adopt` est un `deposit`, `retrieve`
    est un `list` puis un `fetch` — les trois verbes que le port porte déjà. La
@@ -1829,6 +1829,28 @@ restent les deux gestes.
    annonce la sauvegarde actuellement la plus récente — sa date, sa taille, et
    pour Sunkenland le nom et le GUID du monde qu'elle porte — et demande. Un
    outil qui dépose sans le dire est un outil qu'on lance deux fois par accident.
+
+4. **L'archive est vérifiée avant de partir, et la vérification appartient au
+   catalogue.** Pas « le dossier n'est pas vide » : le piège mesuré est plus
+   sournois. Une archive construite depuis le dossier parent donne
+   `Worlds/Worlds/<monde>`, **et le serveur ne s'en plaint pas** — il génère un
+   monde vierge, quelqu'un y joue, et la poussée du soir devient la sauvegarde
+   la plus récente. La règle d'or tombe sur un `-C` mal placé, sans qu'aucune
+   ligne n'ait effacé quoi que ce soit.
+
+   Ce que chaque jeu déclare est donc **la marque qui prouve que l'archive
+   commence au bon niveau**, et elle existe dans les deux cas sans rien
+   comprendre au monde : pour Sunkenland, exactement un dossier `<nom>~<GUID>` à
+   la racine, contenant un `World~*.json` — ce dernier n'est pas décoratif, les
+   dossiers de personnages portent **la même forme `<nom>~<GUID>`** et adopter un
+   personnage à la place d'un monde donne une archive qui restaure quelque chose
+   que personne ne peut jouer. Pour Enshrouded, un fichier d'index `<hex>-index`
+   qui est du JSON, et le fichier que son `.latest` désigne, présent à côté.
+
+   C'est le même endroit que tout le reste de ce qui est propre à un jeu (§4) :
+   pas un `if` dans l'outil, une entrée de catalogue. Et c'est une vérification
+   de disposition, pas de complétude — le §8 vient de dire pourquoi la seconde
+   est hors de portée.
 
 **Un monde adopté est visible à la restauration et invisible à l'audit**, et
 c'est à écrire parce que rien ne le signale. L'objet porte l'origine `manual`,
