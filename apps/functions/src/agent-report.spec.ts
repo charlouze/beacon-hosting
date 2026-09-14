@@ -10,6 +10,13 @@ import { runAgentReport, type AgentReportDeps } from './agent-report.js';
  * is how two places end up disagreeing about the same value. The entry that
  * actually decides is tested in `cloud-init`.
  */
+/**
+ * Ce que l'entree a recu, et la seule raison de l'enregistrer : le point de
+ * jonction se construit desormais a partir du rapport, monde compris. Un double
+ * qui refuse tout ne dit rien de ce qu'on lui a passe.
+ */
+const declared = vi.hoisted(() => ({ facts: [] as unknown[] }));
+
 vi.mock('@beacon/cloud-init', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@beacon/cloud-init')>();
   const refusesEverything = {
@@ -17,7 +24,10 @@ vi.mock('@beacon/cloud-init', async (importOriginal) => {
     hostname: null,
     compose: () => '',
     render: () => '',
-    joinInfo: () => null,
+    joinInfo: (facts: unknown) => {
+      declared.facts.push(facts);
+      return null;
+    },
   };
   return {
     ...actual,
@@ -172,6 +182,26 @@ describe('agentReport', () => {
     // The audit line, and nothing else: `stateSince` stays where it is, so the
     // provisioning delay keeps counting from the boot and not from this report.
     expect(correction.state).toBeNull();
+  });
+
+  // Le monde n'est plus une constante du catalogue : il arrive dans le rapport,
+  // lu sur le disque par la machine. Si la Function ne le transmettait pas,
+  // l'entree refuserait chaque session sans que rien ne le dise.
+  it('passe a l entree le monde que la machine a annonce', async () => {
+    declared.facts = [];
+    deps.state.readSession = vi.fn(async () =>
+      Session.from({ ...fieldsOf(sessionIn('PROVISIONING')), game: 'sunkenland' }),
+    );
+    const world = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
+    await runAgentReport(deps, TOKEN, {
+      sessionId: 's1',
+      phase: 'ready',
+      serverId: `${world.guid}~639242318300625638`,
+      world,
+    });
+    expect(declared.facts).toEqual([
+      { address: '51.15.42.7', serverId: `${world.guid}~639242318300625638`, world },
+    ]);
   });
 
   // The path that already existed, unchanged: an entry that yields a join point

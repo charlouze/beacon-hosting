@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
 import { REQUEST, serviceBlock } from './catalogue-fixtures.spec-helper.js';
+import { enshrouded } from './enshrouded.js';
 
 describe('the enshrouded catalogue entry', () => {
   // §10: an immutable digest, never a moving tag. With a moving one, tonight's
@@ -247,5 +248,28 @@ describe('the enshrouded catalogue entry', () => {
   it('points the save dir where the compose actually mounts the world', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('BEACON_SAVE_DIR=/opt/enshrouded/server/savegame');
+  });
+});
+
+describe('worldLayoutRefusal', () => {
+  it('accepte un index et le fichier qu il designe', () => {
+    expect(enshrouded.worldLayoutRefusal(['3ad85aea', '3ad85aea-index'])).toBeNull();
+  });
+
+  it('refuse un index dont le fichier courant est absent', () => {
+    expect(enshrouded.worldLayoutRefusal(['3ad85aea-index'])).not.toBeNull();
+  });
+
+  it('refuse une archive sans index', () => {
+    expect(enshrouded.worldLayoutRefusal(['3ad85aea'])).not.toBeNull();
+  });
+
+  it('refuse une archive construite depuis le dossier parent', () => {
+    const refusal = enshrouded.worldLayoutRefusal(['savegame/3ad85aea', 'savegame/3ad85aea-index']);
+    expect(refusal).not.toBeNull();
+  });
+
+  it('refuse une archive vide', () => {
+    expect(enshrouded.worldLayoutRefusal([])).not.toBeNull();
   });
 });

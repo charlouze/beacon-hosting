@@ -19,6 +19,7 @@ beforeEach(() => {
     clock: { now: () => new Date(1_757_000_000_000 + tick++ * 60_000) },
     reportIntervalMs: REPORT_INTERVAL_MS,
     pushIntervalMs: 600_000,
+    readWorld: () => null,
   };
 });
 
@@ -124,25 +125,34 @@ describe('runAgentLoop', () => {
 
   // §6: RUNNING means "the join point is published". For this game, the only
   // source of that join point is what the probe read from the file.
+  // L'identifiant et le monde qu'il nomme voyagent ensemble : annoncer l'un
+  // sans l'autre serait le chemin que le spec ferme desormais, donc readWorld
+  // est bouchonne pour nommer le monde que le serverId annonce.
   it('carries the identifier in the report that announces readiness', async () => {
     let turns = 0;
+    const guid = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
     await runAgentLoop({
       ...deps,
-      probeReady: async () => ({ ready: true, serverId: 'w~1' }),
+      probeReady: async () => ({ ready: true, serverId: `${guid}~1` }),
+      readWorld: () => ({ name: 'w', guid }),
       until: () => ++turns >= 2,
     });
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    expect(phases[0]).toEqual({ phase: 'ready', serverId: 'w~1' });
+    expect(phases[0]).toEqual({ phase: 'ready', serverId: `${guid}~1`, world: { name: 'w', guid } });
   });
 
   // `ready` once and only once: a second would rewrite `stateSince`, and the
   // §6 delays are measured against it. The rule does not change because the
   // report now carries one more value.
+  // Meme raison qu'au test precedent : readWorld doit nommer le monde que le
+  // serverId annonce, sinon ce n'est plus une disponibilite mais un refus.
   it('announces readiness once, identifier included', async () => {
     let turns = 0;
+    const guid = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
     await runAgentLoop({
       ...deps,
-      probeReady: async () => ({ ready: true, serverId: 'w~1' }),
+      probeReady: async () => ({ ready: true, serverId: `${guid}~1` }),
+      readWorld: () => ({ name: 'w', guid }),
       until: () => ++turns >= 3,
     });
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].phase);
@@ -160,5 +170,71 @@ describe('runAgentLoop', () => {
     });
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
     expect(phases[0]).toEqual({ phase: 'ready' });
+  });
+
+  const WORLD = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
+  const phasesOf = (report: AgentLoopDeps['report']): string[] =>
+    (report as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0].phase);
+
+  it('remonte le monde restaure avec la disponibilite', async () => {
+    let turns = 0;
+    const probeReady = vi.fn(async () => {
+      turns++;
+      return { ready: true, serverId: `${WORLD.guid}~2026-09-14T20-00-00Z` };
+    });
+    await runAgentLoop({ ...deps, probeReady, readWorld: () => WORLD, until: () => turns >= 2 });
+
+    const ready = (deps.report as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((report) => report.phase === 'ready');
+    expect(ready?.world).toEqual(WORLD);
+    expect(ready?.serverId).toBe(`${WORLD.guid}~2026-09-14T20-00-00Z`);
+  });
+
+  // Le cas que toute cette defense existe pour attraper : le serveur a genere un
+  // monde vierge, donc il annonce un guid qui n'est pas celui qu'on a pose.
+  it('refuse un identifiant qui ne nomme pas le monde restaure', async () => {
+    let turns = 0;
+    const probeReady = vi.fn(async () => {
+      turns++;
+      return { ready: true, serverId: '00000000-0000-0000-0000-000000000000~2026-09-14T20-00-00Z' };
+    });
+    await runAgentLoop({ ...deps, probeReady, readWorld: () => WORLD, until: () => turns >= 2 });
+
+    const phases = phasesOf(deps.report);
+    expect(phases).toContain('failed');
+    expect(phases).not.toContain('ready');
+  });
+
+  // Le dossier absent apres restauration. Il ne doit pas se traduire par « on
+  // publie quand meme » : c'est le meme monde vierge par un autre chemin.
+  it('refuse un identifiant quand aucune identite n a ete lue', async () => {
+    let turns = 0;
+    const probeReady = vi.fn(async () => {
+      turns++;
+      return { ready: true, serverId: 'peu-importe~2026-09-14T20-00-00Z' };
+    });
+    await runAgentLoop({ ...deps, probeReady, readWorld: () => null, until: () => turns >= 2 });
+
+    const phases = phasesOf(deps.report);
+    expect(phases).toContain('failed');
+    expect(phases).not.toContain('ready');
+  });
+
+  // L'autre jeu : pas d'identifiant, pas d'identite, et rien ne change.
+  it('laisse passer la disponibilite du jeu qui n annonce pas d identifiant', async () => {
+    let turns = 0;
+    const probeReady = vi.fn(async () => {
+      turns++;
+      return { ready: true };
+    });
+    await runAgentLoop({ ...deps, probeReady, readWorld: () => null, until: () => turns >= 2 });
+
+    const ready = (deps.report as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((report) => report.phase === 'ready');
+    expect(ready).toBeDefined();
+    expect(ready?.world).toBeUndefined();
+    expect(ready?.serverId).toBeUndefined();
   });
 });

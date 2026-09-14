@@ -18,6 +18,8 @@ export interface AgentLoopDeps {
   readonly pushIntervalMs: number;
   /** Ends the loop. In production it is never true; the tests bound it. */
   readonly until?: () => boolean;
+  /** The world this machine itself restored, read from disk — see `readWorldIdentity`. */
+  readonly readWorld: () => { readonly name: string; readonly guid: string } | null;
 }
 
 /**
@@ -36,18 +38,12 @@ export async function runAgentLoop(deps: AgentLoopDeps): Promise<void> {
   while (!until()) {
     const readiness = await probe(deps);
 
+    const outcome = !announced && readiness.ready ? readyOutcome(readiness, deps.readWorld) : ALIVE;
+
     let instructions: AgentInstructions;
     try {
-      instructions = await deps.report(
-        // `ready` once and only once. A second one would rewrite `stateSince`,
-        // and the delays of §6 are measured on it. `serverId` rides along only
-        // when the probe found one — the game that publishes an address has
-        // none, and the report must not invent one.
-        !announced && readiness.ready
-          ? { phase: 'ready', ...(readiness.serverId !== undefined ? { serverId: readiness.serverId } : {}) }
-          : { phase: 'alive' },
-      );
-      if (!announced && readiness.ready) announced = true;
+      instructions = await deps.report(outcome.report);
+      if (outcome.becomesReady) announced = true;
     } catch (error) {
       // The endpoint is across a network and the session is not over because
       // one call failed. A loop that died here would stop pushing saves — which
@@ -87,4 +83,41 @@ async function probe(deps: AgentLoopDeps): Promise<Readiness> {
     deps.log(`probe failed: ${String(error)}`);
     return { ready: false };
   }
+}
+
+interface ReadyOutcome {
+  readonly report: Omit<AgentReport, 'sessionId'>;
+  /** Whether this outcome is the one `ready` that latches `announced`. */
+  readonly becomesReady: boolean;
+}
+
+const ALIVE: ReadyOutcome = { report: { phase: 'alive' }, becomesReady: false };
+
+/**
+ * `ready` once the server answers, but a `serverId` is followed rather than
+ * merely relayed (§6): it names the world the *game* generated, and the only
+ * defence against a blank world is to compare it against the world *this
+ * machine* restored. No match, no publish — the session then dies of the
+ * provisioning deadline instead, with a legible reason.
+ */
+function readyOutcome(
+  readiness: Readiness & { ready: true },
+  readWorld: AgentLoopDeps['readWorld'],
+): ReadyOutcome {
+  if (readiness.serverId === undefined) {
+    return { report: { phase: 'ready' }, becomesReady: true };
+  }
+
+  const world = readWorld();
+  if (world !== null && readiness.serverId.startsWith(`${world.guid}~`)) {
+    return { report: { phase: 'ready', serverId: readiness.serverId, world }, becomesReady: true };
+  }
+
+  return {
+    report: {
+      phase: 'failed',
+      detail: `serverId does not name the world this machine restored: ${readiness.serverId}`,
+    },
+    becomesReady: false,
+  };
 }

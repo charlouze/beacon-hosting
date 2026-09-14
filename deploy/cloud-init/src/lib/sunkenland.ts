@@ -36,19 +36,12 @@ const GAME_FILES_KEY = `${GAME}/game.tar`;
 const GAME_CONTAINER = 'sunkenland';
 
 /**
- * The world's identity, and it lives here rather than in a document somebody
- * can edit (§6): the control plane checks that the identifier a machine
- * declares begins with the guid it was told to open, and a guid read from
- * Firestore would be a guid a compromised writer could choose.
- *
- * These two are the boot world of the probe. A later human task replaces them
- * if the world actually deposited in the bucket differs — and if it does, the
- * check catches it on the first session rather than publishing a join point
- * into another world.
+ * Measured, `probe/RESULTS.md`: character folders carry the exact same
+ * `<name>~<guid>` shape as a world folder. This is the one discriminant
+ * between them, so `worldLayoutRefusal` below requires it rather than trust
+ * the shape alone.
  */
-const WORLD_GUID = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
-/** What players read in the server list — their recourse if the identifier is lost (§2). */
-const WORLD_NAME = "Beacon's World";
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Measured: the region the server registers in, and the one a client filters by. */
 const REGION = 'eu';
@@ -198,16 +191,46 @@ GAME_PASSWORD=\${GAME_PASSWORD:-}
 # three times.
 exec > >(/opt/beacon/serverid-filter.sh ${READY_FILE}) 2>&1
 
-# The server cannot create a world — without an existing guid it stops. Failing
-# here beats failing three minutes into a boot with an unreadable message.
-: "\${WORLD_GUID:?WORLD_GUID is required: this server cannot create a world}"
+# The world comes off the disk and no longer from a compiled constant: the
+# restore has just laid down exactly one \`<name>~<guid>\` folder, and that
+# folder is the only thing that knows which world this evening opens.
+#
+# A glob into an array, and never a command substitution: this world is named
+# \`Beacon's World\` — a space and an apostrophe — and anything that word-splits
+# turns one folder into three paths that do not exist. A \`for\` over the quoted
+# glob splits nothing either, and it is what lets each match be tested.
+#
+# Only directories: a stray \`notes~1.txt\` left beside the world matches the
+# glob as well, and counting it refuses a boot the adoption had accepted.
+shopt -s nullglob
+worlds=()
+for candidate in "$WORLD_DIR"/*~*; do
+  if [[ -d $candidate ]]; then
+    worlds+=("$candidate")
+  fi
+done
+shopt -u nullglob
 
-# A warning and not a failure: the restore has already exited zero for this
-# container to exist at all, so an empty folder here is worth saying out loud
-# and not worth refusing to boot over.
-if ! compgen -G "$WORLD_DIR/*$WORLD_GUID" > /dev/null; then
-  printf 'beacon: no folder matching %s under %s\\n' "$WORLD_GUID" "$WORLD_DIR"
+# A refusal, where there used to be a warning that booted anyway. Starting with
+# no world is exactly how this game creates a blank one, has an evening played
+# in it, and pushes it over the real save. Two folders are refused for the same
+# reason: this entry point does not arbitrate, the adoption does.
+if (( \${#worlds[@]} != 1 )); then
+  printf 'beacon: expected exactly one <name>~<guid> folder under %s, found %s\\n' "$WORLD_DIR" "\${#worlds[@]}"
+  exit 1
 fi
+
+world=\${worlds[0]##*/}
+WORLD_GUID=\${world##*~}
+# Character folders wear the same shape, and a folder whose tail is not a guid
+# would launch the server on a world it cannot open — which it answers by
+# creating one.
+if [[ ! $WORLD_GUID =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+  printf 'beacon: %s does not end in a guid\\n' "$world"
+  exit 1
+fi
+
+printf 'beacon: opening %s\\n' "$world"
 
 args=(
   -batchmode
@@ -295,9 +318,10 @@ const COMPOSE = `services:
       # been passed, and a player behind a real NAT joins from the list.
       - "27015:27015/udp"
     environment:
-      # Which world to open. Catalogue knowledge (§4): the machine can no more
-      # invent a world than choose one.
-      WORLD_GUID: ${WORLD_GUID}
+      # No world guid here: which world to open is read off the folder the
+      # restore laid down, so the disk is the authority and nothing compiled
+      # can disagree with it.
+      #
       # Measured, and the costliest trap of this entry: compose interpolates
       # everything reaching a container's environment, \`env_file\` included, so
       # a password holding a \`$\` arrives truncated — \`a$bc\` as \`a\`, with a
@@ -469,16 +493,60 @@ export const sunkenland: GameCatalogEntry = {
 
   /**
    * The identifier is the only way into this game, and only the machine
-   * discovers it. What makes it safe to republish is free: the identifier
-   * begins with the guid of the world the control plane itself told the
-   * container to open, so an identifier naming another world is refused here
-   * and the session dies of the provisioning delay (§6).
+   * discovers it — the world it names is now discovered there too, so there is
+   * no constant left to compare against. What is compared instead is the report
+   * against itself: the identifier must begin with the guid of the world the
+   * same report announces.
+   *
+   * That catches a buggy companion, not a hostile machine — the hostile one is
+   * stopped earlier and on the disk, where the companion refuses to report
+   * `ready` for an identifier that does not name the world it restored. What
+   * this adds is that the control plane never publishes a join point
+   * inconsistent with itself.
    */
   joinInfo(facts: JoinFacts): JoinInfo | null {
-    const serverId = facts.serverId;
-    if (serverId === undefined || !serverId.startsWith(`${WORLD_GUID}~`)) {
+    const { serverId, world } = facts;
+    if (serverId === undefined || world === undefined || !serverId.startsWith(`${world.guid}~`)) {
       return null;
     }
-    return { game: GAME, serverId, region: REGION, worldName: WORLD_NAME };
+    return { game: GAME, serverId, region: REGION, worldName: world.name };
+  },
+
+  worldLayoutRefusal(entries: readonly string[]): string | null {
+    if (entries.length === 0) {
+      return 'the archive is empty: no world folder at all';
+    }
+    const topLevel = new Set<string>();
+    for (const entry of entries) {
+      const slash = entry.indexOf('/');
+      topLevel.add(slash === -1 ? entry : entry.slice(0, slash));
+    }
+    // <name>~<guid> is the shape, but character folders wear it too — the
+    // guid check alone cannot tell a world from a parent-directory mistake
+    // like "Worlds", which does not even carry a tilde.
+    const named = [...topLevel].filter((folder) => {
+      const tilde = folder.lastIndexOf('~');
+      return tilde !== -1 && GUID_RE.test(folder.slice(tilde + 1));
+    });
+    if (named.length === 0) {
+      return `found top-level entr${topLevel.size === 1 ? 'y' : 'ies'} ${[...topLevel].join(', ')}, none shaped like "<name>~<guid>": the archive may have been built from the parent directory`;
+    }
+    // §8: exactly one such folder, and not merely one of them holding a world.
+    // The entry point on the machine counts folders, not worlds — a character
+    // folder travelling alongside the world makes it exit 1 on every boot,
+    // forever. Accepting it here would be an adoption that reports success and
+    // denies every session after it, on the one gesture that has no undo.
+    if (named.length > 1) {
+      return `found ${named.length} "<name>~<guid>" folders (${named.join(', ')}): the machine boots on exactly one, so it would refuse this archive on every session`;
+    }
+    const worlds = named.filter((folder) =>
+      entries.some(
+        (entry) => entry.startsWith(`${folder}/`) && /^World~.*\.json$/.test(entry.slice(folder.length + 1)),
+      ),
+    );
+    if (worlds.length === 0) {
+      return `found ${named.join(', ')} but no World~*.json inside: cannot tell a world folder from a character folder`;
+    }
+    return null;
   },
 };

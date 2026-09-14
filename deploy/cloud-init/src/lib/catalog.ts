@@ -54,6 +54,12 @@ export interface JoinFacts {
   readonly address: string;
   /** What the machine declared (§7). Present only for a game that announces one. */
   readonly serverId?: string;
+  /**
+   * The world the machine read off its own disk, name and guid together. It is
+   * what a player looks for in the server list, and the only thing an entry can
+   * check an identifier against now that no guid is compiled in.
+   */
+  readonly world?: { readonly name: string; readonly guid: string };
 }
 
 /**
@@ -73,8 +79,9 @@ export interface GameCatalogEntry {
   render(request: BootRequest): string;
   /**
    * Null is a refusal, not an error to report: §6 wants the control plane to
-   * reject an identifier whose prefix does not name the world it booted, and
-   * the world guid is game knowledge that §4 keeps out of everything else. So
+   * reject an identifier whose prefix does not name the world the same report
+   * announces, and what makes that a check rather than a formality is game
+   * knowledge §4 keeps out of everything else. So
    * the entry decides, and the one caller merely notices that nothing came
    * back — a session with no join point dies of the provisioning delay, which
    * already exists and covers exactly this.
@@ -85,6 +92,15 @@ export interface GameCatalogEntry {
    * proof, and it is the most a value that exists only on the machine allows.
    */
   joinInfo(facts: JoinFacts): JoinInfo | null;
+  /**
+   * The measured trap this whole function exists to catch: an archive built
+   * from the wrong directory — `-C` one level too high — produces
+   * `Worlds/Worlds/<monde>`, and the game does not refuse it. It boots a blank
+   * world instead, someone plays on it, and that evening's push becomes the
+   * newest save. Null means the layout starts at the right level; anything
+   * else is the sentence an administrator reads before they adopt.
+   */
+  worldLayoutRefusal(entries: readonly string[]): string | null;
 }
 
 /**
@@ -198,3 +214,15 @@ export const renderCloudInit = (game: Game, request: BootRequest): string => {
 };
 
 export const renderCompose = (game: Game): string => catalogFor(game).compose();
+
+/**
+ * `tar tzf` lists every entry with a leading `./`, and no entry has to know
+ * that three times over. Normalisation lives here, once, and each game's
+ * entry judges paths that never carry it. `./` alone is tar's marker for the
+ * archive root, never an entry a game's world could consist of, so it does not
+ * survive normalisation — an archive that held only it still judges empty.
+ */
+export const refuseWorldLayout = (game: Game, entries: readonly string[]): string | null =>
+  catalogFor(game).worldLayoutRefusal(
+    entries.map((entry) => entry.replace(/^\.\//, '')).filter((entry) => entry !== ''),
+  );

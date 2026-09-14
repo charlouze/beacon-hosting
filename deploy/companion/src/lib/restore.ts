@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import type { Clock, Save, SaveStore } from '@beacon/session';
+import { newestSave, type Clock, type Save, type SaveStore } from '@beacon/session';
 import { clearDirectory, unpackInto } from './archive.js';
 import type { CompanionConfig } from './config.js';
 import type { Reporter } from './reporter.js';
@@ -59,13 +59,7 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
   try {
     // A throw propagates. It is the whole point of this function.
     const saves = await deps.store.list(config.game);
-    // Newest by `createdAt` and not `saves[0]`: the port's contract is "newest
-    // first" (§4), but trusting an adapter's order here would make a restore
-    // depend on an invariant this function cannot check.
-    newest = saves.reduce<Save | undefined>(
-      (latest, save) => (latest === undefined || save.createdAt > latest.createdAt ? save : latest),
-      undefined,
-    );
+    newest = newestSave(saves);
   } catch (error) {
     await tell(deps, `restore refused: the bucket did not answer — ${String(error)}`);
     throw error;

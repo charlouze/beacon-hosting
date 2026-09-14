@@ -50,6 +50,12 @@
     },
     {
       "path": "./tools/deploy-setup"
+    },
+    {
+      "path": "./libs/admin-key"
+    },
+    {
+      "path": "./tools/world-depot"
     }
   ],
   "compilerOptions": {}

@@ -75,7 +75,7 @@ un jeu par tranche.
 | 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | **livrée le 2026-09-08** |
 | 4 | La sécurité | Le système peut être exposé | **livrée le 2026-09-11** |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | maquettes validées le 2026-09-11 |
-| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | acceptée le 2026-09-11, **avant la 6** |
+| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **livrée le 2026-09-14** |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
 | 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
 
@@ -567,3 +567,35 @@ resté ouvert se recharge quand elle bouge (§4).
   Deux endroits mentent déjà par anticipation et devront bouger : la **section D**
   de [`probe/RESULTS.md`](../../../probe/RESULTS.md), qui donne l'alerting gratuit
   sans réserve, et le **§11** du spec. La mesure, elle, est en section F.
+
+- **Éprouver un outil d'administration contre un seau demande un harnais qui
+  n'existe pas.** La tranche 7 livre `tools/world-depot`, dont les deux gestes
+  ne se prouvent qu'en parlant à un seau : aucun test unitaire ne dit si les
+  identifiants se lisent, si le transfert aboutit, ni si ce qui revient est ce
+  qui est parti. La vérification a donc été faite à la main le 2026-09-14 — un
+  conteneur MinIO, une configuration rclone jetable, un monde de test — et tout
+  a tenu, aller-retour à l'octet près.
+
+  **Ce qui mérite d'être consigné est ce que ce montage a coûté à trouver**, et
+  qui se reperdra sinon. L'isolation ne passe pas par le nom du seau :
+  `BEACON_SAVES_BUCKET` ne change que lui, tandis que l'endpoint, la région et
+  la clé viennent tous du remote rclone `scw-admin`. Pointer la variable sur un
+  seau local tout en laissant la vraie configuration en place **signe une
+  écriture vers Scaleway** dans un seau portant le nom du local. Le seul levier
+  qui isole vraiment est `RCLONE_CONFIG`, qui fait lire à l'outil une
+  configuration ne contenant que MinIO. Seconde trouvaille du même ordre :
+  Scaleway étant adressé en virtual-hosted style (`forcePathStyle: false`,
+  parce que c'est ce que la production parle), un MinIO local n'est joignable
+  depuis l'hôte que si `<seau>.<domaine>` résout — d'où `MINIO_DOMAIN` posé sur
+  un domaine à DNS joker.
+
+  **La moitié du harnais existe déjà** : le test de fumée du compagnon monte son
+  propre MinIO dans `deploy/companion/smoke/`, avec le même problème d'adressage
+  résolu autrement — par des alias de réseau Docker, ce qui ne sert que les
+  conteneurs et pas un outil lancé depuis l'hôte.
+
+  Le geste se répétera à chaque tranche qui touche au seau, et la règle du dépôt
+  est qu'un geste récurrent devient un outil testé plutôt qu'une recette
+  transmise de mémoire. Ça n'est pas une tranche : c'est une cible Nx à écrire
+  le jour où une tranche a de nouveau besoin du seau, et le bon moment pour la
+  payer est celui-là, pas avant.
