@@ -75,7 +75,7 @@ un jeu par tranche.
 | 3 bis | Le second jeu | Sunkenland démarre, avec ses fichiers et son ServerID | **livrée le 2026-09-08** |
 | 4 | La sécurité | Le système peut être exposé | **livrée le 2026-09-11** |
 | 5 | L'écran | Le produit décrit dans `.impeccable/` | maquettes validées le 2026-09-11 |
-| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | acceptée le 2026-09-11, **avant la 6** |
+| 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **livrée le 2026-09-14** |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
 | 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
 

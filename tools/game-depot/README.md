@@ -35,7 +35,7 @@ npx nx run game-depot:push -- --game=sunkenland --from="<installation locale>"
 ```
 
 Pour un script qui a déjà résolu son dossier et exporté les cinq variables
-`BEACON_S3_*`. C'est ce que fait `deploy/scaleway/bootstrap-sunkenland.ps1`.
+`BEACON_S3_*`.
 
 ## `game-depot:archive-key`
 
