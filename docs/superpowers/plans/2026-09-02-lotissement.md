@@ -599,3 +599,24 @@ resté ouvert se recharge quand elle bouge (§4).
   transmise de mémoire. Ça n'est pas une tranche : c'est une cible Nx à écrire
   le jour où une tranche a de nouveau besoin du seau, et le bon moment pour la
   payer est celui-là, pas avant.
+
+- **`deploy/cloud-init` s'appelle mal : c'est le catalogue des jeux.** Son nom
+  désigne une sortie de rendu, alors que le projet porte tout ce que Beacon sait
+  d'un jeu — l'image et son digest, le port mesuré, la cadence d'autosauvegarde,
+  comment la disponibilité s'observe, comment le point de jonction se construit,
+  et depuis la tranche 7 à quoi ressemble un monde sur le disque.
+
+  Le dépôt le sait déjà partout ailleurs : son tag Nx est `scope:catalog`, et les
+  contraintes de frontières d'`eslint.config.mjs` parlent du « catalogue », pas
+  du cloud-init. Le nom du projet est le seul endroit qui dit autre chose.
+
+  Ce que ça coûte se voit à la lecture : qui cherche « où est décrit ce que Beacon
+  sait de Sunkenland » n'ouvre pas `deploy/cloud-init`. La question s'est posée
+  telle quelle le 2026-09-14, en revue d'une garde ajoutée à `worldLayoutRefusal`.
+
+  Le renommage — `deploy/catalog`, paquet `@beacon/catalog` — est mécanique mais
+  traverse le dépôt : imports d'`apps/functions` et de `tools/world-depot`,
+  tsconfig, cibles Nx, et les renvois de ce lotissement. `nx move` fait le gros
+  et le reste se relit. À payer le jour où une tranche ouvre déjà ce projet en
+  grand, pas pour lui-même : un renommage seul produit un diff large qui ne dit
+  rien, et masquerait le changement suivant dans sa revue.
