@@ -9,4 +9,4 @@
  * day a new image is published there must be exactly one line to change.
  */
 export const COMPANION_IMAGE =
-  'ghcr.io/charlouze/beacon-companion@sha256:4728d2de3e4abc9b7439b25e299e1a70fe86f32ecccb9d98dd6e44debed817ca';
+  'ghcr.io/charlouze/beacon-companion@sha256:65118703608283cc547498d2fe1e70b45eccd1f36eee80f3f3c16c87062eed07';
