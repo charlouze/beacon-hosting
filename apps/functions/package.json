@@ -67,6 +67,12 @@
           "command": "npx tsx apps/functions/src/stamp-entry.ts"
         }
       },
+      "personas": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx apps/functions/src/personas-entry.ts"
+        }
+      },
       "prune-lockfile": {
         "dependsOn": [
           "build"
