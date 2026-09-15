@@ -1,13 +1,8 @@
-import { createWriteStream } from 'node:fs';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
-import {
-  GetObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  type S3Client,
-} from '@aws-sdk/client-s3';
+import { GetObjectCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import type { ObjectApi, ObjectSummary } from './object-api.js';
 
 /**
@@ -44,15 +39,15 @@ export function fromS3(client: S3Client, bucket: string): ObjectApi {
     },
 
     async put(key: string, fromFile: string): Promise<void> {
-      // ContentLength is passed explicitly: a stream has no length, and without
-      // it the sdk buffers the whole archive in memory on a machine that is
+      // `Upload` rather than a single `PutObjectCommand`: S3 refuses any one
+      // `PutObject` past 5 GiB, and a game update can cross that line without
+      // warning. Below that it still sends one `PutObjectCommand`, unchanged;
+      // above it, it splits the stream into parts on its own — never
+      // buffering more than a few parts' worth in memory on a machine that is
       // also running a game server.
-      const sizeBytes = statSync(fromFile).size;
       const body = createReadStream(fromFile);
       try {
-        await client.send(
-          new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentLength: sizeBytes }),
-        );
+        await new Upload({ client, params: { Bucket: bucket, Key: key, Body: body } }).done();
       } catch (error) {
         // A send that fails before reading the body — a bad endpoint, a refused
         // signature — leaves this stream with nobody to consume it, while every
