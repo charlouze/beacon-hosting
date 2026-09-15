@@ -138,7 +138,6 @@ const deps = (): WatchdogDeps => ({
   clock: { now: () => NOW },
   host,
   states: worldStateStores(db),
-  worlds: adminWorldRecord(db),
   events: systemEvents(db),
   ledger: afterTheInventory(ledger),
   health: watchdogHealth(db),
@@ -179,7 +178,6 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
     })),
     all: vi.fn(async () => ['w1']),
   },
-  worlds: { read: vi.fn(async () => null), create: vi.fn() },
   events: { file: vi.fn() },
   ledger: {
     openSessions: vi.fn(async () => []),
@@ -506,6 +504,55 @@ describe('runWatchdog', () => {
     const events = await db.collection('events').get();
     expect(events.size).toBe(1);
     expect(events.docs[0].get('worldId')).toBeNull();
+  });
+
+  // The contract task 12 exists to honour, with a real destruction on each
+  // side: `own` must be this world's outcomes and no other's, or the same
+  // stuck session would be filed twice — once per world it was handed to.
+  it('destroys a stuck session in each of two worlds, filed once and to its own world', async () => {
+    await seedWorld('a', {
+      state: 'STOPPING',
+      sessionId: 's-a',
+      stateSince: minutesAgo(11),
+      instanceId: 'i-a',
+    });
+    await seedWorld('b', {
+      state: 'STOPPING',
+      sessionId: 's-b',
+      stateSince: minutesAgo(11),
+      instanceId: 'i-b',
+    });
+    host.hosted = [hosted('s-a'), hosted('s-b')];
+
+    await runWatchdog(deps());
+
+    expect(host.closed.sort()).toEqual(['s-a', 's-b']);
+    const events = await db.collection('events').get();
+    expect(
+      events.docs.map((d) => [d.get('type'), d.get('sessionId'), d.get('worldId')]).sort(),
+    ).toEqual([
+      ['SessionStopped', 's-a', 'a'],
+      ['SessionStopped', 's-b', 'b'],
+    ]);
+    expect((await db.doc('worlds/a/server/current').get()).get('state')).toBe('IDLE');
+    expect((await db.doc('worlds/b/server/current').get()).get('state')).toBe('IDLE');
+  });
+
+  // The sentinel path (no world explains the machine) counted once whatever
+  // the number of open worlds — previously only exercised with zero worlds,
+  // where the loop over `view.worlds` never ran at all.
+  it('destroys a machine no world explains once, whatever worlds are open', async () => {
+    await seedWorld('a', { state: 'IDLE' });
+    await seedWorld('b', { state: 'IDLE' });
+    host.hosted = [hosted('ghost')];
+
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual(['ghost']);
+    const events = await db.collection('events').get();
+    expect(events.docs.map((d) => [d.get('type'), d.get('sessionId'), d.get('worldId')])).toEqual(
+      [['SessionReclaimed', 'ghost', null]],
+    );
   });
 });
 
