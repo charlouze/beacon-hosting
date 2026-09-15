@@ -3,14 +3,7 @@
     {
       "ID": "auto-sept-jours",
       "Status": "Enabled",
-      "Filter": { "Prefix": "saves/enshrouded/auto/" },
-      "Expiration": { "Days": 7 },
-      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
-    },
-    {
-      "ID": "sunkenland-auto-sept-jours",
-      "Status": "Enabled",
-      "Filter": { "Prefix": "saves/sunkenland/auto/" },
+      "Filter": { "Prefix": "auto/" },
       "Expiration": { "Days": 7 },
       "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
     }
