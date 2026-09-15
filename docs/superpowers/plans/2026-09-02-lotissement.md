@@ -325,78 +325,121 @@ plus que le coût de la session.
 
 ### 6 · L'infra en code
 
-Les ressources du compte qui vivent longtemps cessent de n'exister que dans une
-console : les deux seaux avec leur versionnement, leur politique et leur règle
-d'élagage, la clé IAM, l'alerte de budget Scaleway, l'alerte Cloud Monitoring et
-son canal, et l'enregistrement A **en existence seulement**. Sept ressources, pas
-une de plus.
+**Recadrée le 2026-09-15, et sur les deux axes à la fois.** Ce qui suit remplace
+« sept ressources en Terraform, pour un énoncé relisible ». La cible et le
+mécanisme ont changé ; ce que la sonde a mesuré, non.
 
-**Elle passe en dernier parce qu'elle ne débloque rien.** Aucun joueur ne la
-voit, aucun gate n'en dépend, et elle est la seule tranche du découpage dont
-l'absence ne coûte que de la vigilance. Ce qu'elle rapporte n'est pas de
-l'automatisation — sans identifiant d'hébergeur dans la CI (`STACK.md`), c'est
-un humain qui lancera `apply` depuis son poste — mais **un énoncé relisible en
-revue et une dérive détectable par un `plan`**, qui ne touche rien.
+**La cible est un compte reconstructible.** Beacon se réinstalle sur un compte
+vide par une suite de gestes écrits, en un temps connu. Pas pour changer de
+compte — il n'y en a qu'un, et le §10 en fait une décision — mais parce que
+c'est le seul énoncé qui se vérifie. Un fichier qui décrit un compte déjà
+conforme ne prouve rien ; le même fichier sur un compte vide prouve tout. C'est
+d'ailleurs ce que la sonde disait déjà sans le nommer : le seul verdict qu'elle
+tenait pour valable était un `plan` vide sur le compte réel.
 
-C'est très exactement le défaut qui a mordu en tranche 3 : `beacon-saves` était
-versionné sans que personne l'ait décidé, une règle d'expiration n'y supprimait
-donc rien, et seule une relecture depuis le seau l'a montré.
+**Le mécanisme est `tools/deploy-setup` étendu, et non Terraform.** L'outil
+existe depuis la tranche 4 : il lit ce qui existe, calcule l'écart avec ce qui
+est déclaré, l'imprime sous `--check`, demande, puis le comble — un `plan` et un
+`apply` qui ne disent pas leur nom, en TypeScript et testés. La tranche 6 telle
+qu'elle était écrite aurait introduit une **seconde** mécanique déclarative à
+côté, sans que personne voie le doublon.
 
-**Sondée en avance de phase le 2026-09-08**, section F de
-[`probe/RESULTS.md`](../../../probe/RESULTS.md). Trois de ses réponses valent
-d'être connues avant d'écrire le plan :
+Trois raisons, dans cet ordre :
 
-- **Le DNS sort du périmètre.** Terraform y déclarerait l'IP que la Function
-  réécrit à chaque session : dérive permanente, et un `apply` qui repointe le
-  sous-domaine vers une session morte pendant qu'une autre tourne. Seule
-  l'*existence* de l'enregistrement se déclare — c'est elle qui manquait le jour
-  du `http 404` —, et le login DynHost ne s'importe pas du tout.
-- **On ne réimporte rien : tout se détruit et se recrée.** Décidé le 2026-09-08 —
-  rien dans les seaux ne vaut d'être gardé, le monde du 2026-09-07 était un monde
-  d'épreuve. Ça règle le seul trou de la sonde, le login DynHost ne s'important
-  pas, et ça supprime le critère délicat : sur un compte vide, l'`apply` produit
-  ce que le fichier dit. En échange, **l'état porte désormais la clé S3 et le mot
-  de passe DynHost** — son seau se verrouille, et reste hors Terraform faute de
-  pouvoir se contenir lui-même.
-- **Le seau porte sa règle d'expiration en bloc interne**, faute de ressource
-  séparée : adopter `beacon-saves` met dans le dépôt, pour la première fois, un
-  outil capable d'effacer une sauvegarde, là où le §8 dit que rien ici n'en est
-  capable. `prevent_destroy` ne protège rien le jour du nuke, et redevient
-  obligatoire dès qu'un monde auquel on tient entre dans le seau.
+- **Le §8 survit sans garde-fou ajouté.** Un outil sans état n'a pas de notion
+  de « remplacer » : il n'existe aucun chemin par lequel un changement de nom
+  emporte `beacon-saves` et les mondes dedans. Terraform en avait un, et sa
+  contrepartie était un `prevent_destroy` posé en condition d'entrée — c'est-à-dire
+  une garde à ne jamais oublier, sur la seule donnée irremplaçable du système.
+  La frontière retenue est au §14 du spec : l'outil **déclare le contenant,
+  jamais le contenu**.
+- **Le savoir reste dans la langue où il a été payé.**
+  `tools/deploy-setup/src/lib/wanted.ts` est le fichier le plus cher du dépôt à
+  redécouvrir : que `firebase deploy` interroge l'API des extensions avant de
+  rien publier et qu'aucun rôle étroit ne le permette, qu'activer
+  `compute.googleapis.com` soit *ce qui crée* le compte par défaut que trois
+  liaisons nomment. Ça se transpose ; ça ne se réinvente pas.
+- **Un outil sans état ne se dispute pas avec le watchdog**, parce qu'il ne
+  croit rien détenir.
 
-**Cette tranche avait une date de péremption, et elle est passée.** Le nuke
-n'était gratuit que tant que les seaux ne portaient rien ; la clause disait que
-si le vrai monde arrivait avant, `beacon-saves` repasserait en import. C'est
-arrivé le **2026-09-08**, quand la tranche 3 bis a déposé le monde d'amorçage de
-Sunkenland — constaté le 2026-09-11 : le seau porte
-`Beacon's World~4db51c84-24cf-459e-9e9e-88b8c3a7ce3b`, et
-`deploy/cloud-init/src/lib/sunkenland.ts` fixe ce GUID en dur.
+Ce que ça coûte, et il faut le savoir : on ne détecte pas ce qui existe **en
+trop**, seulement ce qui diverge sur un attribut déclaré. Pour un compte d'une
+vingtaine de ressources connues, c'est le bon marché — et c'est exactement le
+défaut qui a mordu en tranche 3, qu'une comparaison d'attribut déclaré attrape :
+`beacon-saves` était versionné sans que personne l'ait décidé, une règle
+d'expiration n'y supprimait donc rien, et seule une relecture depuis le seau l'a
+montré.
 
-Un monde ne se retélécharge pas. Il se crée dans le client d'un joueur, son GUID
-se fige à cet instant, et les personnages y restent attachés — c'est tout ce que
-`deploy/scaleway/bootstrap-world.ps1` explique. Détruire `beacon-saves` coûterait
-donc soit le monde, soit un redépôt sous un autre GUID, qui détacherait tout le
-monde.
+**Elle passe en dernier parce qu'elle ne débloque rien**, et ça n'a pas changé.
+Aucun joueur ne la voit, aucun gate n'en dépend, et elle est la seule tranche du
+découpage dont l'absence ne coûte que de la vigilance.
 
-Donc : **`beacon-saves` s'importe, avec son critère de `plan` vide et tout ce que
-la sonde en dit. `beacon-games` se détruit et se recrée** — ses 2,23 Gio sont des
-fichiers de jeu, que `nx run game-depot:update` retélécharge depuis Steam. La
-décision du 2026-09-08 tenait pour les deux ; elle ne tient plus que pour un.
+#### Ce que la sonde a mesuré, et qui tient toujours
 
-**La frontière avec la CLI, et pourquoi elle est là.**
-`google_firebase_hosting_version` ne supporte pas les fichiers statiques :
-`apps/web` ne se déploie pas en Terraform. La CLI reste donc, et tant qu'elle
-reste, autant qu'elle garde tout ce qu'elle sait déjà faire — règles, index,
-Functions, et le job Scheduler qui vient avec. **La CLI livre l'app, Terraform
-déclare le compte.** Ce qui rend la seconde moitié nécessaire est l'alerte Cloud
-Monitoring du watchdog : la CLI ne la pose pas, elle est née d'un clic de console
-en tranche 1, et le §6 en fait le seul garde-fou du composant le plus critique
-pour le budget.
+Section F de [`probe/RESULTS.md`](../../../probe/RESULTS.md), le 2026-09-08,
+sans toucher au compte. Le mécanisme a changé, pas les faits :
+
+- **Le DNS sort du périmètre**, et pour une raison qui ne dépend d'aucun outil :
+  l'IP de l'enregistrement est réécrite à chaque session, donc seule son
+  *existence* se déclare — c'est elle qui manquait le jour du `http 404`. Le §14
+  du spec le dérive maintenant de la frontière au lieu de le constater.
+- **Le login DynHost reste dehors.** L'adopter demanderait de le détruire et de
+  le recréer, donc d'en changer le mot de passe et de faire perdre sa mise à
+  jour DNS à la session en cours.
+- **La règle d'expiration est un attribut du seau**, pas une ressource séparée.
+  Avec un outil sans état c'est une simple pose de document — `create` remplace
+  la configuration entière, et [`deploy/scaleway/`](../../../deploy/scaleway/README.md)
+  porte déjà les deux JSON qui en tiennent lieu.
+
+**Deux questions de la sonde n'ont plus d'objet.** « Terraform ou OpenTofu » :
+ni l'un ni l'autre. « Importer ou détruire pour recréer » : ni l'un ni l'autre
+non plus — sans état, il n'y a rien à importer, et rien n'a besoin d'être
+détruit. Toute la controverse du nuke s'éteint avec la prémisse qui la portait.
+
+Elle se serait éteinte de toute façon : **la tranche 7 a rendu le monde
+portable.** `world-depot retrieve` le rend sur la machine d'un administrateur et
+`adopt` le redépose, GUID compris. Ce qui rendait `beacon-saves` intouchable
+depuis le 2026-09-08 — un monde ne se retélécharge pas — a cessé d'être vrai le
+2026-09-14, et par un outil écrit pour une autre raison.
+
+#### La frontière avec `firebase deploy`, qui ne bouge pas
+
+`apps/web`, les règles, les index, les Functions et le job Scheduler qu'emporte
+`onSchedule` restent à la CLI, déployés par la fusion dans `main`. **La CLI
+livre l'app, l'outil déclare le compte.** Ce qui rend la seconde moitié
+nécessaire est l'alerte Cloud Monitoring du watchdog : la CLI ne la pose pas,
+elle est née d'un clic de console en tranche 1, et le §6 en fait le seul
+garde-fou du composant le plus critique pour le budget.
 
 **Ce que cette tranche ne revendique jamais** : l'instance et l'IP flottante,
 qui appartiennent au watchdog et se réconcilient par tag ; les règles, les
 index, les Functions, le Hosting et le job Scheduler, que `firebase deploy`
 déploie. Deux outils sur le même objet est une guerre d'états.
+
+#### Les sous-lots
+
+**6a — la carte.** *Livrée le 2026-09-15.* Le §14 du spec, la table des huit
+mécanismes dans [`deploy/README.md`](../../../deploy/README.md), et la ligne de
+`CLAUDE.md` qui les ressort au bon moment. Aucun code. Elle se tient seule : sans
+elle, une session future rouvre cette section et écrit du Terraform.
+
+**6b — le compte visé cesse d'être une constante.**
+`tools/deploy-setup/src/lib/wanted.ts` code en dur le numéro du projet, dont
+`agentBindings()` compose trois membres parce que seul le numéro est accepté
+dans un `principalSet`. Sur un projet neuf, l'outil configure donc l'ancien.
+C'est la condition pour que 6d veuille dire quelque chose.
+
+**6c — le compte Scaleway et OVH entre dans l'outil.** Les deux seaux et leurs
+politiques, la clé S3, l'alerte de budget, l'alerte Cloud Monitoring et son
+canal, l'enregistrement A en existence seulement. Les deux JSON de
+`deploy/scaleway/` cessent d'être posés à la main. Les ports existent déjà —
+`libs/scaleway-storage`, `libs/ovh-dns` —, et l'outil ne les atteint que pour
+leur configuration, jamais pour leurs objets (§14).
+
+**6d — la répétition.** Un compte neuf, la suite de gestes, chronométrée, et ce
+qu'elle fait tomber. C'est le seul lot qui prouve quelque chose, et il est
+**entièrement un geste humain** : les commandes s'écrivent ici, un humain les
+lance.
 
 ### 7 · Les mondes vont et viennent
 
@@ -510,6 +553,11 @@ resté ouvert se recharge quand elle bouge (§4).
   en code** — Scaleway et GCP ont chacun leur fournisseur —, et la question n'est
   pas de savoir si c'est souhaitable mais quand ça vaut le détour.
 
+  **Le fournisseur n'a finalement pas été la réponse**, tranché le 2026-09-15 :
+  c'est `tools/deploy-setup` qui les prend, sans état et sans verbe de
+  destruction. La question de la ligne ci-dessus reste posée telle quelle — elle
+  est l'histoire, et elle a produit la bonne tranche pour la mauvaise raison.
+
   Cette liste portait aussi **le job Scheduler**, et c'était faux :
   `apps/functions/src/main.ts` le déclare en `onSchedule`, donc `firebase deploy`
   le crée. Il n'a jamais été un geste de console.
@@ -540,6 +588,11 @@ resté ouvert se recharge quand elle bouge (§4).
   chaque session — et il coûte une garde qui n'existait pas : un `prevent_destroy`
   sur le seau des sauvegardes, obligatoire dès qu'un monde auquel on tient y
   entre, sa règle d'élagage étant un bloc interne du seau.
+
+  **Cette garde a disparu avec l'outil qui la réclamait.** Le mécanisme retenu
+  le 2026-09-15 est sans état et n'a aucun verbe de destruction : il n'y a plus
+  de chemin par lequel le seau se ferait remplacer, donc plus rien à protéger.
+  C'est le §14 du spec qui porte maintenant cette propriété.
 
 - **L'alerte du watchdog devient payante, et c'est la propriété qui est touchée,
   pas le budget.** Google facturera l'alerting le **1er septembre 2027 au plus
