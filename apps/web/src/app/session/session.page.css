@@ -4,6 +4,18 @@
   flex-direction: column;
 }
 
+/* The foot has two ends and not three stops. The Steam control was its left
+   half until the list arrived; « Your worlds » took that place, and a third
+   child under `space-between` would park a 17-digit number in ink at the exact
+   centre of a foot made of two greys. It joins Sign out on the right, which is
+   the shape every comp gives this foot. Not below 640 px, where the three wrap
+   onto their own lines and a pushed margin would only rag one of them. */
+@media (min-width: 641px) {
+  .quiet beacon-steam-declaration {
+    margin-left: auto;
+  }
+}
+
 /* Same repli as `worlds.page.css`, duplicated rather than shared: component
    stylesheets are encapsulated, and no global rule in `styles.css` covers a
    two-word wordmark yet. */

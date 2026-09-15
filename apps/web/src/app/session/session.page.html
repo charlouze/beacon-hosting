@@ -75,6 +75,7 @@
   />
 
   <div class="quiet">
+    <a data-action="worlds" routerLink="/">Your worlds</a>
     @if (member().steamId; as steamId) {
       <beacon-steam-declaration [steamId]="steamId" (declared)="declared.emit($event)" />
     }
