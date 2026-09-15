@@ -535,6 +535,14 @@ glossaire est la langue omniprésente :
 | lien d'invitation | `inviteCode`, libellé `Invite link` | `beacon.charlouze.com/join/<worldId>/<code>` : ce qu'un joueur colle sur Discord. Celui qui l'ouvre, s'il est membre, devient joueur. Régénérer le code invalide le lien |
 | entrer dans un monde | `join`, libellé `Join` | devenir joueur d'un monde par son lien. Ne fait rien pour un visiteur |
 | quitter un monde | `leave`, libellé `Leave this world` | cesser d'en être joueur, soi-même. L'admin peut retirer quelqu'un |
+| état de l'ensemble | libellés `No world yet`, `Nothing running`, `1 in service`, `N in service` | ce que le bandeau de la liste dit d'un lot de mondes, avant qu'on en lise un |
+| prochaine session | libellé `Next session` · `4 h once opened` | sur un monde qui dort : ce qu'ouvrir donnera, depuis `sessionDurationMs` |
+| renommer | libellés `Rename`, `Save`, `Cancel` | changer le nom du monde, sur place, dans la bande du monde |
+| nouveau lien | libellés `New link`, `Keep this one` | régénérer le code d'invitation, et y renoncer ; l'ancien lien cesse de marcher |
+| confirmation de sortie | libellés `Leave`, `Stay` | la confirmation de `Leave this world`, sur place |
+| entrée en cours | libellés `Joining`, `Taking you in.` | `/join` pendant que la règle décide ; la page ne nomme pas le monde, qu'elle ne peut pas lire |
+| lien refusé | libellé `Link not valid` | `/join` quand la règle refuse ; un code remplacé et un code faux se lisent pareil |
+| pas le vôtre | libellé `Not yours` | `/worlds/{worldId}` d'un monde dont on n'est pas joueur : rien ne se lit, et l'écran le dit |
 | adopter un monde | `adopt` | faire naître un monde dans le système, et y déposer s'il y a lieu un monde venu d'ailleurs comme une sauvegarde d'origine `manual`. **La seule opération du système qui recouvre** (§8) |
 | rendre un monde | `retrieve` | ressortir du système le monde qui y vit, sur la machine de l'administrateur. Ne retire rien du seau : c'est une copie, et c'est ce qui rend l'adoption acceptable |
 | jeu | `Game` | le jeu d'un monde, `enshrouded` ou `sunkenland` ; figé à l'adoption, lu par la session |
