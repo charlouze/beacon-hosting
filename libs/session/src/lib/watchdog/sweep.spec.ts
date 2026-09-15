@@ -8,13 +8,13 @@ const ago = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000);
 
 describe('mustSweep', () => {
   it('sweeps while anything is not idle', () => {
-    expect(mustSweep({ ...quiet, state: 'RUNNING' }, ago(1), NOW, DEFAULT_LIMITS)).toBe(true);
+    expect(mustSweep([{ ...quiet, state: 'RUNNING' }], ago(1), NOW, DEFAULT_LIMITS)).toBe(true);
   });
 
   // IDLE while a reserved field still holds something is the record disagreeing
   // with itself — exactly what the reconciliation is for, so it must look.
   it('sweeps while a reserved field still holds something', () => {
-    expect(mustSweep({ ...quiet, hasReservedFacts: true }, ago(1), NOW, DEFAULT_LIMITS)).toBe(
+    expect(mustSweep([{ ...quiet, hasReservedFacts: true }], ago(1), NOW, DEFAULT_LIMITS)).toBe(
       true,
     );
   });
@@ -23,21 +23,33 @@ describe('mustSweep', () => {
   // damaged one. Deciding to look at nothing because we can read nothing is
   // the mistake this line exists to refuse.
   it('sweeps when there is no record at all', () => {
-    expect(mustSweep(null, ago(1), NOW, DEFAULT_LIMITS)).toBe(true);
+    expect(mustSweep([null], ago(1), NOW, DEFAULT_LIMITS)).toBe(true);
   });
 
   it('sweeps when nothing has ever swept', () => {
-    expect(mustSweep(quiet, null, NOW, DEFAULT_LIMITS)).toBe(true);
+    expect(mustSweep([quiet], null, NOW, DEFAULT_LIMITS)).toBe(true);
   });
 
   it('does not sweep on a quiet pass that follows a recent one', () => {
-    expect(mustSweep(quiet, ago(5), NOW, DEFAULT_LIMITS)).toBe(false);
+    expect(mustSweep([quiet], ago(5), NOW, DEFAULT_LIMITS)).toBe(false);
   });
 
   // §11: the started hour is due on each resource separately, so a stray
   // reclaimed at thirty minutes costs exactly what it would at five. Thirty is
   // also the ceiling: at sixty, one missed pass buys a second billed hour.
   it('sweeps again once the quiet interval has passed', () => {
-    expect(mustSweep(quiet, ago(30), NOW, DEFAULT_LIMITS)).toBe(true);
+    expect(mustSweep([quiet], ago(30), NOW, DEFAULT_LIMITS)).toBe(true);
+  });
+
+  // §6: one world stuck is enough to make the whole pass ask the provider,
+  // whatever the others say — a healthy world buys no rest for a stuck one.
+  it('sweeps when one world among several is not idle, even after a recent pass', () => {
+    expect(
+      mustSweep([quiet, { ...quiet, state: 'RUNNING' }], ago(5), NOW, DEFAULT_LIMITS),
+    ).toBe(true);
+  });
+
+  it('does not sweep while every world is idle-clean and the pass was recent', () => {
+    expect(mustSweep([quiet, quiet], ago(5), NOW, DEFAULT_LIMITS)).toBe(false);
   });
 });

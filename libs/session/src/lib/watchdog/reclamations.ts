@@ -1,7 +1,8 @@
 import type { ReclaimReason } from '../events.js';
 import type { Session } from '../session-aggregate.js';
 import type { SessionId } from '../session.js';
-import type { WatchdogLimits, WatchdogView } from './view.js';
+import type { WorldId } from '../world.js';
+import type { WatchdogLimits, WatchdogView, WorldView } from './view.js';
 
 export interface Reclamation {
   readonly sessionId: SessionId;
@@ -16,14 +17,15 @@ export interface Reclamation {
  * to write STOPPING, and the clean shutdown of §6 carries the rest.
  */
 export interface Expiration {
+  readonly worldId: WorldId;
   readonly sessionId: SessionId;
   readonly detail: string;
 }
 
 export interface WatchdogDecision {
-  /** What must be destroyed, and why. */
+  /** What must be destroyed, and why. Computed once, across every world. */
   readonly destroy: readonly Reclamation[];
-  /** What must be asked to stop, its closing time behind it. */
+  /** What must be asked to stop, its closing time behind it — per world. */
   readonly expired: readonly Expiration[];
 }
 
@@ -31,6 +33,13 @@ export interface WatchdogDecision {
  * What the watchdog must do about the world it just read. Pure: it decides
  * from what the provider declares and what the control plane recorded, and
  * never from an id it kept.
+ *
+ * The unexplained are computed once, over `hosted` and `openSessions`, never
+ * once per world: a machine the provider holds that no intent explains
+ * belongs to no world, and counting it once per world would file as many
+ * `SessionReclaimed` as there are worlds, for a single destruction. The
+ * expiration and the stuck-state check, by contrast, run once per world — §6:
+ * the watchdog "applique à chacun, séparément, les décisions du tableau".
  *
  * One parcours, one return, two named lists — never a single list a flag
  * would have to be read to tell apart. A session never appears in both:
@@ -52,43 +61,50 @@ export function reclamations(view: WatchdogView, limits: WatchdogLimits): Watchd
   }
 
   const expired: Expiration[] = [];
-  const sessionId = view.server?.sessionId;
-  const expiring = expiredSession(view, limits);
 
-  if (sessionId != null && expiring !== null) {
-    // Overwrites whatever the loop above set for the same id: a session past
-    // its own closing time is finished, not unexplained, and it cannot owe
-    // both verbs at once.
-    //
-    // The trade this is the other half of: a hosted session whose intent is
-    // already closed and whose deadline has passed is asked to stop rather
-    // than destroyed on sight, so it can go on billing for as long as
-    // `stoppingTimeoutMs` after the grace — up to about fifteen minutes on
-    // the defaults, not the whole life of a stray. What buys that wait is a
-    // save: STOPPING is what makes `pre-shutdown` mean anything (§6 étape
-    // 2-3), and destroying here instead would end the session on whatever
-    // the last cadence push happened to catch. The stopping-timeout net in
-    // `stuckReason` is what bounds the wait: an agent that never reports is
-    // still reaped, at that ceiling, exactly as any other stuck STOPPING is.
-    bySession.delete(sessionId);
-    expired.push({ sessionId, detail: `closing time was ${expiring.deadline.auditHour()}` });
-  } else {
-    // A stuck state overwrites the entry above when both apply: the narrower
-    // reason reads better in the audit, and it is the one that decides what
-    // server/current becomes.
-    //
-    // It is emitted whether or not the provider holds anything. §6 asks for
-    // "destruction, then IDLE", and the "then" is the part a session with no
-    // resources still needs: close() is idempotent, so the cost of asking is
-    // two reads, and the benefit is a state that stops being stuck forever.
-    const stuck = stuckReason(view, limits);
-    if (stuck !== null && sessionId != null) {
-      const held = view.hosted.find((server) => server.sessionId === sessionId);
-      bySession.set(sessionId, {
+  for (const world of view.worlds) {
+    const sessionId = world.server?.sessionId;
+    const expiring = expiredSession(world, view.now, limits);
+
+    if (sessionId != null && expiring !== null) {
+      // Overwrites whatever the loop above set for the same id: a session past
+      // its own closing time is finished, not unexplained, and it cannot owe
+      // both verbs at once.
+      //
+      // The trade this is the other half of: a hosted session whose intent is
+      // already closed and whose deadline has passed is asked to stop rather
+      // than destroyed on sight, so it can go on billing for as long as
+      // `stoppingTimeoutMs` after the grace — up to about fifteen minutes on
+      // the defaults, not the whole life of a stray. What buys that wait is a
+      // save: STOPPING is what makes `pre-shutdown` mean anything (§6 étape
+      // 2-3), and destroying here instead would end the session on whatever
+      // the last cadence push happened to catch. The stopping-timeout net in
+      // `stuckReason` is what bounds the wait: an agent that never reports is
+      // still reaped, at that ceiling, exactly as any other stuck STOPPING is.
+      bySession.delete(sessionId);
+      expired.push({
+        worldId: world.worldId,
         sessionId,
-        reason: stuck,
-        detail: held?.summary ?? NOTHING_HELD,
+        detail: `closing time was ${expiring.deadline.auditHour()}`,
       });
+    } else {
+      // A stuck state overwrites the entry above when both apply: the narrower
+      // reason reads better in the audit, and it is the one that decides what
+      // server/current becomes.
+      //
+      // It is emitted whether or not the provider holds anything. §6 asks for
+      // "destruction, then IDLE", and the "then" is the part a session with no
+      // resources still needs: close() is idempotent, so the cost of asking is
+      // two reads, and the benefit is a state that stops being stuck forever.
+      const stuck = stuckReason(world, view.now, limits);
+      if (stuck !== null && sessionId != null) {
+        const held = view.hosted.find((server) => server.sessionId === sessionId);
+        bySession.set(sessionId, {
+          sessionId,
+          reason: stuck,
+          detail: held?.summary ?? NOTHING_HELD,
+        });
+      }
     }
   }
 
@@ -103,23 +119,21 @@ const NOTHING_HELD = 'the provider holds nothing for this session';
  * deadline is not stuck — it is finished, and the audit must say so with the
  * right word.
  */
-function expiredSession(view: WatchdogView, limits: WatchdogLimits): Session | null {
-  const session = view.session;
-  if (view.server?.state !== 'RUNNING' || session === null || session.state !== 'RUNNING') {
+function expiredSession(world: WorldView, now: Date, limits: WatchdogLimits): Session | null {
+  const session = world.session;
+  if (world.server?.state !== 'RUNNING' || session === null || session.state !== 'RUNNING') {
     return null;
   }
-  return session.deadline.isPastBy({ now: () => view.now }, limits.deadlineGraceMs)
-    ? session
-    : null;
+  return session.deadline.isPastBy({ now: () => now }, limits.deadlineGraceMs) ? session : null;
 }
 
-function stuckReason(view: WatchdogView, limits: WatchdogLimits): ReclaimReason | null {
-  const record = view.server;
+function stuckReason(world: WorldView, now: Date, limits: WatchdogLimits): ReclaimReason | null {
+  const record = world.server;
   if (record === null) return null;
   if (record.state === 'FAILED') return 'failed-retry';
   if (record.stateSince === null) return null;
 
-  const elapsed = view.now.getTime() - record.stateSince.getTime();
+  const elapsed = now.getTime() - record.stateSince.getTime();
   if (record.state === 'PROVISIONING' && elapsed > limits.provisioningTimeoutMs) {
     return 'provisioning-timeout';
   }
