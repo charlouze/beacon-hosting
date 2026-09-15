@@ -24,7 +24,7 @@ export interface PushDeps {
   readonly clock: Clock;
   readonly config: Pick<
     CompanionConfig,
-    'game' | 'sessionId' | 'saveDir' | 'workDir' | 'stopFlag'
+    'world' | 'sessionId' | 'saveDir' | 'workDir' | 'stopFlag'
   >;
   readonly shutdownGraceMs: number;
 }
@@ -62,7 +62,7 @@ export async function pushSave(deps: PushDeps, origin: SaveOrigin): Promise<void
     }
 
     save = await deps.store.deposit(archive, {
-      game: config.game,
+      worldId: config.world,
       sessionId: config.sessionId,
       origin,
       createdAt: now,
