@@ -70,7 +70,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
     },
     // The same object every call: a test that grabs it via `deps.states.for(...)`
     // and mutates one of its methods reaches the very instance `provision` uses.
-    states: { for: () => state, all: vi.fn(async () => [WORLD_ID]) },
+    states: { for: vi.fn(() => state), all: vi.fn(async () => [WORLD_ID]) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -135,6 +135,7 @@ describe('provisioning', () => {
     expect(request.bootstrap).toContain('SERVER_PASSWORD=hunter2');
     expect(request.sessionId).toBe('s1');
     expect(request.size).toBe('DEV1-L');
+    expect(deps.states.for).toHaveBeenCalledWith(WORLD_ID);
   });
 
   // The heart of this tranche. RUNNING means the join point is published, and
@@ -210,6 +211,7 @@ describe('provisioning', () => {
       expect.objectContaining({ state: 'IDLE', clearFacts: true }),
       NOW,
     );
+    expect(deps.states.for).toHaveBeenCalledWith(WORLD_ID);
     expect(deps.ledger.close).toHaveBeenCalledWith('s1', NOW);
   });
 
@@ -309,6 +311,7 @@ describe('provisioning', () => {
 
     await runStateChange(deps, WORLD_ID, provisioningSession('s1', WORLD_ID, 'sunkenland'));
 
+    expect(deps.worlds.read).toHaveBeenCalledWith(WORLD_ID);
     expect(declaredSteamIds).toHaveBeenCalledWith(['u1', 'u2']);
     const request = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // Not `toEqual` against a plain object: `world` is the domain's own
