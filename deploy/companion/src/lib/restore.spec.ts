@@ -208,14 +208,14 @@ describe('runRestore', () => {
   // that is not this world's, or find none and let the game generate one over
   // a world that does exist under its real name.
   it('lists the saves of its world, not of its game', async () => {
-    deps.config = { ...deps.config, world: 'les-copains' };
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains' } };
     await runRestore(deps);
     expect(deps.store.list).toHaveBeenCalledWith('les-copains');
   });
 
   it('names the world in the message when it has never been saved', async () => {
     deps.store.list = vi.fn(async () => []);
-    deps.config = { ...deps.config, world: 'les-copains' };
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains' } };
     await runRestore(deps);
     expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('les-copains'));
   });

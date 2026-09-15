@@ -98,7 +98,7 @@ describe('pushSave', () => {
   // land as another world's newest save, and the next restore for either
   // world would be wrong.
   it('deposits under its world and its session', async () => {
-    deps.config = { ...deps.config, world: 'les-copains', sessionId: 's1' };
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains', sessionId: 's1' } };
     await pushSave(deps, 'auto');
     const [, draft] = (deps.store.deposit as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(draft).toMatchObject({ worldId: 'les-copains', sessionId: 's1', origin: 'auto' });
