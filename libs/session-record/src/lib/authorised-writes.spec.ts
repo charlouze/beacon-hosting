@@ -14,9 +14,16 @@ import {
   terminate,
   type Firestore,
 } from 'firebase/firestore';
-import { DEFAULT_SETTINGS } from '@beacon/session';
+import { DEFAULT_SETTINGS, World } from '@beacon/session';
 import { clientSessionRecord, type ClientSessionRecord } from './client-session.js';
-import { EVENTS, SERVER_DOC, SETTINGS_DOC } from './fields.js';
+import {
+  EVENTS,
+  idleServerDocument,
+  playerDocument,
+  serverDocPath,
+  SETTINGS_DOC,
+  worldDocument,
+} from './fields.js';
 
 // Same teardown artefact as `round-trip.spec.ts`: the settings listener a
 // record owns for its whole lifetime logs a shutdown error when the test's
@@ -49,6 +56,15 @@ const ALICE = 'alice';
 const BOB = 'bob';
 const MALLORY = 'mallory';
 const ACTOR = { uid: ALICE, name: 'Alice' };
+const WORLD_ID = 'les-copains';
+const NOW = new Date('2026-09-15T20:00:00Z');
+const WORLD = World.from({
+  worldId: WORLD_ID,
+  game: 'enshrouded',
+  name: 'Les copains',
+  inviteCode: 'c0de',
+  players: [ALICE],
+});
 
 let env: RulesTestEnvironment;
 let adminApp: App;
@@ -98,6 +114,7 @@ const admin = () => getFirestore(adminApp);
  */
 async function reset(): Promise<void> {
   await admin().recursiveDelete(admin().collection(EVENTS));
+  await admin().recursiveDelete(admin().collection('worlds'));
   // Through the Admin SDK, which is above the rules — the same way §5 says
   // these documents come into existence: the deployment seeds them, and an
   // admin enrols from the console.
@@ -106,7 +123,11 @@ async function reset(): Promise<void> {
   await admin()
     .doc(SETTINGS_DOC)
     .set({ ...DEFAULT_SETTINGS, rulesVersion: null });
-  await admin().doc(SERVER_DOC).set(IDLE_SERVER);
+  await admin().doc(`worlds/${WORLD_ID}`).set(worldDocument(WORLD, NOW));
+  await admin()
+    .doc(`worlds/${WORLD_ID}/players/${ALICE}`)
+    .set(playerDocument(ALICE, WORLD.inviteCode, Timestamp.fromDate(NOW)));
+  await admin().doc(serverDocPath(WORLD_ID)).set(idleServerDocument(NOW));
 }
 
 beforeEach(reset);
@@ -152,9 +173,9 @@ describe('what the browser really writes, through the rules that are really depl
   it('opens a session, with its audit entry in the same lot', async () => {
     const record = recordAs(ALICE);
 
-    await record.open({ sessionId: 's1', game: 'enshrouded', actor: ACTOR });
+    await record.open({ worldId: WORLD_ID, sessionId: 's1', actor: ACTOR });
 
-    const server = (await admin().doc(SERVER_DOC).get()).data() ?? {};
+    const server = (await admin().doc(serverDocPath(WORLD_ID)).get()).data() ?? {};
     expect(server['state']).toBe('PROVISIONING');
     expect(server['sessionId']).toBe('s1');
     expect(server['startedBy']).toBe(ALICE);
@@ -167,7 +188,7 @@ describe('what the browser really writes, through the rules that are really depl
     await running('2026-09-06T23:45:00Z');
     const record = recordAs(ALICE);
 
-    await record.extend(ACTOR);
+    await record.extend(WORLD_ID, ACTOR);
 
     expect(await deadline()).toEqual(new Date('2026-09-07T01:00:00Z'));
     const events = await admin().collection(EVENTS).get();
@@ -178,9 +199,9 @@ describe('what the browser really writes, through the rules that are really depl
     await running('2026-09-06T23:45:00Z');
     const record = recordAs(ALICE);
 
-    await record.requestStop(ACTOR);
+    await record.requestStop(WORLD_ID, ACTOR);
 
-    expect((await admin().doc(SERVER_DOC).get()).get('state')).toBe('STOPPING');
+    expect((await admin().doc(serverDocPath(WORLD_ID)).get()).get('state')).toBe('STOPPING');
     const events = await admin().collection(EVENTS).get();
     expect(events.docs.map((entry) => entry.get('type'))).toEqual(['SessionStopRequested']);
   });
@@ -193,13 +214,13 @@ describe('what the browser really writes, through the rules that are really depl
 
     await expect(
       record.open({
+        worldId: WORLD_ID,
         sessionId: 's1',
-        game: 'enshrouded',
         actor: { uid: MALLORY, name: 'Mallory' },
       }),
     ).rejects.toThrow();
 
-    expect((await admin().doc(SERVER_DOC).get()).get('state')).toBe('IDLE');
+    expect((await admin().doc(serverDocPath(WORLD_ID)).get()).get('state')).toBe('IDLE');
     expect((await admin().collection(EVENTS).get()).size).toBe(0);
   });
 
@@ -210,30 +231,13 @@ describe('what the browser really writes, through the rules that are really depl
     const record = recordAs(ALICE);
 
     await expect(
-      record.open({ sessionId: 's1', game: 'enshrouded', actor: { uid: BOB, name: 'Bob' } }),
+      record.open({ worldId: WORLD_ID, sessionId: 's1', actor: { uid: BOB, name: 'Bob' } }),
     ).rejects.toThrow();
 
-    expect((await admin().doc(SERVER_DOC).get()).get('state')).toBe('IDLE');
+    expect((await admin().doc(serverDocPath(WORLD_ID)).get()).get('state')).toBe('IDLE');
     expect((await admin().collection(EVENTS).get()).size).toBe(0);
   });
 });
-
-/** What §5 seeds, and what `harness.ts` gives the rules suites. */
-const IDLE_SERVER = {
-  state: 'IDLE',
-  stateSince: null,
-  sessionId: null,
-  startedBy: null,
-  startedAt: null,
-  deadline: null,
-  game: null,
-  instanceId: null,
-  ipId: null,
-  ip: null,
-  joinInfo: null,
-  provisionClaimedAt: null,
-  lastError: null,
-};
 
 /**
  * A RUNNING session closing at midnight, with `now` inside its extension
@@ -246,18 +250,19 @@ async function running(nowIso: string): Promise<void> {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(now);
   await admin()
-    .doc(SERVER_DOC)
-    .set({
-      ...IDLE_SERVER,
-      state: 'RUNNING',
-      stateSince: Timestamp.fromDate(now),
-      sessionId: 's1',
-      game: 'enshrouded',
-      startedBy: ALICE,
-      startedAt: Timestamp.fromDate(now),
-      deadline: Timestamp.fromDate(new Date('2026-09-07T00:00:00Z')),
-    });
+    .doc(serverDocPath(WORLD_ID))
+    .set(
+      {
+        state: 'RUNNING',
+        stateSince: Timestamp.fromDate(now),
+        sessionId: 's1',
+        startedBy: ALICE,
+        startedAt: Timestamp.fromDate(now),
+        deadline: Timestamp.fromDate(new Date('2026-09-07T00:00:00Z')),
+      },
+      { merge: true },
+    );
 }
 
 const deadline = async () =>
-  ((await admin().doc(SERVER_DOC).get()).get('deadline') as Timestamp).toDate();
+  ((await admin().doc(serverDocPath(WORLD_ID)).get()).get('deadline') as Timestamp).toDate();

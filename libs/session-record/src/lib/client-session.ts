@@ -1,47 +1,57 @@
 import {
   DEFAULT_SETTINGS,
   Session,
+  World,
   type Actor,
-  type Game,
   type SessionSettings,
+  type WorldId,
 } from '@beacon/session';
 import {
   collection,
+  collectionGroup,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
+  query,
   runTransaction,
   serverTimestamp,
   Timestamp,
+  where,
   writeBatch,
   type Firestore,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import {
   displayedFactsFrom,
   EVENTS,
   openingFields,
+  playerDocument,
+  PLAYERS,
   rulesVersionFrom,
+  serverDocPath,
   sessionFrom,
   settingsFrom,
-  SERVER_DOC,
   SETTINGS_DOC,
   toDate,
   TTL_DAYS,
+  worldFrom,
+  WORLDS,
   type DisplayedFacts,
 } from './fields.js';
 
 export type { DisplayedFacts };
 
 export interface OpenRequest {
+  readonly worldId: WorldId;
   readonly sessionId: string;
-  readonly game: Game;
   readonly actor: Actor;
 }
 
 /**
- * One snapshot of `server/current`, as the screen needs it: what the domain
- * reads, the three facts §4 says are displayed, and the instant the current
- * state began.
+ * One snapshot of a world's `server/current`, as the screen needs it: what the
+ * domain reads, the three facts §4 says are displayed, and the instant the
+ * current state began.
  *
  * `stateSince` travels with them and is not a catch-all. The boot screen
  * announces a window computed from the instant the state began, and the
@@ -57,6 +67,21 @@ export interface ServerView {
 }
 
 /**
+ * A world and the session context it holds, published together (T8). The
+ * screen never sees a world without its state, the same discipline `watch`
+ * once held for a session and its facts on a single document — except a world
+ * and its `server/current` are two documents, so this is two subscriptions
+ * merged into one publication rather than one.
+ *
+ * `server` is null when the world's `server/current` is unreadable — a
+ * document with no session on it is not this member's problem to interpret.
+ */
+export interface WorldSummary {
+  readonly world: World;
+  readonly server: ServerView | null;
+}
+
+/**
  * The browser's face of the session context. It owns the connection on
  * purpose: `apps/web` must not import a Firestore sdk nor name a document
  * field (§4), and the only way to keep that true is for this module to be the
@@ -64,16 +89,13 @@ export interface ServerView {
  */
 export interface ClientSessionRecord {
   /**
-   * One subscription and not two. A separate `watchFacts()` would be a second
-   * `onSnapshot` on the same document, free to lag behind the first — exactly
-   * the defect this record refuses below for `config/settings`. A session and
-   * the facts that go with it come from the same snapshot or they are not
-   * consistent.
-   *
-   * Null when `sessionFrom` returns null, which is to say when the document is
-   * unreadable — and the screen says so rather than showing an empty board.
+   * §8: a collection group query on `players` where `uid == uid`, then one
+   * subscription per world found — three or four, never thirty, which is why
+   * one per world is the honest shape and not a scaling concern.
    */
-  watch(onView: (view: ServerView | null) => void): () => void;
+  watchMyWorlds(uid: string, onWorlds: (worlds: readonly WorldSummary[]) => void): () => void;
+  /** One world, and its session context, as one publication (see `WorldSummary`). */
+  watchWorld(worldId: WorldId, onView: (view: WorldSummary | null) => void): () => void;
   watchSettings(onSettings: (settings: SessionSettings) => void): () => void;
   /**
    * Calls back at most once, when the deployed rules version stops matching
@@ -85,16 +107,25 @@ export interface ClientSessionRecord {
    * never been stamped, and reloading on it would loop on first boot.
    */
   watchVersionDrift(compiled: string, onDrift: () => void): () => void;
+  /** The domain has said yes first (`World.join`); the rules say theirs (T9). */
+  join(worldId: WorldId, code: string, actor: Actor): Promise<void>;
+  leave(worldId: WorldId, actor: Actor): Promise<void>;
+  rename(worldId: WorldId, name: string, actor: Actor): Promise<void>;
+  /** The code is drawn here — the only randomness this module holds. */
+  regenerateInvite(worldId: WorldId, actor: Actor): Promise<void>;
   open(request: OpenRequest): Promise<void>;
-  extend(actor: Actor): Promise<void>;
-  requestStop(actor: Actor): Promise<void>;
+  extend(worldId: WorldId, actor: Actor): Promise<void>;
+  requestStop(worldId: WorldId, actor: Actor): Promise<void>;
 }
 
 export function clientSessionRecord(
   db: Firestore,
   clock = { now: () => new Date() },
 ): ClientSessionRecord {
-  const server = () => doc(db, SERVER_DOC);
+  const worldDoc = (worldId: WorldId) => doc(db, WORLDS, worldId);
+  const playerDoc = (worldId: WorldId, uid: string) => doc(db, WORLDS, worldId, PLAYERS, uid);
+  const playersCollection = (worldId: WorldId) => collection(db, WORLDS, worldId, PLAYERS);
+  const serverDoc = (worldId: WorldId) => doc(db, serverDocPath(worldId));
 
   /**
    * The settings as they were last read, kept current by one listener and one
@@ -120,17 +151,112 @@ export function clientSessionRecord(
     for (const listener of versionListeners) listener(deployedVersion);
   });
 
-  const eventFor = (session: Session, event: { type: string; detail: string }, actor: Actor) => ({
+  const eventBase = (event: { type: string; detail: string }, actor: Actor) => ({
     type: event.type,
-    sessionId: session.sessionId,
     detail: event.detail,
     actor,
     at: serverTimestamp(),
     expiresAt: Timestamp.fromDate(new Date(clock.now().getTime() + TTL_DAYS * 86_400_000)),
   });
 
+  /** A session-carried event: `worldId` and `sessionId` come from the session itself. */
+  const eventFor = (session: Session, event: { type: string; detail: string }, actor: Actor) => ({
+    ...eventBase(event, actor),
+    worldId: session.worldId,
+    sessionId: session.sessionId,
+  });
+
+  /** A world-carried event: `join`, `leave`, `rename` open no session at all. */
+  const eventForWorld = (
+    worldId: WorldId,
+    event: { type: string; detail: string },
+    actor: Actor,
+  ) => ({
+    ...eventBase(event, actor),
+    worldId,
+    sessionId: null,
+  });
+
+  /**
+   * The world as the domain needs it, players included: `join`, `leave`,
+   * `rename` and `regenerateInvite` all decide from the whole roster, not from
+   * one member's presence in it.
+   */
+  async function readWorld(worldId: WorldId): Promise<World> {
+    const [snapshot, players] = await Promise.all([
+      getDoc(worldDoc(worldId)),
+      getDocs(playersCollection(worldId)),
+    ]);
+    const world = worldFrom(
+      worldId,
+      snapshot.data() ?? {},
+      players.docs.map((entry) => entry.id),
+    );
+    if (world === null) throw new Error(`world ${worldId} is unreadable`);
+    return world;
+  }
+
+  /** A world and its session context, from one subscription on each document. */
+  function watchWorldSummary(
+    worldId: WorldId,
+    onSummary: (summary: WorldSummary | null) => void,
+  ): Unsubscribe {
+    let worldData: Record<string, unknown> | null | undefined;
+    let serverData: Record<string, unknown> | undefined;
+    let publishing = Promise.resolve();
+
+    const publish = (): void => {
+      // Serialised: a slow `getDocs` for one snapshot must not overtake the
+      // publication of the snapshot that followed it.
+      publishing = publishing.then(async () => {
+        if (worldData === undefined || serverData === undefined) return;
+        if (worldData === null) {
+          onSummary(null);
+          return;
+        }
+        const players = await getDocs(playersCollection(worldId));
+        const world = worldFrom(
+          worldId,
+          worldData,
+          players.docs.map((entry) => entry.id),
+        );
+        if (world === null) {
+          onSummary(null);
+          return;
+        }
+        const session = sessionFrom(serverData, world);
+        onSummary({
+          world,
+          server:
+            session === null
+              ? null
+              : {
+                  session,
+                  facts: displayedFactsFrom(serverData),
+                  stateSince: toDate(serverData['stateSince']),
+                },
+        });
+      });
+    };
+
+    const unsubWorld = onSnapshot(worldDoc(worldId), (snapshot) => {
+      worldData = snapshot.exists() ? (snapshot.data() ?? {}) : null;
+      publish();
+    });
+    const unsubServer = onSnapshot(serverDoc(worldId), (snapshot) => {
+      serverData = snapshot.data() ?? {};
+      publish();
+    });
+
+    return () => {
+      unsubWorld();
+      unsubServer();
+    };
+  }
+
   /** Read, decide, write the patch and its audit line in one batch. */
   async function write(
+    worldId: WorldId,
     actor: Actor,
     decide: (session: Session) => {
       session: Session;
@@ -138,8 +264,9 @@ export function clientSessionRecord(
     },
     patch: (session: Session) => Record<string, unknown>,
   ): Promise<void> {
-    const snapshot = await getDoc(server());
-    const current = sessionFrom(snapshot.data() ?? {});
+    const world = await readWorld(worldId);
+    const snapshot = await getDoc(serverDoc(worldId));
+    const current = sessionFrom(snapshot.data() ?? {}, world);
     if (current === null) throw new Error('server/current is unreadable');
 
     // The domain refuses before anything is written: an extension outside the
@@ -148,7 +275,7 @@ export function clientSessionRecord(
     const decided = decide(current);
 
     const batch = writeBatch(db);
-    batch.set(server(), patch(decided.session), { merge: true });
+    batch.set(serverDoc(worldId), patch(decided.session), { merge: true });
     for (const event of decided.events) {
       batch.set(doc(collection(db, EVENTS)), eventFor(decided.session, event, actor));
     }
@@ -158,16 +285,47 @@ export function clientSessionRecord(
   }
 
   return {
-    watch(onView) {
-      return onSnapshot(server(), (snapshot) => {
-        const data = snapshot.data() ?? {};
-        const session = sessionFrom(data);
-        onView(
-          session === null
-            ? null
-            : { session, facts: displayedFactsFrom(data), stateSince: toDate(data['stateSince']) },
+    watchMyWorlds(uid, onWorlds) {
+      const playersQuery = query(collectionGroup(db, PLAYERS), where('uid', '==', uid));
+      const summaries = new Map<WorldId, WorldSummary>();
+      let worldIds: readonly WorldId[] = [];
+      let stopWorlds: Unsubscribe[] = [];
+
+      const publish = (): void => {
+        // Wait until every world found by the last query has reported once —
+        // otherwise the first publication would show fewer worlds than the
+        // query already found, which is not "not yet loaded", it is wrong.
+        if (summaries.size < worldIds.length) return;
+        onWorlds(worldIds.flatMap((worldId) => summaries.get(worldId) ?? []));
+      };
+
+      const stopGroup = onSnapshot(playersQuery, (snapshot) => {
+        for (const stop of stopWorlds.splice(0)) stop();
+        summaries.clear();
+        const found = new Set<WorldId>();
+        for (const entry of snapshot.docs) {
+          const worldId = entry.ref.parent.parent?.id;
+          if (worldId !== undefined) found.add(worldId);
+        }
+        worldIds = [...found];
+        stopWorlds = worldIds.map((worldId) =>
+          watchWorldSummary(worldId, (summary) => {
+            if (summary === null) summaries.delete(worldId);
+            else summaries.set(worldId, summary);
+            publish();
+          }),
         );
+        publish();
       });
+
+      return () => {
+        stopGroup();
+        for (const stop of stopWorlds.splice(0)) stop();
+      };
+    },
+
+    watchWorld(worldId, onView) {
+      return watchWorldSummary(worldId, onView);
     },
 
     watchSettings(onSettings) {
@@ -189,21 +347,90 @@ export function clientSessionRecord(
       return () => versionListeners.delete(listener);
     },
 
+    async join(worldId, code, actor) {
+      const world = await readWorld(worldId);
+      // The domain says yes before anything reaches Firestore: a wrong code
+      // must leave nothing behind for the rules to have an opinion on.
+      const decided = world.join(actor.uid, code, actor);
+      const batch = writeBatch(db);
+      batch.set(playerDoc(worldId, actor.uid), playerDocument(actor.uid, code, serverTimestamp()));
+      for (const event of decided.events) {
+        batch.set(doc(collection(db, EVENTS)), eventForWorld(worldId, event, actor));
+      }
+      await batch.commit();
+    },
+
+    async leave(worldId, actor) {
+      const world = await readWorld(worldId);
+      const decided = world.leave(actor.uid, actor);
+      const batch = writeBatch(db);
+      batch.delete(playerDoc(worldId, actor.uid));
+      for (const event of decided.events) {
+        batch.set(doc(collection(db, EVENTS)), eventForWorld(worldId, event, actor));
+      }
+      await batch.commit();
+    },
+
+    async rename(worldId, name, actor) {
+      const world = await readWorld(worldId);
+      const decided = world.rename(name, actor);
+      const batch = writeBatch(db);
+      batch.set(worldDoc(worldId), { name: decided.world.name }, { merge: true });
+      for (const event of decided.events) {
+        batch.set(doc(collection(db, EVENTS)), eventForWorld(worldId, event, actor));
+      }
+      await batch.commit();
+    },
+
+    async regenerateInvite(worldId, actor) {
+      const world = await readWorld(worldId);
+      const code = crypto.randomUUID();
+      const decided = world.regenerateInvite(code, actor);
+      const batch = writeBatch(db);
+      batch.set(worldDoc(worldId), { inviteCode: decided.world.inviteCode }, { merge: true });
+      for (const event of decided.events) {
+        batch.set(doc(collection(db, EVENTS)), eventForWorld(worldId, event, actor));
+      }
+      await batch.commit();
+    },
+
     /**
-     * §6 étape 1. Reading the state and writing in the same transaction is the
-     * whole lock against two people clicking at once: the second transaction
-     * replays its read, sees PROVISIONING and gives up.
+     * §6 étape 1. The world is read in the same transaction as `server/current`
+     * so `Session.opening` can refuse "not a player" before anything is
+     * written, and so the double-click lock is unchanged: the second
+     * transaction replays its read, sees PROVISIONING and gives up.
+     *
+     * Only the actor's own player document is read, never the whole roster:
+     * `Session.opening` only asks `hasPlayer` of the one uid opening, and a
+     * transaction's `get` takes a document, never a query.
      */
     async open(request: OpenRequest): Promise<void> {
+      const { worldId } = request;
       await runTransaction(db, async (transaction) => {
-        const snapshot = await transaction.get(server());
-        const current = sessionFrom(snapshot.data() ?? {});
+        const [worldSnapshot, playerSnapshot, serverSnapshot] = await Promise.all([
+          transaction.get(worldDoc(worldId)),
+          transaction.get(playerDoc(worldId, request.actor.uid)),
+          transaction.get(serverDoc(worldId)),
+        ]);
+        const world = worldFrom(
+          worldId,
+          worldSnapshot.data() ?? {},
+          playerSnapshot.exists() ? [request.actor.uid] : [],
+        );
+        if (world === null) throw new Error(`world ${worldId} is unreadable`);
+
+        const current = sessionFrom(serverSnapshot.data() ?? {}, world);
         if (current === null) throw new Error('server/current is unreadable');
         if (current.state !== 'IDLE') {
           throw new Error(`cannot open a session while server/current is ${current.state}`);
         }
-        const opened = Session.opening(request, clock, settings);
-        transaction.set(server(), openingFields(opened.session, serverTimestamp()), {
+
+        const opened = Session.opening(
+          { sessionId: request.sessionId, world, actor: request.actor },
+          clock,
+          settings,
+        );
+        transaction.set(serverDoc(worldId), openingFields(opened.session, serverTimestamp()), {
           merge: true,
         });
         for (const event of opened.events) {
@@ -221,16 +448,18 @@ export function clientSessionRecord(
      * one hour rather than two. Extending is a collective act on a shared
      * resource, not a counter each person increments.
      */
-    extend(actor: Actor): Promise<void> {
+    extend(worldId: WorldId, actor: Actor): Promise<void> {
       return write(
+        worldId,
         actor,
         (session) => session.extend(actor, clock, settings),
         (session) => ({ deadline: Timestamp.fromDate(session.deadline.at) }),
       );
     },
 
-    requestStop(actor: Actor): Promise<void> {
+    requestStop(worldId: WorldId, actor: Actor): Promise<void> {
       return write(
+        worldId,
         actor,
         (session) => session.requestStop(actor, clock),
         () => ({ state: 'STOPPING', stateSince: serverTimestamp() }),
