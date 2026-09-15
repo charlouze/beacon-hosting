@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
 import type { Viewer } from '@beacon/membership-record/client';
 import { DEFAULT_SETTINGS } from '@beacon/session';
 import { App } from './app';
@@ -86,7 +86,10 @@ describe('App routes', () => {
   const open = async (url: string, next: Viewer) => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [provideRouter(routes), { provide: Records, useValue: records }],
+      providers: [
+        provideRouter(routes, withComponentInputBinding()),
+        { provide: Records, useValue: records },
+      ],
     });
     viewer.set(next);
     const fixture = TestBed.createComponent(App);
