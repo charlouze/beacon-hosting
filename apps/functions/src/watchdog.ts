@@ -1,50 +1,71 @@
 import {
   mustSweep,
   reclamations,
-  reconcile,
+  reconcileWorld,
+  sweepEvents,
   type Clock,
+  type DomainEvent,
   type ReclaimOutcome,
   type ServerHost,
+  type SessionId,
   type UnclaimedSweep,
   type WatchdogLimits,
   type WatchdogView,
+  type WorldId,
+  type WorldView,
 } from '@beacon/session';
-import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
+import type {
+  AdminWorldRecord,
+  SettingsStore,
+  SystemEvents,
+  WorldStateStores,
+} from '@beacon/session-record';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import type { WatchdogHealth } from './watchdog-health.js';
 
 export interface WatchdogDeps {
   readonly clock: Clock;
   readonly host: ServerHost;
-  readonly state: ServerStateStore;
+  readonly states: WorldStateStores;
+  readonly worlds: AdminWorldRecord;
+  readonly events: SystemEvents;
   readonly ledger: ProvisioningLedger;
   readonly health: WatchdogHealth;
   readonly settings: SettingsStore;
   readonly limits: WatchdogLimits;
 }
 
+/** A world with no destruction attributable to it — never a real world (§6, task 12). */
+const UNCLAIMED_WORLD: WorldId = 'unclaimed';
+
 /**
- * Read the world, let the domain decide, do it, write down what happened.
- * There is no decision in here on purpose: everything that could be wrong
- * about *what* to destroy is tested without a network in libs/session.
+ * Read every world, let the domain decide for each, do it, write down what
+ * happened. There is no decision in here on purpose: everything that could be
+ * wrong about *what* to destroy is tested without a network in libs/session.
  */
 export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   const now = deps.clock.now();
 
-  // Firestore only, and first. These four reads decide whether this pass has
-  // any reason to reach for the provider at all.
-  const [server, session, previous, settings] = await Promise.all([
-    deps.state.read(),
-    deps.state.readSession(),
+  // Firestore only, and first. These reads decide whether this pass has any
+  // reason to reach for the provider at all.
+  const [worldIds, previous, settings] = await Promise.all([
+    deps.states.all(),
     deps.health.previousPass(),
     deps.settings.read(),
   ]);
+  const worlds = await Promise.all(worldIds.map((worldId) => readWorld(deps.states, worldId)));
 
   // The job still fires every five minutes, and that is the point: the
   // Monitoring alert of §6 is the only signal of a dead watchdog, it only
   // detects a job that stops, and a pass that does less stays invisible to it
   // where a paused job would be indistinguishable from a dead one.
-  if (!mustSweep(server, previous.sweptAt, now, deps.limits)) {
+  //
+  // No world at all reads as `[null]`, never as `[]`: `mustSweep([], ...)`
+  // finds nothing that needs attention vacuously and would fall back to the
+  // quiet interval — exactly the throttle this pass has no record to justify,
+  // since it never had one to call clean in the first place.
+  const servers = worlds.length === 0 ? [null] : worlds.map((world) => world.server);
+  if (!mustSweep(servers, previous.sweptAt, now, deps.limits)) {
     await deps.health.beat(now, previous.stranded, null);
     return;
   }
@@ -59,12 +80,11 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   const openSessions = await deps.ledger.openSessions();
   const view: WatchdogView = {
     now,
-    server,
-    session,
-    settings,
+    worlds,
     hosted,
     openSessions,
     alreadyAnnounced: previous.stranded,
+    settings,
   };
 
   const decision = reclamations(view, deps.limits);
@@ -96,13 +116,45 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     sweep = { destroyed: [], stranded: [], errors: [String(error)] };
   }
 
-  // decision.expired folds into this same correction (review finding 2):
-  // a session marked expired can, in this very pass, also be one the
-  // grounding above already sent to IDLE, and reconcile is the one function
-  // that gets to decide between the two.
-  const correction = reconcile(view, outcomes, sweep, decision.expired);
-  await deps.state.apply(correction, now);
-  for (const sessionId of correction.closeIntents) {
+  // Each world's own session, and nothing that belongs to another one: the
+  // reconcile.ts contract this task closes. A session that names no current
+  // world's own record — the machine no record explains any more — is the
+  // "unexplained" of `reclamations()`, and it belongs to the pass, not to any
+  // world's per-world correction (see reconcile.ts's doc on `reconcileWorld`).
+  const claimedBy = new Map<SessionId, WorldId>();
+  for (const world of worlds) {
+    if (world.server?.sessionId != null) claimedBy.set(world.server.sessionId, world.worldId);
+  }
+
+  const closeIntents = new Set<SessionId>();
+  const systemEvents: DomainEvent[] = [];
+
+  for (const world of view.worlds) {
+    const own = outcomes.filter((outcome) => claimedBy.get(outcome.reclamation.sessionId) === world.worldId);
+    const expired = decision.expired.filter((e) => e.worldId === world.worldId);
+    // decision.expired folds into this same correction (review finding 2):
+    // a session marked expired can, in this very pass, also be one the
+    // grounding above already sent to IDLE, and reconcileWorld is the one
+    // function that gets to decide between the two.
+    const correction = reconcileWorld(view, world, own, expired);
+    await deps.states.for(world.worldId).apply(correction, now);
+    for (const sessionId of correction.closeIntents) closeIntents.add(sessionId);
+  }
+
+  const unclaimed = outcomes.filter(
+    (outcome) => !claimedBy.has(outcome.reclamation.sessionId),
+  );
+  if (unclaimed.length > 0) {
+    const noWorld: WorldView = { worldId: UNCLAIMED_WORLD, server: null, session: null };
+    const correction = reconcileWorld(view, noWorld, unclaimed, []);
+    systemEvents.push(...correction.events);
+    for (const sessionId of correction.closeIntents) closeIntents.add(sessionId);
+  }
+
+  systemEvents.push(...sweepEvents(sweep, view.alreadyAnnounced));
+  if (systemEvents.length > 0) await deps.events.file(systemEvents, now);
+
+  for (const sessionId of closeIntents) {
     await deps.ledger.close(sessionId, now);
   }
 
@@ -113,4 +165,10 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   // minutes. `now` as the sweep instant either way: this pass did reach for
   // the provider, whatever the provider answered.
   await deps.health.beat(now, swept ? sweep.stranded : previous.stranded, now);
+}
+
+async function readWorld(states: WorldStateStores, worldId: WorldId): Promise<WorldView> {
+  const store = states.for(worldId);
+  const [server, session] = await Promise.all([store.read(), store.readSession()]);
+  return { worldId, server, session };
 }

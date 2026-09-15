@@ -3,8 +3,8 @@ import {
   adminWorldRecord,
   deploymentRecord,
   saveRecords,
-  serverStateStore,
   settingsStore,
+  systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
@@ -49,7 +49,9 @@ function buildFirestoreDeps() {
   const db = getFirestore(defaultApp());
   return {
     clock: { now: () => new Date() },
-    state: serverStateStore(db),
+    states: worldStateStores(db),
+    worlds: adminWorldRecord(db),
+    events: systemEvents(db),
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),
     settings: settingsStore(db),
