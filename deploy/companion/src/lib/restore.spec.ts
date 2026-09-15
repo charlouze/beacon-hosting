@@ -24,8 +24,8 @@ let deposited: string;
 const saveOf = (createdAt: string, sizeBytes = 20_000) =>
   Save.of({
     createdAt: new Date(createdAt),
-    game: 'enshrouded',
-    objectKey: `saves/enshrouded/auto/s0/${createdAt.replace(/[:.]/g, '-')}.tar.gz`,
+    worldId: 'enshrouded',
+    objectKey: `auto/enshrouded/${createdAt.replace(/[:.]/g, '-')}.tar.gz`,
     sizeBytes,
     origin: 'auto',
   });
@@ -60,7 +60,7 @@ beforeEach(async () => {
     takeOwnership: vi.fn(async () => undefined),
     log: vi.fn(),
     config: {
-      game: 'enshrouded',
+      world: 'enshrouded',
       saveDir,
       saveOwner: '4711:4711',
       workDir: join(root, 'work'),
@@ -202,6 +202,22 @@ describe('runRestore', () => {
   it('restores the world alone when no game files are configured', async () => {
     await runRestore(deps);
     expect(deps.store.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // §8: a companion that listed the wrong world's saves would restore a save
+  // that is not this world's, or find none and let the game generate one over
+  // a world that does exist under its real name.
+  it('lists the saves of its world, not of its game', async () => {
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains' } };
+    await runRestore(deps);
+    expect(deps.store.list).toHaveBeenCalledWith('les-copains');
+  });
+
+  it('names the world in the message when it has never been saved', async () => {
+    deps.store.list = vi.fn(async () => []);
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains' } };
+    await runRestore(deps);
+    expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('les-copains'));
   });
 });
 

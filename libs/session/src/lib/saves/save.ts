@@ -1,4 +1,4 @@
-import type { Game } from '../game.js';
+import type { WorldId } from '../world.js';
 
 /**
  * How a save came to exist. `auto` is the companion's regular push, `manual` a
@@ -30,7 +30,7 @@ export function isPlausibleSaveSize(sizeBytes: number): boolean {
 
 export interface SaveFields {
   readonly createdAt: Date;
-  readonly game: Game;
+  readonly worldId: WorldId;
   /** Where it lives in the bucket. Built by the adapter, never by the domain. */
   readonly objectKey: string;
   readonly sizeBytes: number;
@@ -65,8 +65,8 @@ export class Save {
     return new Date(this.fields.createdAt.getTime());
   }
 
-  get game(): Game {
-    return this.fields.game;
+  get worldId(): WorldId {
+    return this.fields.worldId;
   }
 
   get objectKey(): string {

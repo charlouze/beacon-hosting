@@ -5,16 +5,19 @@ import {
   type Session,
   type SessionId,
   type StateCorrection,
+  type WorldId,
 } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import {
   EVENTS,
   RESERVED_FACTS,
-  SERVER_DOC,
+  serverDocPath,
   sessionFrom,
   toDate,
   toState,
   TTL_DAYS,
+  worldFrom,
+  WORLDS,
   type JoinInfo,
 } from './fields.js';
 
@@ -58,14 +61,20 @@ export interface ServerStateStore {
 }
 
 /**
- * The admin face of the session context's state. The client face comes with
+ * The admin face of one world's session context. The client face comes with
  * the browser that needs it; both must map the same field names, which is why
  * the names live here and not at each call site.
+ *
+ * `worldId` is captured once rather than threaded through every call: it is
+ * what this store is *for*, the way a repository is for one aggregate and not
+ * asked which one on every method.
  */
-export function serverStateStore(db: Firestore): ServerStateStore {
+export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateStore {
+  const serverDoc = () => db.doc(serverDocPath(worldId));
+
   return {
     async read(): Promise<ServerRecord | null> {
-      const snapshot = await db.doc(SERVER_DOC).get();
+      const snapshot = await serverDoc().get();
       if (!snapshot.exists) return null;
       const data = snapshot.data() ?? {};
       return {
@@ -77,13 +86,21 @@ export function serverStateStore(db: Firestore): ServerStateStore {
     },
 
     async readSession(): Promise<Session | null> {
-      const snapshot = await db.doc(SERVER_DOC).get();
-      return snapshot.exists ? sessionFrom(snapshot.data() ?? {}) : null;
+      const snapshot = await serverDoc().get();
+      if (!snapshot.exists) return null;
+      const worldSnapshot = await db.doc(`${WORLDS}/${worldId}`).get();
+      if (!worldSnapshot.exists) return null;
+      // Players play no part in `sessionFrom` — it only reads `worldId` and
+      // `game` off the world — so the subcollection is not worth a second
+      // read here.
+      const world = worldFrom(worldId, worldSnapshot.data() ?? {}, []);
+      if (world === null) return null;
+      return sessionFrom(snapshot.data() ?? {}, world);
     },
 
     async claimProvisioning(sessionId: SessionId, at: Date): Promise<boolean> {
       return db.runTransaction(async (transaction) => {
-        const snapshot = await transaction.get(db.doc(SERVER_DOC));
+        const snapshot = await transaction.get(serverDoc());
         const data = snapshot.data() ?? {};
         // Three refusals and not one. Already claimed is the double delivery;
         // another session is a trigger that arrived after the world moved on;
@@ -91,7 +108,7 @@ export function serverStateStore(db: Firestore): ServerStateStore {
         if ((data['provisionClaimedAt'] ?? null) !== null) return false;
         if (data['sessionId'] !== sessionId) return false;
         if (data['state'] !== 'PROVISIONING') return false;
-        transaction.update(db.doc(SERVER_DOC), {
+        transaction.update(serverDoc(), {
           provisionClaimedAt: Timestamp.fromDate(at),
           // The one instant where the recorded failure stops being true. Every
           // other write leaves it, deliberately — "the last attempt failed" has
@@ -105,7 +122,7 @@ export function serverStateStore(db: Firestore): ServerStateStore {
     },
 
     async publish(facts: ServerFacts, at: Date): Promise<void> {
-      await db.doc(SERVER_DOC).set(
+      await serverDoc().set(
         {
           state: 'RUNNING',
           stateSince: Timestamp.fromDate(at),
@@ -143,11 +160,11 @@ export function serverStateStore(db: Firestore): ServerStateStore {
         patch['deadline'] = Timestamp.fromDate(correction.deadline.at);
       }
       if (Object.keys(patch).length > 0) {
-        batch.set(db.doc(SERVER_DOC), patch, { merge: true });
+        batch.set(serverDoc(), patch, { merge: true });
       }
 
       for (const event of correction.events) {
-        batch.set(db.collection(EVENTS).doc(), eventDocument(event, at));
+        batch.set(db.collection(EVENTS).doc(), eventDocument(event, at, worldId));
       }
 
       // One commit: §8 answers "state written but audit entry missing" with
@@ -157,7 +174,12 @@ export function serverStateStore(db: Firestore): ServerStateStore {
   };
 }
 
-function eventDocument(event: DomainEvent, at: Date) {
+/**
+ * The shape every audited event takes on the way into Firestore, whichever
+ * store files it — one world's, or `systemEvents` for the events §4 keeps
+ * outside any world.
+ */
+export function eventDocument(event: DomainEvent, at: Date, worldId: WorldId | null) {
   return {
     // Spread rather than an enumerated field list, so a figure like
     // SessionStopped's costEuros — or whatever the next event variant
@@ -166,6 +188,7 @@ function eventDocument(event: DomainEvent, at: Date) {
     // wrote a document with no cost to read back, and §11's monthly total
     // had nothing to sum.
     ...event,
+    worldId,
     sessionId: event.sessionId ?? null,
     actor: { uid: 'system', name: 'system' },
     at: Timestamp.fromDate(at),

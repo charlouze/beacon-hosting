@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
-import { REQUEST, serviceBlock } from './catalogue-fixtures.spec-helper.js';
+import { REQUEST, request, serviceBlock } from './catalogue-fixtures.spec-helper.js';
 import { enshrouded } from './enshrouded.js';
 
 describe('the enshrouded catalogue entry', () => {
@@ -49,6 +49,18 @@ describe('the enshrouded catalogue entry', () => {
     expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('-adminSteamIDs');
   });
 
+  // The world's name is now what a player looks for in the game's own server
+  // list, and the world's id is what the companion reports under — the
+  // literal hostname this game used to compile in is gone.
+  it('tells the companion its world, and names the server after it', () => {
+    const rendered = enshrouded.render(
+      request({ world: { worldId: 'les-copains', name: 'Les copains' } }),
+    );
+    expect(rendered).toContain('BEACON_WORLD=les-copains');
+    expect(rendered).toContain('SERVER_NAME=Les copains');
+    expect(rendered).not.toContain('enshrouded.beacon.charlouze.com');
+  });
+
   it('writes the session password into a file only root can read', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('SERVER_PASSWORD=hunter2');
@@ -85,10 +97,14 @@ describe('the enshrouded catalogue entry', () => {
 
   // This game publishes an address, and nothing the machine declares enters
   // what a player copies: the address comes from what the function reserved.
-  it('yields the join point a player copies, from the reserved address', () => {
-    expect(catalogFor('enshrouded').joinInfo({ address: '51.15.42.7' })).toEqual({
+  // The hostname is no longer compiled in either — it is derived from the
+  // world the session opened on.
+  it('yields the join point a player copies, from the reserved address and the world hostname', () => {
+    expect(
+      catalogFor('enshrouded').joinInfo({ address: '51.15.42.7', worldId: 'les-copains' }),
+    ).toEqual({
       game: 'enshrouded',
-      hostname: 'enshrouded.beacon.charlouze.com',
+      hostname: 'les-copains.beacon.charlouze.com',
       address: '51.15.42.7',
       port: 15637,
     });
@@ -99,10 +115,25 @@ describe('the enshrouded catalogue entry', () => {
   // frontier that leaks.
   it('ignores an identifier this game has no use for', () => {
     expect(
-      catalogFor('enshrouded').joinInfo({ address: '51.15.42.7', serverId: 'whatever' }),
+      catalogFor('enshrouded').joinInfo({
+        address: '51.15.42.7',
+        worldId: 'les-copains',
+        serverId: 'whatever',
+      }),
     ).toEqual({
       game: 'enshrouded',
-      hostname: 'enshrouded.beacon.charlouze.com',
+      hostname: 'les-copains.beacon.charlouze.com',
+      address: '51.15.42.7',
+      port: 15637,
+    });
+  });
+
+  // Named after the world, not compiled in: the hostname of a session comes
+  // from the world it opened on, and nothing else can point a record there.
+  it('builds a join point on the world hostname', () => {
+    expect(enshrouded.joinInfo({ address: '51.15.42.7', worldId: 'les-copains' })).toEqual({
+      game: 'enshrouded',
+      hostname: 'les-copains.beacon.charlouze.com',
       address: '51.15.42.7',
       port: 15637,
     });

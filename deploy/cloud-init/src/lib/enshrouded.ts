@@ -1,4 +1,4 @@
-import type { JoinInfo } from '@beacon/session';
+import type { JoinInfo, WorldId } from '@beacon/session';
 import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 import { COMPANION_IMAGE } from './companion-image.js';
 import { fill, indent } from './template.js';
@@ -110,6 +110,7 @@ write_files:
     content: |
       BEACON_SESSION_ID=__SESSION_ID__
       BEACON_GAME=enshrouded
+      BEACON_WORLD=__WORLD_ID__
       BEACON_TOKEN=__AGENT_TOKEN__
       BEACON_ENDPOINT=__ENDPOINT__
       BEACON_S3_ENDPOINT=__S3_ENDPOINT__
@@ -163,15 +164,31 @@ runcmd:
   - [ docker, compose, -f, /opt/beacon/docker-compose.yml, --env-file, /opt/beacon/.env, up, -d ]
 `;
 
+/**
+ * Derived rather than compiled in, so two worlds never contend for the same
+ * record: each session opens on its own subdomain. A plain function, and not
+ * a method read through `this`, is what lets `joinInfo` below keep the
+ * non-nullable `string` its own return type promises — `GameCatalogEntry`
+ * widens the property to `string | null` to cover the other game.
+ */
+const hostnameFor = (worldId: WorldId): string => `${worldId}.beacon.charlouze.com`;
+
 export const enshrouded: GameCatalogEntry = {
   game: 'enshrouded',
-  hostname: 'enshrouded.beacon.charlouze.com',
+
+  // Measured: this server boots on an empty `server/savegame` by generating a
+  // fresh world rather than refusing — the first session of a world nobody
+  // adopted an archive for is exactly that generation.
+  generatesWorlds: true,
+
+  hostname: hostnameFor,
 
   compose: () => COMPOSE,
 
   render(request: BootRequest): string {
     let rendered = fill(CLOUD_INIT, '__DOCKER_COMPOSE__', indent(COMPOSE));
-    rendered = fill(rendered, '__SERVER_NAME__', request.serverName);
+    rendered = fill(rendered, '__SERVER_NAME__', request.world.name);
+    rendered = fill(rendered, '__WORLD_ID__', request.world.worldId);
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);
     rendered = fill(rendered, '__SLOT_COUNT__', String(request.slotCount));
     rendered = fill(rendered, '__SESSION_ID__', request.sessionId);
@@ -185,12 +202,16 @@ export const enshrouded: GameCatalogEntry = {
     return fill(rendered, '__GAMES_BUCKET__', request.saves.gamesBucket);
   },
 
-  // This game's join point comes from the address alone, so it never refuses —
-  // and it never reads `serverId`, which it has no use for.
+  // This game's join point comes from the address for the fallback and from
+  // the world for the hostname — and it never reads `serverId`, which it has
+  // no use for.
   joinInfo(facts: JoinFacts): JoinInfo {
+    if (facts.worldId === undefined) {
+      throw new Error('cannot build an enshrouded join point without the world a session opened on');
+    }
     return {
       game: 'enshrouded',
-      hostname: this.hostname as string,
+      hostname: hostnameFor(facts.worldId),
       address: facts.address,
       port: 15637,
     };

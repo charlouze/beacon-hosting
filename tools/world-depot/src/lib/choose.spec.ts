@@ -5,8 +5,8 @@ import { chooseSave } from './choose.js';
 const save = (iso: string): Save =>
   Save.of({
     createdAt: new Date(iso),
-    game: 'sunkenland',
-    objectKey: `saves/sunkenland/auto/s1/${iso.replace(/[:.]/g, '-')}.tar.gz`,
+    worldId: 'les-copains',
+    objectKey: `auto/les-copains/${iso.replace(/[:.]/g, '-')}.tar.gz`,
     sizeBytes: 50_000,
     origin: 'auto',
   });
@@ -28,7 +28,7 @@ describe('chooseSave', () => {
   });
 
   it('rend undefined pour une cle que l historique ne porte pas', () => {
-    expect(chooseSave(history, 'saves/sunkenland/auto/s1/jamais.tar.gz')).toBeUndefined();
+    expect(chooseSave(history, 'auto/les-copains/jamais.tar.gz')).toBeUndefined();
   });
 
   it('rend undefined sur un historique vide', () => {

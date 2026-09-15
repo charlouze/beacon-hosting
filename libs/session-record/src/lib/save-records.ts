@@ -25,7 +25,7 @@ export function saveRecords(db: Firestore): SaveRecords {
       const id = createHash('sha256').update(save.objectKey).digest('hex').slice(0, 32);
       await db.doc(`${SAVES}/${id}`).set({
         createdAt: Timestamp.fromDate(save.createdAt),
-        game: save.game,
+        worldId: save.worldId,
         objectKey: save.objectKey,
         sizeBytes: save.sizeBytes,
         origin: save.origin,

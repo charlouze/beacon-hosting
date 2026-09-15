@@ -1,5 +1,7 @@
 import { getAuth, type UserImportRecord } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { World, type WorldId } from '@beacon/session';
+import { adminWorldRecord, playerDocument, PLAYERS, WORLDS } from '@beacon/session-record';
 import { defaultApp } from './firebase-app.js';
 import { emulatorsOnly } from './emulator-guard.js';
 
@@ -81,6 +83,11 @@ function importRecordOf(persona: Persona): UserImportRecord {
   };
 }
 
+/** The only world the emulator cannot invent on its own either — see `personas()`. */
+export const DEV_WORLD_ID: WorldId = 'dev-world';
+
+const DEV_WORLD_INVITE_CODE = 'dev';
+
 /**
  * Lays the four personas down in the Auth emulator and in `members`.
  *
@@ -90,6 +97,13 @@ function importRecordOf(persona: Persona): UserImportRecord {
  * visitor's document is deleted rather than left alone for the same reason —
  * promote them once to see an enrolment and the visitor screen is gone until
  * someone remembers why.
+ *
+ * `dev-world` is the one exception to "a world is born of an adoption"
+ * (`world-depot`): the emulator has no `world-depot` to adopt from, and a
+ * board with nothing to show is not a fixture anyone can look at. It is
+ * created here, once, by `adminWorldRecord` — never overwritten, because the
+ * players it holds are meant to accumulate the way a real world's would, not
+ * reset on every run — and reachable only through `emulatorsOnly`.
  */
 export async function personas(): Promise<void> {
   emulatorsOnly('personas');
@@ -106,5 +120,32 @@ export async function personas(): Promise<void> {
       await doc.set({ email: persona.email, role: persona.role, steamId: persona.steamId });
     }
     console.log(`${persona.email.padEnd(20)} ${persona.role ?? 'not a member'} — ${persona.shows}`);
+  }
+
+  const members = PERSONAS.filter((persona) => persona.role !== null);
+  const worlds = adminWorldRecord(db);
+  if ((await worlds.read(DEV_WORLD_ID)) === null) {
+    const now = new Date();
+    await worlds.create(
+      World.from({
+        worldId: DEV_WORLD_ID,
+        game: 'enshrouded',
+        name: 'Dev world',
+        inviteCode: DEV_WORLD_INVITE_CODE,
+        players: members.map((persona) => persona.uid),
+      }),
+      now,
+    );
+    // `adminWorldRecord.create` never writes `players`: it is a subcollection
+    // (§4), and a world it creates starts with none. This is what actually
+    // seats each member — the array above only names them for `worldFrom`.
+    for (const persona of members) {
+      await db
+        .doc(`${WORLDS}/${DEV_WORLD_ID}/${PLAYERS}/${persona.uid}`)
+        .set(playerDocument(persona.uid, DEV_WORLD_INVITE_CODE, Timestamp.fromDate(now)));
+    }
+    console.log(`${DEV_WORLD_ID} seeded, with every member as a player`);
+  } else {
+    console.log(`${DEV_WORLD_ID} already exists — left untouched`);
   }
 }

@@ -8,6 +8,7 @@ export * from './lib/saves/save.js';
 export * from './lib/session-aggregate.js';
 export * from './lib/session.js';
 export * from './lib/settings.js';
+export * from './lib/world.js';
 export * from './lib/watchdog/reclamations.js';
 export * from './lib/watchdog/reconcile.js';
 export * from './lib/watchdog/sweep.js';

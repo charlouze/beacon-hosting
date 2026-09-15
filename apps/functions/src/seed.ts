@@ -1,48 +1,26 @@
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 
 /**
- * What §5 means by "seeded at deployment", and it is exactly the two documents
- * no client may create — a `create` would be born past every field-by-field
- * check at once, so someone above the rules has to write them first.
+ * What §5 means by "seeded at deployment": the one document no client may
+ * create — a `create` would be born past every field-by-field check at once,
+ * so someone above the rules has to write it first.
  *
- * `members` is not one of them, though it is just as unwritable by a client:
- * its first document names a Google `uid`, which does not exist until someone
- * has signed in against this very project. A deployment cannot know it, so the
- * first admin is a console gesture after the first merge (§5, §10).
+ * A world's own `server/current` is not seeded here: a world is born of an
+ * adoption (`world-depot`), and that write brings its `server/current` IDLE
+ * with it. There is no `server/current` at the root any more — every session
+ * context lives under `worlds/{worldId}` (§5).
+ *
+ * `members` is not one of them either, though it is just as unwritable by a
+ * client: its first document names a Google `uid`, which does not exist until
+ * someone has signed in against this very project. A deployment cannot know
+ * it, so the first admin is a console gesture after the first merge (§5, §10).
  *
  * Never touches an existing document: re-running it after an incident is the
  * recovery path, not a hazard.
  */
 export async function seed(): Promise<void> {
   const db = getFirestore(defaultApp());
-  const doc = db.doc('server/current');
-
-  // Each document is checked on its own: a crash between the two creates must
-  // not make a re-run skip the second one just because the first now exists.
-  if ((await doc.get()).exists) {
-    console.log('server/current already exists — left untouched');
-  } else {
-    // Every field of §5, present and null. A field that is absent rather than
-    // null does not read the same way in a rules diff, and `firestore.rules`
-    // is written against this very document.
-    await doc.create({
-      state: 'IDLE',
-      stateSince: Timestamp.now(),
-      sessionId: null,
-      startedBy: null,
-      startedAt: null,
-      deadline: null,
-      game: null,
-      instanceId: null,
-      ipId: null,
-      ip: null,
-      joinInfo: null,
-      provisionClaimedAt: null,
-      lastError: null,
-    });
-    console.log('server/current seeded as IDLE');
-  }
 
   // §5: seeded at deployment, and never created by a client — `resource` is
   // null on a create, so a document a client could create would bypass every

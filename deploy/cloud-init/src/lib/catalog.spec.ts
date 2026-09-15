@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Game } from '@beacon/session';
-import { type BootRequest, refuseWorldLayout, renderCloudInit } from './catalog.js';
-import { REQUEST } from './catalogue-fixtures.spec-helper.js';
+import { type BootRequest, catalogFor, refuseWorldLayout, renderCloudInit } from './catalog.js';
+import { REQUEST, request } from './catalogue-fixtures.spec-helper.js';
 
 /**
  * Every field of a request that lands in a file docker compose reads, and how
@@ -13,7 +13,8 @@ import { REQUEST } from './catalogue-fixtures.spec-helper.js';
  * the test would pass while proving nothing.
  */
 const EXPOSED: readonly (readonly [string, (value: string) => BootRequest])[] = [
-  ['serverName', (value) => ({ ...REQUEST, serverName: value })],
+  ['world.name', (value) => ({ ...REQUEST, world: { ...REQUEST.world, name: value } })],
+  ['world.worldId', (value) => ({ ...REQUEST, world: { ...REQUEST.world, worldId: value } })],
   ['serverPassword', (value) => ({ ...REQUEST, serverPassword: value })],
   ['sessionId', (value) => ({ ...REQUEST, sessionId: value })],
   ['agentToken', (value) => ({ ...REQUEST, agentToken: value })],
@@ -95,6 +96,24 @@ describe('the frontier every boot crosses', () => {
     }
     expect(message).toContain('serverPassword');
     expect(message).not.toContain('hunter');
+  });
+});
+
+describe('the hostname a session opens under', () => {
+  it('derives the hostname from the world, for the game that has one', () => {
+    expect(catalogFor('enshrouded').hostname('les-copains')).toBe(
+      'les-copains.beacon.charlouze.com',
+    );
+    expect(catalogFor('sunkenland').hostname('les-copains')).toBeNull();
+  });
+
+  it('refuses a world name that compose would amputate', () => {
+    expect(() =>
+      renderCloudInit(
+        'enshrouded',
+        request({ world: { worldId: 'les-copains', name: 'a$b' } }),
+      ),
+    ).toThrow(/world\.name/);
   });
 });
 

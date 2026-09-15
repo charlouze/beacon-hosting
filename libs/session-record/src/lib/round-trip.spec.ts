@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -9,23 +9,38 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { deleteApp, initializeApp as initializeClientApp, type FirebaseApp } from 'firebase/app';
 import {
   connectFirestoreEmulator,
+  doc,
+  getDoc,
   getFirestore as getClientFirestore,
+  serverTimestamp,
+  setDoc,
   setLogLevel,
 } from 'firebase/firestore';
-import { clientSessionRecord, type ClientSessionRecord, type ServerView } from './client-session.js';
-import { factsPatch, serverStateStore, type ServerFacts } from './server-state.js';
-import { displayedFactsFrom, EVENTS, SERVER_DOC, sessionFrom } from './fields.js';
+import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
+import {
+  idleServerDocument,
+  openingFields,
+  playerDocument,
+  serverDocPath,
+  sessionFrom,
+  worldDocument,
+  worldFrom,
+} from './fields.js';
 
-// `clientSessionRecord` keeps its settings listener open for the record's
-// whole lifetime by design (a browser tab owns it until it closes). Deleting
-// a test's client app while that listener is still attached makes the sdk
-// log an "Uncaught Error in snapshot listener: ... Firestore shutting down"
-// for every test — a teardown artefact of this suite, not a defect to chase
-// by giving `ClientSessionRecord` an unsubscribe it has no production need
-// for. Silencing the sdk's own logger, here only, keeps the output pristine.
+// Silences the sdk's own "Uncaught Error in snapshot listener" noise a
+// terminated client app logs on teardown — a teardown artefact of this
+// suite, not a defect worth chasing.
 setLogLevel('silent');
 
-const ACTOR = { uid: 'u1', name: 'Alice' };
+const WORLD = World.from({
+  worldId: 'les-copains',
+  game: 'enshrouded',
+  name: 'Les copains',
+  inviteCode: 'c0de',
+  players: ['u1'],
+});
+const now = new Date('2026-09-06T20:00:00Z');
+
 let env: RulesTestEnvironment;
 
 beforeAll(async () => {
@@ -37,47 +52,34 @@ beforeAll(async () => {
       port: 8080,
     },
   });
+  if (getApps().length === 0) initializeApp({ projectId: 'demo-beacon' });
 });
 
 afterAll(async () => {
   await env?.cleanup();
 });
 
-beforeEach(async () => {
-  await env.clearFirestore();
-  if (getApps().length === 0) initializeApp({ projectId: 'demo-beacon' });
-  await getFirestore().doc(SERVER_DOC).set({ state: 'IDLE', sessionId: null });
-});
-
-// Every client app opened by `clientRecord` in the running test, closed here
-// so a leaked Firestore client cannot spill into the next test's timers.
+// Every client app opened by `clientDb` in the running test, closed here so a
+// leaked Firestore client cannot spill into the next test.
 const clientApps: FirebaseApp[] = [];
 
 afterEach(async () => {
-  vi.useRealTimers();
+  await env.clearFirestore();
   await Promise.all(clientApps.splice(0).map((app) => deleteApp(app)));
 });
 
 /**
- * The client face, on a connection where the "owner" mock token bypasses the
- * rules — the same bypass `env.withSecurityRulesDisabled` uses internally.
- *
- * `withSecurityRulesDisabled` itself cannot serve this suite: its context is
- * torn down — `app.delete()` — the instant its callback returns (the library
- * "eagerly clean[s] up this context to actively prevent misuse outside of the
- * callback, e.g. storing the context in a variable", by its own comment), so
- * a `record` built inside the callback and used after it, as every test here
- * does, fails every call with "the client has already been terminated". A
- * connection this suite owns for the whole test, opened with the same
- * documented `mockUserToken: 'owner'` bypass, sidesteps that lifecycle
- * entirely without touching the rules under test.
+ * A raw client connection, on the same "owner" mock-token bypass
+ * `env.withSecurityRulesDisabled` uses internally. What is under test here is
+ * the mapping `fields.ts` holds between the two transports, not the
+ * authorisation the rules decide — that is tranche 4's, and T9's for a world.
  */
-function clientRecord(): ClientSessionRecord {
+function clientDb() {
   const app = initializeClientApp({ projectId: 'demo-beacon' }, `client-${clientApps.length}`);
   clientApps.push(app);
   const db = getClientFirestore(app);
   connectFirestoreEmulator(db, '127.0.0.1', 8080, { mockUserToken: 'owner' });
-  return clientSessionRecord(db);
+  return db;
 }
 
 /**
@@ -85,190 +87,74 @@ function clientRecord(): ClientSessionRecord {
  * reads it back — a suite that only checked each face against itself would
  * pass with two mappings that disagree, which is the one failure this file
  * exists to catch.
- *
- * The rules are bypassed on the client side because what is under test is the
- * mapping, not the authorisation: the refusals have their own suite, and they
- * are tranche 4's.
  */
-describe('the two faces agree on the document', () => {
-  it('reads back, admin side, what the browser wrote', async () => {
-    const record = await clientRecord();
-    await record.open({ sessionId: 's1', game: 'enshrouded', actor: ACTOR });
-
-    const session = sessionFrom((await getFirestore().doc(SERVER_DOC).get()).data() ?? {});
-    expect(session?.state).toBe('PROVISIONING');
-    expect(session?.sessionId).toBe('s1');
-    expect(session?.game).toBe('enshrouded');
-    expect(session?.startedBy).toBe('u1');
-    // None: the field is an admin's (§5), and the driver is not one. The
-    // function applies the deployed default and publishes what it provisioned.
-    expect(session?.instanceSize).toBeNull();
-    expect(session?.deadline.at.getTime()).toBeGreaterThan(Date.now());
-    // An opening writes no join point (§4): the machine does not exist yet.
-    expect(session?.hasJoinInfo).toBe(false);
-  });
-
-  it('reads back, browser side, what the function wrote', async () => {
-    await runningSince('2026-09-06T22:00:00Z');
-    await serverStateStore(getFirestore()).publish(
-      {
-        ip: '51.15.42.7',
-        joinInfo: { game: 'enshrouded', hostname: 'h', address: '51.15.42.7', port: 15637 },
-        instanceSize: 'DEV1-L',
-        references: { instanceId: 'srv-1', ipId: 'ip-1' },
-      },
-      new Date('2026-09-06T22:00:00Z'),
+describe('the two faces agree on a world', () => {
+  it('reads back, admin side, the world and the player the browser wrote', async () => {
+    const client = clientDb();
+    await setDoc(doc(client, `worlds/${WORLD.worldId}`), worldDocument(WORLD, now));
+    await setDoc(
+      doc(client, `worlds/${WORLD.worldId}/players/u2`),
+      playerDocument('u2', WORLD.inviteCode, serverTimestamp()),
     );
 
-    const seen = (await firstSnapshot(await clientRecord()))?.session;
-    expect(seen?.state).toBe('RUNNING');
-    expect(seen?.sessionId).toBe('s1');
-    expect(seen?.instanceSize).toBe('DEV1-L');
-    // The join point exists; what it contains is a reserved field the domain
-    // transports and never reads (§4) — only whether it is there at all.
-    expect(seen?.hasJoinInfo).toBe(true);
+    const worldData = (await getFirestore().doc(`worlds/${WORLD.worldId}`).get()).data() ?? {};
+    const world = worldFrom(WORLD.worldId, worldData, ['u1', 'u2']);
+    expect(world?.name).toBe('Les copains');
+    expect(world?.hasPlayer('u2')).toBe(true);
+
+    const player = (await getFirestore().doc(`worlds/${WORLD.worldId}/players/u2`).get()).data();
+    expect(player?.['uid']).toBe('u2');
   });
 
-  /**
-   * The screen's own three fields, end to end. It calls the very function
-   * `publish` calls: a round trip that recopied by hand what the writer writes
-   * would only prove the two copies agree with each other — the mistake
-   * tranche 4 paid for on the federation's `principalSet`, where the test
-   * asserted the same wrong string as the code, written from the same belief.
-   */
-  it('hands the screen exactly what the functions published', () => {
-    const published: ServerFacts = {
-      ip: '51.159.84.12',
-      joinInfo: {
-        game: 'sunkenland',
-        serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639241613967341807',
-        region: 'Europe',
-        worldName: "Beacon's World",
-      },
-      instanceSize: 'DEV1-L',
-      references: { instanceId: 'i-1', ipId: 'ip-1' },
-    };
-    const read = displayedFactsFrom(factsPatch(published));
-    expect(read.joinInfo).toEqual(published.joinInfo);
-    expect(read.ip).toBe(published.ip);
+  it('reads back, browser side, the world the admin wrote', async () => {
+    await getFirestore().doc(`worlds/${WORLD.worldId}`).set(worldDocument(WORLD, now));
+
+    const snapshot = await getDoc(doc(clientDb(), `worlds/${WORLD.worldId}`));
+    const world = worldFrom(WORLD.worldId, snapshot.data() ?? {}, ['u1']);
+    expect(world?.game).toBe('enshrouded');
+    expect(world?.inviteCode).toBe('c0de');
   });
 
-  /**
-   * The seam the screen has to survive: RUNNING means the join point is
-   * published (§4), but the state and the fact reach the browser in the same
-   * snapshot or not at all — which is why they travel in one callback.
-   */
-  it('carries the session and its facts in the same snapshot', async () => {
-    await runningSince('2026-09-06T23:00:00Z');
-    await serverStateStore(getFirestore()).publish(
-      {
-        ip: '51.15.42.7',
-        joinInfo: { game: 'enshrouded', hostname: 'h', address: '51.15.42.7', port: 15637 },
-        instanceSize: 'DEV1-L',
-        references: { instanceId: 'srv-1', ipId: 'ip-1' },
-      },
-      new Date('2026-09-06T23:00:00Z'),
+  it('reads back, admin side, the opening the browser wrote', async () => {
+    const client = clientDb();
+    const path = serverDocPath(WORLD.worldId);
+    await setDoc(doc(client, path), idleServerDocument(now));
+
+    const { session } = Session.opening(
+      { sessionId: 's1', world: WORLD, actor: { uid: 'u1', name: 'Alice' } },
+      { now: () => now },
+      DEFAULT_SETTINGS,
     );
+    await setDoc(doc(client, path), openingFields(session, serverTimestamp()), { merge: true });
 
-    const view = await firstSnapshot(await clientRecord());
-    expect(view?.session.state).toBe('RUNNING');
-    expect(view?.facts.ip).toBe('51.15.42.7');
-    expect(view?.facts.joinInfo?.game).toBe('enshrouded');
-    expect(view?.stateSince).toEqual(new Date('2026-09-06T23:00:00Z'));
+    const data = (await getFirestore().doc(path).get()).data() ?? {};
+    const read = sessionFrom(data, WORLD);
+    expect(read?.state).toBe('PROVISIONING');
+    expect(read?.sessionId).toBe('s1');
+    // Taken from the world, never from the document (§5) — it carries no game.
+    expect(read?.game).toBe('enshrouded');
+    expect(read?.worldId).toBe('les-copains');
+    expect(data['game']).toBeUndefined();
+  });
+
+  it('reads back, browser side, a session the admin published', async () => {
+    const path = serverDocPath(WORLD.worldId);
+    await getFirestore()
+      .doc(path)
+      .set({
+        state: 'RUNNING',
+        sessionId: 's1',
+        startedBy: 'u1',
+        startedAt: Timestamp.fromDate(now),
+        deadline: Timestamp.fromDate(new Date('2026-09-07T00:00:00Z')),
+        joinInfo: { game: 'enshrouded', hostname: 'h', address: '1.2.3.4', port: 15637 },
+      });
+
+    const snapshot = await getDoc(doc(clientDb(), path));
+    const session = sessionFrom(snapshot.data() ?? {}, WORLD);
+    expect(session?.state).toBe('RUNNING');
+    expect(session?.worldId).toBe('les-copains');
+    expect(session?.hasJoinInfo).toBe(true);
+    expect(session?.deadline.at).toEqual(new Date('2026-09-07T00:00:00Z'));
   });
 });
-
-/**
- * The first value the subscription yields. `onSnapshot` never fires
- * synchronously, so `unsubscribe` is assigned before the promise can settle.
- */
-function firstSnapshot(record: ClientSessionRecord): Promise<ServerView | null> {
-  let unsubscribe = (): void => undefined;
-  const first = new Promise<ServerView | null>((resolve) => {
-    unsubscribe = record.watch(resolve);
-  });
-  return first.finally(() => unsubscribe());
-}
-
-describe('the client face', () => {
-  // §6 étape 1: read the state and write in the same transaction. The second
-  // click replays its read, sees PROVISIONING and gives up — no lock, no
-  // flag, just the transaction.
-  it('lets one of two simultaneous openings through, and one only', async () => {
-    const record = await clientRecord();
-    const results = await Promise.allSettled([
-      record.open({ sessionId: 's1', game: 'enshrouded', actor: ACTOR }),
-      record.open({ sessionId: 's2', game: 'enshrouded', actor: ACTOR }),
-    ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(await sessionIdOf()).toMatch(/^s[12]$/);
-  });
-
-  it('refuses to open on a document that is not idle', async () => {
-    const record = await clientRecord();
-    await record.open({ sessionId: 's1', game: 'enshrouded', actor: ACTOR });
-    await expect(
-      record.open({ sessionId: 's2', game: 'enshrouded', actor: ACTOR }),
-    ).rejects.toThrow(/PROVISIONING/);
-  });
-
-  it('writes the opening and its audit line in the same transaction', async () => {
-    const record = await clientRecord();
-    await record.open({ sessionId: 's1', game: 'enshrouded', actor: ACTOR });
-    const events = await getFirestore().collection(EVENTS).get();
-    expect(events.docs.map((d) => d.get('type'))).toEqual(['SessionStarted']);
-    expect(events.docs[0].get('actor')).toEqual(ACTOR);
-  });
-
-  // Two people extending in the same second write the same value: the session
-  // gains one hour, not two. A batched write and not a transaction, on
-  // purpose (§6).
-  it('extends inside the window, twice, to the same value', async () => {
-    const record = await clientRecord();
-    await runningSince('2026-09-06T23:45:00Z');
-    await Promise.all([record.extend(ACTOR), record.extend(ACTOR)]);
-    expect(await deadlineOf()).toEqual(new Date('2026-09-07T01:00:00Z'));
-  });
-
-  it('refuses to extend outside the window, without writing anything', async () => {
-    const record = await clientRecord();
-    await runningSince('2026-09-06T21:00:00Z');
-    await expect(record.extend(ACTOR)).rejects.toThrow(/extension window/);
-    expect(await eventCount()).toBe(0);
-    expect(await deadlineOf()).toEqual(new Date('2026-09-07T00:00:00Z'));
-  });
-
-  it('records who asked for the stop', async () => {
-    const record = await clientRecord();
-    await runningSince('2026-09-06T23:45:00Z');
-    await record.requestStop(ACTOR);
-    const events = await getFirestore().collection(EVENTS).get();
-    expect(events.docs[0].get('type')).toBe('SessionStopRequested');
-    expect(events.docs[0].get('actor')).toEqual(ACTOR);
-  });
-});
-
-const sessionIdOf = async () =>
-  (await getFirestore().doc(SERVER_DOC).get()).get('sessionId') as string;
-
-const deadlineOf = async () =>
-  ((await getFirestore().doc(SERVER_DOC).get()).get('deadline') as Timestamp).toDate();
-
-const eventCount = async () => (await getFirestore().collection(EVENTS).get()).size;
-
-/** A RUNNING session whose deadline is one session duration after `now`. */
-async function runningSince(nowIso: string): Promise<void> {
-  const now = new Date(nowIso);
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  vi.setSystemTime(now);
-  await getFirestore().doc(SERVER_DOC).set({
-    state: 'RUNNING',
-    sessionId: 's1',
-    game: 'enshrouded',
-    startedBy: 'u1',
-    startedAt: now,
-    deadline: new Date('2026-09-07T00:00:00Z'),
-    instanceSize: 'DEV1-L',
-    joinInfo: { game: 'enshrouded', hostname: 'h', address: '1.2.3.4', port: 15637 },
-  });
-}
