@@ -28,6 +28,7 @@ const running = (deadlineIso: string) =>
   Session.from({
     state: 'RUNNING',
     sessionId: 's1',
+    worldId: ENSHROUDED_WORLD.worldId,
     game: 'enshrouded',
     startedBy: 'u1',
     startedAt: new Date('2026-09-06T20:00:00Z'),
@@ -121,6 +122,7 @@ describe('Session', () => {
     const session = Session.from({
       state: 'RUNNING',
       sessionId: 's1',
+      worldId: ENSHROUDED_WORLD.worldId,
       game: 'enshrouded',
       startedBy: 'u1',
       startedAt: new Date('2026-09-06T20:00:00Z'),
@@ -139,6 +141,7 @@ describe('Session', () => {
     const session = Session.from({
       state: 'RUNNING',
       sessionId: 'sess1',
+      worldId: WORLD.worldId,
       game: 'sunkenland',
       startedBy: 'Charlouze',
       startedAt,

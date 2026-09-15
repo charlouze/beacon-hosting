@@ -36,6 +36,7 @@ const runningSession = (sessionId: string, deadlineIso: string) =>
   Session.from({
     state: 'RUNNING',
     sessionId,
+    worldId: 'enshrouded-world',
     game: 'enshrouded',
     startedBy: 'u1',
     startedAt: new Date('2026-09-06T20:00:00Z'),
