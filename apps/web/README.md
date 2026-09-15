@@ -20,7 +20,7 @@ jamais un champ de document : tout passe par `@beacon/session-record/client` et
 mise run dev-functions
 npx firebase emulators:start --config firebase.dev.json --project demo-beacon \
   --only firestore,auth,functions
-# 2. les deux documents qu'aucun client ne peut creer
+# 2. le document qu'aucun client ne peut creer
 mise run seed
 # 3. le pilote ; se connecter une fois pour exister
 npx nx serve web

@@ -18,44 +18,15 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.doc('server/current').delete();
   await db.doc('config/settings').delete();
 });
 
 describe('seed', () => {
-  // Each document is checked on its own: a crash between the two creates must
-  // not make a re-run skip the second.
-  it('seeds the two documents on an empty database', async () => {
+  // §5: a world's `server/current` is born of an adoption, never of the seed.
+  it('seeds settings and nothing else', async () => {
     await seed();
-
-    for (const path of ['server/current', 'config/settings']) {
-      expect((await db.doc(path).get()).exists).toBe(true);
-    }
-  });
-
-  // Every field of §5, present and null. A field that is absent rather than
-  // null does not read the same way in a rules diff, and `firestore.rules` is
-  // written against this very document.
-  it('seeds server/current as IDLE, with every field of the model', async () => {
-    await seed();
-
-    const stored = (await db.doc('server/current').get()).data();
-    expect(stored?.['state']).toBe('IDLE');
-    expect(Object.keys(stored ?? {}).sort()).toEqual([
-      'deadline',
-      'game',
-      'instanceId',
-      'ip',
-      'ipId',
-      'joinInfo',
-      'lastError',
-      'provisionClaimedAt',
-      'sessionId',
-      'startedAt',
-      'startedBy',
-      'state',
-      'stateSince',
-    ]);
+    expect((await db.doc('config/settings').get()).exists).toBe(true);
+    expect((await db.doc('server/current').get()).exists).toBe(false);
   });
 
   // Null and not absent, for the same reason: the stamp of §10 writes this
@@ -70,13 +41,11 @@ describe('seed', () => {
   });
 
   // The recovery path (§10): re-running after an incident must be safe.
-  it('leaves existing documents untouched', async () => {
-    await db.doc('server/current').set({ state: 'RUNNING' });
+  it('leaves an existing document untouched', async () => {
     await db.doc('config/settings').set({ sessionDurationMs: 1 });
 
     await seed();
 
-    expect((await db.doc('server/current').get()).data()).toEqual({ state: 'RUNNING' });
     expect((await db.doc('config/settings').get()).data()).toEqual({ sessionDurationMs: 1 });
   });
 

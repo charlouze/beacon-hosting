@@ -1,8 +1,26 @@
+import { deleteApp, initializeApp } from 'firebase-admin/app';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { displayedFactsFrom, sessionFrom } from '@beacon/session-record';
-import { DEFAULT_SETTINGS } from '@beacon/session';
-import { SCREENS, isScreen, screenFixture } from './screen.js';
+import { DEFAULT_SETTINGS, World } from '@beacon/session';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEV_WORLD_ID } from './personas.js';
+import { screen, SCREENS, isScreen, screenFixture } from './screen.js';
+
+process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
+process.env['FIREBASE_AUTH_EMULATOR_HOST'] ??= '127.0.0.1:9099';
 
 const NOW = new Date('2026-09-14T20:00:00.000Z');
+
+// `sessionFrom` reads `worldId` and `game` off the world, not off the
+// document (§5) — a fixed stand-in world is enough for every test here, since
+// none of them assert on it.
+const WORLD = World.from({
+  worldId: DEV_WORLD_ID,
+  game: 'enshrouded',
+  name: 'Dev world',
+  inviteCode: 'dev',
+  players: [],
+});
 
 describe('screenFixture', () => {
   it('names only screens the board can actually announce', () => {
@@ -32,11 +50,11 @@ describe('screenFixture', () => {
     ['closing', 'STOPPING'],
     ['failed', 'FAILED'],
   ] as const)('makes %s readable as %s', (screen, state) => {
-    expect(sessionFrom(screenFixture(screen, NOW))?.state).toBe(state);
+    expect(sessionFrom(screenFixture(screen, NOW), WORLD)?.state).toBe(state);
   });
 
   it('makes unreadable a document this vocabulary cannot read', () => {
-    expect(sessionFrom(screenFixture('unreadable', NOW))).toBeNull();
+    expect(sessionFrom(screenFixture('unreadable', NOW), WORLD)).toBeNull();
   });
 
   it('publishes a join point on every running screen, per game', () => {
@@ -78,5 +96,28 @@ describe('screenFixture', () => {
     for (const screen of SCREENS) {
       expect(Object.keys(screenFixture(screen, NOW)).sort()).toEqual(keys);
     }
+  });
+});
+
+describe('screen', () => {
+  let app: ReturnType<typeof initializeApp>;
+  let db: Firestore;
+
+  beforeAll(() => {
+    app = initializeApp({ projectId: 'demo-beacon' }, 'screen-spec');
+    db = getFirestore(app);
+  });
+
+  afterAll(async () => {
+    await deleteApp(app);
+  });
+
+  it('stages the screen on the dev world', async () => {
+    await screen('running', NOW);
+
+    const doc = await db.doc('worlds/dev-world/server/current').get();
+    expect(doc.get('state')).toBe('RUNNING');
+    expect(doc.get('game')).toBeUndefined();
+    expect(doc.get('joinInfo').hostname).toBe('dev-world.beacon.charlouze.com');
   });
 });
