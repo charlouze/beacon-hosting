@@ -1,6 +1,7 @@
 # Beacon
 
-Serveurs de jeu à la demande, pour trois ou quatre amis. Le serveur n'existe
+Serveurs de jeu à la demande, pour des groupes de trois ou quatre amis, chacun
+sur son monde. Le serveur n'existe
 que pendant les sessions de jeu : il naît avec son heure de fin déjà fixée,
 prolongeable d'une heure autant de fois qu'on veut mais seulement dans les
 trente dernières minutes. Ce n'est pas une limite de durée, c'est l'obligation
@@ -11,7 +12,7 @@ d'implémentation, qui vit dans le spec et bouge avec lui — ce fichier a déj�
 périmé une fois par un changement d'hébergeur et une seconde par l'arrivée d'un
 deuxième jeu. Il ne porte que ce qui reste vrai toute la vie du projet.
 
-App : `beacon.charlouze.com` · serveurs de jeu : `<jeu>.beacon.charlouze.com`
+App : `beacon.charlouze.com` · serveurs de jeu : `<monde>.beacon.charlouze.com`
 
 ## Stack
 

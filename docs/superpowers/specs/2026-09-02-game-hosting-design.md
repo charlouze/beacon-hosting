@@ -6,6 +6,12 @@ d'architecture (DDD et Clean Architecture) dont les corrections sont intégrées
 **Révisé le 2026-09-05** : Sunkenland rejoint le périmètre, ce que la première
 rédaction excluait. La révision suit la sonde et non l'inverse — les faits qui
 la fondent sont en section J de `probe/RESULTS.md`.
+**Révisé le 2026-09-15** : plusieurs mondes par jeu, et plusieurs sessions en
+même temps. Le commanditaire joue au même jeu avec plusieurs groupes d'amis, qui
+ne partagent ni leur monde ni leurs soirées. Le monde entre dans le modèle,
+`server/current` descend sous lui, et « un seul serveur à la fois » sort du
+§13 — c'était la seule ligne du périmètre v1 qui décrivait une limite du modèle
+plutôt qu'un choix.
 
 Vérité produit : [`PRODUCT.md`](../../../PRODUCT.md). Ce document fait autorité
 sur l'architecture ; PRODUCT.md fait autorité sur les utilisateurs, le but et
@@ -19,8 +25,10 @@ uniquement pendant les sessions de jeu.
 
 C'est ce serveur-là qui a fait naître le projet, et la référence de 7,90 €/mois
 reste la sienne. La plateforme en héberge désormais deux — Sunkenland a rejoint
-le périmètre le 2026-09-05 — mais un seul à la fois, et l'objectif n'a pas
-changé de nature : c'est toujours le calendrier qu'on refuse de payer.
+le périmètre le 2026-09-05 — et, depuis le 2026-09-15, plusieurs mondes de
+chacun, pour des groupes qui ne jouent pas ensemble et peuvent jouer le même
+soir. L'objectif n'a pas changé de nature : c'est toujours le calendrier qu'on
+refuse de payer, et deux machines un soir coûtent deux soirées, pas deux mois.
 
 Objectifs, par ordre de priorité :
 
@@ -30,13 +38,15 @@ Objectifs, par ordre de priorité :
 3. **Simplicité d'usage.** Un ami non technique doit pouvoir lancer une partie
    en un clic et savoir quand le serveur s'arrêtera.
 
-Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
+Groupe cible : quelques groupes de 3 à 4 joueurs, chacun sur son monde, quelques
+soirées par mois chacun.
 
 ## 2. Contraintes et décisions actées
 
 | Décision | Choix | Motif |
 |---|---|---|
-| Périmètre v1 | **Enshrouded et Sunkenland**, un seul serveur à la fois. Le jeu se choisit à l'ouverture de la session, par n'importe quel membre | **Décision révisée le 2026-09-05**, la première disait « Enshrouded uniquement ». Le commanditaire joue au second et le veut. La frontière que la première rédaction gardait ouverte est donc payée maintenant, et elle coûte moins cher que prévu : `libs/session` n'apprend qu'un identifiant de jeu, tout le technique reste dans l'adapter. Le choix à l'ouverture plutôt qu'en réglage d'admin suit le principe « personne n'est jamais bloqué » — celui qui lance la soirée décide à quoi on joue. |
+| Périmètre v1 | **Enshrouded et Sunkenland**, en autant de mondes qu'on en adopte, **un serveur par monde à la fois**. Une session s'ouvre sur un monde, par n'importe lequel de ses joueurs | **Décision révisée le 2026-09-15**, la précédente disait « un seul serveur à la fois » et « le jeu se choisit à l'ouverture ». Le commanditaire joue au même jeu avec plusieurs groupes qui ne partagent pas leur monde et veulent pouvoir jouer le même soir. Le jeu ne se choisit donc plus à l'ouverture : il est celui du monde, figé à l'adoption, et c'est le monde qu'on choisit. **Un monde ne tourne qu'une fois à la fois**, et c'est la seule limite : pas de plafond de machines, décidé le même jour — l'échéance est le garde-fou, et trois mondes lancés le même soir font trois soirées facturées, ce que le §1 accepte par construction. La révision du 2026-09-05 disait que la frontière du jeu coûtait moins cher que prévu ; celle-ci coûte ce qu'elle annonce, parce que le jeu tenait lieu de monde partout (§4). |
+| Monde | Une entité du contexte `session` : un `worldId`, slug immuable choisi à l'adoption ; un `name`, le nom affiché, que ses joueurs changent à volonté ; un `game`, figé ; ses **joueurs**, un document par joueur dans une sous-collection ; et un **code d'invitation** | **Décidé le 2026-09-15.** Pas d'objet « groupe » : le monde *est* ce qu'un groupe partage, et ses joueurs sont la seule appartenance qui compte pour jouer. On entre par un lien d'invitation collé sur Discord, là où la soirée se décide, et non par une inscription — un joueur qui invite connaît l'adresse de son ami, jamais son `uid`, et le §5 lui interdit de lire `members` pour la trouver ; le lien ne demande de connaître personne. On sort en effaçant son propre document ; l'admin peut effacer celui de n'importe qui ; n'importe quel joueur régénère le code, ce qui invalide le lien qui traîne. **La liste blanche reste globale** : être membre de Beacon reste la condition de tout, et un lien ne fait rien pour un non-membre. Le slug seul comme nom a été écarté par le commanditaire : un identifiant qui sert de clé S3 et de sous-domaine ne se renomme pas, et un monde, si. |
 | Cycle de vie | Démarrage manuel, échéance explicite | Une échéance supprime le besoin de détecter la présence des joueurs, qui était le composant le plus risqué du système. |
 | Durée de session | 4 h par défaut | Choix du commanditaire. |
 | Prolongation | +1 h, illimitée, seulement dans les 30 dernières minutes | Le garde-fou n'est pas une durée maximale mais l'obligation qu'un humain éveillé reclique : une machine oubliée s'arrête toujours dans l'heure. |
@@ -45,17 +55,17 @@ Groupe cible : 3 à 4 joueurs simultanés, quelques soirées par mois.
 | Frontière front / Functions | Le navigateur écrit directement dans Firestore ; une Function n'existe que là où un secret est indispensable | Choix du commanditaire. Interdire l'écriture au client ne protégeait rien — il n'a de toute façon aucun identifiant d'hébergeur — et ajoutait une couche de callables à maintenir. |
 | Rôle des règles Firestore | Sécurité seule : identité, appartenance, rôle, propriété des champs. Aucune règle métier | Choix du commanditaire. Réécrire les durées et les transitions en langage de règles aurait dupliqué `libs/session` dans un second langage, avec une divergence garantie à terme. Le contrôle métier côté serveur est assuré par le watchdog, qui rejoue le même code. |
 | Modèle de domaine | Un seul contexte délimité, `session`, dont `saves` est un module support. `libs/session` est un **noyau de décision partagé** : le navigateur et les Functions y calculent, le watchdog seul y fait autorité | La valeur du projet tient entièrement dans la session et son échéance ; la structure doit le dire plutôt que de ranger le code par couche. Parler d'un agrégat qui « porte ses invariants » aurait menti sur le mécanisme : ce code tourne aussi dans un navigateur qu'on ne contrôle pas. Où chaque invariant tient réellement est dit au §4. |
-| Nom du produit | **Beacon** — app sur `beacon.charlouze.com`, serveurs de jeu sur `<jeu>.beacon.charlouze.com` | Un feu qu'on allume pour appeler les autres, éteint après : le nom raconte l'acte social plutôt que la machine. La forme du domaine accueille un deuxième jeu sans rien renommer. |
+| Nom du produit | **Beacon** — app sur `beacon.charlouze.com`, serveurs de jeu sur `<monde>.beacon.charlouze.com` | Un feu qu'on allume pour appeler les autres, éteint après : le nom raconte l'acte social plutôt que la machine. **La forme du domaine a changé le 2026-09-15** : `<jeu>.beacon` ne pouvait porter qu'un serveur par jeu, et le `worldId` étant unique, le jeu n'a rien à dire dans le nom. |
 | Langue | Code et interface en anglais ; spec et documentation en français | L'expert du domaine lit lui-même le TypeScript, donc il n'y a pas de fossé de traduction à combler. Le glossaire de §4 fait le pont, et tout terme visible dans l'interface doit y figurer. |
 | Stockage des saves | Scaleway Object Storage, `fr-par` | Français, même région que l'instance, donc transferts internes. C'est cette justification qui l'a fait suivre l'instance : laissé chez OVH, il devenait un transfert entre fournisseurs. Du S3 dans les deux cas, l'adapter ne change que d'endpoint. |
 | Fichiers du serveur | **Selon le jeu.** Enshrouded : téléchargés par SteamCMD à chaque démarrage. Sunkenland : déposés une fois dans le stockage objet, restaurés comme une sauvegarde | Le téléchargement à chaud évite ~8 Go de stockage permanent, et reste le bon choix tant que SteamCMD se connecte anonymement. **Le serveur dédié de Sunkenland exige un compte qui possède le jeu** — mesuré, `Missing configuration` en anonyme, et le manuel de l'éditeur le disait avant nous. Le télécharger à chaud imposerait un secret Steam sur la VM, que le §7 tient pour l'élément le moins fiable du système. Ses 2,3 Go passent donc par le seau, même région, par le chemin que `SaveStore` construit déjà. Une image privée sur un registre a été écartée sur le coût : 0,50 $/Go de transfert sortant chez GitHub, soit ~10 $/mois pour huit soirées — davantage que le serveur dédié qu'on remplace. |
-| Adoption et restitution d'un monde | Une commande d'administration, `tools/world-depot`, à deux gestes symétriques : `adopt` et `retrieve`. Hors interface, depuis la machine d'un administrateur | **Décision révisée le 2026-09-14**, la première ne connaissait que l'amorçage et ne le voyait qu'en aller. Un monde ne se retélécharge pas : il naît dans le client d'un joueur ou chez un autre hébergeur, et le système doit donc savoir l'adopter **et** le rendre — sans quoi entrer dans Beacon est une porte à sens unique. Le serveur dédié Sunkenland **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à la création et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. **C'est pourquoi l'identité du monde n'est plus une constante du catalogue mais se lit sur le disque** (§6) : adopter deviendrait sinon un geste à deux temps, dont le second est un déploiement. Le client écrit ses mondes dans `SteamCloudData/<steamID64>/Worlds` et le serveur les lit dans `Worlds` : `-steamID` réconcilierait les deux, **et n'est délibérément pas utilisé** — voir §12. L'adoption est donc une copie vers `saves/<jeu>/`, jamais un dossier réarrangé. |
+| Adoption et restitution d'un monde | Une commande d'administration, `tools/world-depot`, à deux gestes symétriques : `adopt` et `retrieve`. Hors interface, depuis la machine d'un administrateur | **Décision révisée le 2026-09-14**, la première ne connaissait que l'amorçage et ne le voyait qu'en aller. Un monde ne se retélécharge pas : il naît dans le client d'un joueur ou chez un autre hébergeur, et le système doit donc savoir l'adopter **et** le rendre — sans quoi entrer dans Beacon est une porte à sens unique. Le serveur dédié Sunkenland **ne sait pas créer un monde** : sans un `-worldGuid` qui existe déjà, il s'arrête. Deux choix se figent à la création et ne se rattrapent pas — le GUID, auquel les personnages des joueurs restent attachés, et le nom du dossier, qui est ce que les joueurs lisent dans la liste des serveurs et donc leur recours si l'identifiant se perd. **C'est pourquoi l'identité du monde n'est plus une constante du catalogue mais se lit sur le disque** (§6) : adopter deviendrait sinon un geste à deux temps, dont le second est un déploiement. Le client écrit ses mondes dans `SteamCloudData/<steamID64>/Worlds` et le serveur les lit dans `Worlds` : `-steamID` réconcilierait les deux, **et n'est délibérément pas utilisé** — voir §12. L'adoption est donc une copie vers le préfixe du monde (§5), jamais un dossier réarrangé. **Révisée à nouveau le 2026-09-15 : c'est `adopt` qui fait naître un monde**, et lui seul. Il crée `worlds/{worldId}` et son `server/current` s'ils n'existent pas, imprime le lien d'invitation, et pour un jeu qui se rejoint par une adresse, l'enregistrement DNS exact à créer. Pour cela **il gagne une identité Firebase** — les identifiants d'application par défaut de `gcloud`, que la machine de l'admin porte déjà pour `tools/deploy-setup` : ni nouveau secret ni nouvelle machine, c'est le compte qui possède le projet, sur son poste. **L'archive est facultative pour un jeu dont le serveur sait générer un monde** — Enshrouded — parce qu'un dossier vide ne passe ni le plancher ni la vérification de disposition, et que le compagnon sait déjà démarrer sur une absence listée (§6). Pour Sunkenland elle reste obligatoire, le serveur ne sachant pas créer. |
 | Dépôt des fichiers de jeu | Une commande d'administration, `tools/game-depot`, à deux gestes : `push` et `update` — **jamais `purge`** | Le dépôt et le rafraîchissement sont le même besoin vu à deux moments ; en faire deux scripts aurait multiplié les endroits où l'on peut se tromper de préfixe. **Elle ne connaît pas le préfixe des sauvegardes** — pas par prudence, par construction : la seule protection qui tienne contre l'effacement du seul actif irremplaçable du système est de ne pas lui donner l'adresse. `tools/world-depot`, qui la connaît, est **un outil séparé pour cette raison exacte** et non malgré elle : il n'atteint le seau qu'à travers le port `SaveStore`, qui n'a aucun verbe destructeur à lui offrir (§8), là où celle-ci manipule un client de transfert brut. **La purge, que cette ligne prévoyait, a été écartée le 2026-09-08** : la seule chose qui supprime dans ce système est une règle de cycle de vie de seau (§8), et ces fichiers sous licence ne se redéposent que depuis une machine qui possède le jeu. `update` est né du constat que le geste se refait **à chaque mise à jour** du serveur dédié : il résout la clé d'administration, cherche l'installation dans les bibliothèques Steam, et imprime la commande `steamcmd` exacte quand il ne la trouve pas. |
 | Mise à jour du jeu Sunkenland | `tools/game-depot push`, lancée à la main par un administrateur. **La dérive est acceptée en v1** | Rafraîchir le dépôt demande le compte Steam, qui ne réside que sur la machine de l'administrateur (§7) ; l'automatiser reviendrait à le confier à un runner ou à une VM. Les clients se mettent à jour seuls, le dépôt non, et le décalage se découvre en tentant de rejoindre — le coût direct est une heure facturée et **une minute de rafraîchissement**, chronométré le 2026-09-05 : 2,3 Go déposés en 64 s depuis la machine de l'administrateur. Ce qu'on accepte réellement n'est pas là : c'est que la corvée ne peut être faite que par qui détient le compte, ce qui rouvre une dépendance à l'administrateur que le produit refuse partout ailleurs. Assumé pour une v1, à rouvrir si ça mord. |
-| DNS | OVH DynHost sur `enshrouded.beacon.charlouze.com`. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur ou la liste — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. **Mesuré le 2026-09-05 et non plus déduit** : derrière le NAT de Scaleway, sans `-publicip` ni `-publicport`, un joueur trouve le serveur dans la liste et y entre. La découverte passe par Photon, le transport par de l'UDP direct. Ce jeu a donc besoin d'une IP publique, **pas d'une IP stable**. |
+| DNS | OVH DynHost, **un enregistrement `<worldId>.beacon.charlouze.com` par monde Enshrouded**, créé une fois dans la console à l'adoption. **Rien pour Sunkenland** | Gratuit, inclus au domaine déjà possédé, et prévu exactement pour cet usage. **Reste chez OVH** quand le calcul et le stockage n'y sont plus : le domaine y est, et un enregistrement A pointe où l'on veut. Ce n'est pas un oubli de la bascule. **Révisé le 2026-09-15** : un nom par jeu ne peut porter qu'un serveur par jeu. Une seule identité DynHost, posée sur le sous-domaine `*`, met à jour tous les noms — le commanditaire l'a créée — mais DynHost ne crée aucun enregistrement (§12) : chaque monde demande donc un geste de console, que `adopt` imprime. Deux voies ont été pesées et écartées : un lot d'enregistrements pris à l'ouverture, qui change le nom d'une soirée à l'autre et ajoute une réservation à réconcilier ; et des clés d'API sur la zone, qui donnent à une Function un secret à pouvoir sur tout `charlouze.com` et un verbe de création à l'exécution sur ce qui survit aux sessions. Le commanditaire tenait la seconde pour acceptable, rien de critique ne vivant dans cette zone ; l'identité qu'il a posée étant DynHost, la question ne s'est pas présentée. En revanche **on ne rejoint pas un serveur Sunkenland par une adresse** — ni nom ni IP, le client ne propose que l'identifiant de serveur ou la liste — donc `DnsUpdater` n'est pas appelé pour ce jeu. Un port n'a pas de sous-domaine à porter. **Mesuré le 2026-09-05 et non plus déduit** : derrière le NAT de Scaleway, sans `-publicip` ni `-publicport`, un joueur trouve le serveur dans la liste et y entre. La découverte passe par Photon, le transport par de l'UDP direct. Ce jeu a donc besoin d'une IP publique, **pas d'une IP stable**. |
 | Conteneur du jeu | Enshrouded : `mornedhels/enshrouded-server`, telle quelle. Sunkenland : `melle2/sunkenland-ds`, **mais son script de démarrage ne suffit pas** | La première gère déjà SteamCMD, Wine, supervisord, l'auto-update et des backups avec rotation ; la forker nous priverait des mises à jour amont pour un bénéfice nul. La seconde apporte Wine, Xvfb et SteamCMD, mais son script ignore les options dont Beacon a besoin — `-autoSaveIntervalInSeconds`, `-adminSteamIDs` — et son `+login anonymous` ne peut pas fonctionner pour cette app. **Notre script est monté dans l'image, pas construit dedans** — mesuré le 2026-09-05, en local puis sur une VM. Ni fork ni image maison n'ont donc à exister : l'image reste consommée à son digest et son point d'entrée est remplacé par un fichier. Deux contraintes qu'elle impose et qu'il faut respecter : le serveur tourne en **uid 7000**, donc le dossier des mondes restauré doit lui appartenir, faute de quoi l'autosave n'écrit rien sans rien dire ; et son `trap` doit être repris, un `exec` en PID 1 ne recevant jamais `SIGTERM`. |
 | Cadence de sauvegarde Sunkenland | `-autoSaveIntervalInSeconds 300` | **Rien ne permet à Beacon de provoquer une sauvegarde** : ni l'arrêt du conteneur, ni un `WM_CLOSE` poli, ni la déconnexion du dernier joueur. Mesuré six fois. Le seul levier est la cadence, et elle est réglable par une option que le manuel de l'éditeur ne mentionne pas. À 300 s, on perd au plus cinq minutes de jeu, ce que le §3 accepte déjà pour un crash. Le jeu ne garde que dix instantanés glissants, donc l'intervalle fixe aussi la profondeur d'historique sur la machine — 50 minutes ici ; la profondeur réelle vit dans le stockage objet. |
-| Rôle d'administrateur dans le jeu | **Tous les membres**, via `-adminSteamIDs` | Le SteamID est demandé au membre à son premier passage dans l'app et rangé dans son profil. « La ressource est commune » : donner le rôle à tous suit le même principe que « n'importe qui démarre, prolonge et arrête ». Un admin du jeu peut déclencher une sauvegarde depuis la console, ce qui rend le pire cas meilleur que les 300 s pour qui y pense. Contrepartie assumée : il peut aussi exclure un autre joueur, ce qui est la seule autorité d'un membre sur un autre dans tout le système. |
+| Rôle d'administrateur dans le jeu | **Sunkenland seulement : tous les joueurs du monde**, via `-adminSteamIDs`. Enshrouded n'a pas de rôle par compte Steam — ses rôles sont des mots de passe, et le seul rôle configuré donne tout à tout le monde | Le SteamID est demandé au membre à son premier passage dans l'app et rangé dans son profil ; il ne sert qu'à ce jeu. « La ressource est commune » : donner le rôle à tous ceux qui la partagent suit le même principe que « n'importe qui démarre, prolonge et arrête ». *Tous les membres* jusqu'au 2026-09-15 ; depuis que les mondes ont leurs joueurs, un membre d'un autre groupe n'a rien à faire administrateur d'un monde où il ne joue pas. Un admin du jeu peut déclencher une sauvegarde depuis la console, ce qui rend le pire cas meilleur que les 300 s pour qui y pense. Contrepartie assumée : il peut aussi exclure un autre joueur, ce qui est la seule autorité d'un membre sur un autre dans tout le système. |
 | Conteneur compagnon | Image maison minimale (`rclone` + `curl`) | Restaure la save au démarrage, pousse les backups vers le stockage objet, dialogue avec le plan de contrôle. C'est la seule image que nous construisons. |
 | Zone | `fr-par-1` | **Le catalogue n'est pas le même d'une zone à l'autre**, et c'est mesuré, pas supposé (`probe/RESULTS.md`, section T). `fr-par-1` est la seule des trois zones parisiennes à porter le gabarit retenu, aux meilleurs prix de la région. Ce n'était pas une décision : c'était une valeur par défaut posée sans vérifier, jusqu'à ce que la sonde montre qu'elle portait quelque chose. |
 | Gabarit d'instance | **Libre**, sélecteur réservé à l'admin. `DEV1-L` (4 vCPU / 8 Gio, 80 Go locaux) en v1, **~0,0495 €/h disque compris** | Enshrouded brûle 2,6 cœurs **sans personne connecté** — mesuré — donc un calibre à 2 vCPU serait saturé avant le premier joueur, et 8 Gio est le plancher mémoire. `DEV1-L` est aussi, au 2026-09-03, le seul calibre à 8 Gio de la zone à la fois disponible et livré avec un disque local. **Son prix catalogue de 0,04284 €/h ne comprend pas ce disque** : les 80 Go se facturent à part, ~0,0067 €/h, ce que la facture réelle a montré et que le catalogue ne dit pas. |
@@ -213,12 +223,12 @@ flowchart TD
     sch["Cloud Scheduler<br/>toutes les 5 min"]
     scw["API Scaleway<br/>instance et IP"]
     dns["OVH DynHost<br/>enregistrement A"]
-    vm["Instance DEV1-L<br/>Paris"]
+    vm["Instances DEV1-L<br/>Paris, une par monde qui tourne"]
     obj[("Scaleway Object Storage<br/>sauvegardes")]
 
     nav -->|"écritures directes, filtrées par les règles"| fs
     fs -.->|"lecture temps réel"| nav
-    fs -->|"trigger sur server/current"| fn
+    fs -->|"trigger sur worlds/*/server/current"| fn
     sch -->|"watchdog"| fn
     fn -->|"réconciliation et arrêts forcés"| fs
     fn --> scw
@@ -240,16 +250,19 @@ changements d'état s'affichent simultanément chez tout le monde sans polling.
 
 | Écriture | Auteur | Motif |
 |---|---|---|
-| Demander le démarrage (`IDLE` → `PROVISIONING`) | Navigateur | Aucun secret requis. Le verrou anti-double-clic est la transaction Firestore elle-même : lire l'état et écrire dans la même transaction. |
-| Prolonger l'échéance | Navigateur | Aucun secret requis. Le calcul vient de `libs/session`. |
-| Demander l'arrêt (`RUNNING` → `STOPPING`) | Navigateur | Aucun secret requis. |
+| Demander le démarrage (`IDLE` → `PROVISIONING`) | Navigateur, un joueur du monde | Aucun secret requis. Le verrou anti-double-clic est la transaction Firestore elle-même : lire l'état et écrire dans la même transaction. Le document étant celui du monde, c'est aussi le verrou « un monde ne tourne qu'une fois ». |
+| Prolonger l'échéance | Navigateur, un joueur du monde | Aucun secret requis. Le calcul vient de `libs/session`. |
+| Demander l'arrêt (`RUNNING` → `STOPPING`) | Navigateur, un joueur du monde | Aucun secret requis. |
+| `worlds/{worldId}.name`, `inviteCode` | Navigateur, un joueur du monde | Renommer et réinviter sont des gestes du groupe, pas de l'admin. |
+| `worlds/{worldId}/players/{uid}` | Navigateur : le sujet lui-même, à la création avec le code du monde, à la suppression sans condition ; l'admin, à la suppression | Entrer par le lien, sortir soi-même, être retiré par l'admin. Personne n'inscrit quelqu'un d'autre. |
+| `worlds/{worldId}` et son `server/current`, en création | `tools/world-depot adopt`, par l'Admin SDK | Un monde naît d'une adoption (§2) ; aucun client ne crée ces documents, pour la raison du §5. |
 | `config/settings`, `members/{uid}` | Navigateur (admin) | Les règles vérifient `role == 'admin'`. |
 | `events/{id}` | Navigateur et Functions, en création seule | Journal d'audit ; les règles interdisent modification et suppression. |
 | Créer et détruire l'instance et l'IP | Function | Clé secrète Scaleway. |
 | Mettre à jour DynHost | Function | Identifiants DynHost, chez OVH. |
 | `instanceId`, `ipId`, `ip`, et `agentTokens/{sessionId}` | Function | Valeurs que le client ne doit ni connaître ni forger. |
 | `provisioning/{sessionId}`, `health/watchdog` | Function | Comptabilité interne : l'intention de création taguée, le battement de cœur et les volumes orphelins déjà signalés. Aucun client n'y lit ni n'y écrit. |
-| `saves/{id}` | Function, via `agentReport` | La VM n'a pas d'identité Firebase. |
+| `saves/{id}` | Function, via `agentReport` ; `tools/world-depot adopt` pour ce qu'il dépose | La VM n'a pas d'identité Firebase. L'outil en a une depuis le 2026-09-15, et un objet déposé sans document contredisait le §5. |
 | Arrêts forcés et réconciliation | Function, via le watchdog | Clé secrète Scaleway. |
 
 ### Ce que les règles Firestore font, et ce qu'elles ne font pas
@@ -281,7 +294,7 @@ apps/
   web/                 Angular, déployé sur Firebase Hosting
   functions/           Firebase Functions gen2, TypeScript
 libs/
-  session/             CŒUR DE MÉTIER. Session, Deadline, SessionState,
+  session/             CŒUR DE MÉTIER. World, Session, Deadline, SessionState,
                        événements de domaine. Ports ServerHost, DnsUpdater,
                        Clock, SaveStore. Ne connaît ni Firestore ni l'hébergeur
     saves/             module support : Save, plancher de taille
@@ -351,15 +364,34 @@ du projet : une partie s'ouvre, porte une échéance, se prolonge, se termine.
 Tout le reste — provisionner une VM, télécharger un jeu, pointer un DNS — est
 générique et emprunté.
 
-`Session` est la racine, identifiée par `sessionId` :
+Deux racines depuis le 2026-09-15, qui se référencent par identifiant et ne se
+contiennent jamais. `World` est ce qui dure ; `Session` est ce qui s'ouvre
+dessus et meurt :
 
 | Membre | Nature | Rôle |
 |---|---|---|
-| `Session` | racine | seule porte d'entrée ; expose `extend(clock)`, `requestStop()`, `displayedDeadline(clock)`, `estimatedCost(tariff)` |
+| `World` | racine | ce qu'un groupe partage : `worldId`, `game`, `name`, ses joueurs. Expose `rename()`, `invite()` — régénérer le code —, et sait dire si un `uid` y joue. **Il ne porte aucune session** : il sait seulement qu'une session, au plus, est ouverte sur lui, et c'est le document qui le tient (§5) |
+| `Session` | racine | seule porte d'entrée d'une partie ; référence son monde par `worldId` ; expose `extend(clock)`, `requestStop()`, `displayedDeadline(clock)`, `estimatedCost(tariff)` |
 | `Deadline` | objet valeur | immuable ; sait dire `isWithinExtensionWindow(clock)` et produire la suivante |
 | `SessionState` | objet valeur | `Idle`, `Provisioning`, `Running`, `Stopping`, `Failed` et les transitions légales |
-| `Game` | objet valeur | quel jeu la session ouvre : `enshrouded` ou `sunkenland`. **Rien d'autre** — ni image, ni port, ni chemin de sauvegarde |
+| `Game` | objet valeur | quel jeu un monde est : `enshrouded` ou `sunkenland`. **Rien d'autre** — ni image, ni port, ni chemin de sauvegarde. Porté par le monde, lu par la session |
 | `JoinInfo` | objet valeur | ce que le joueur copie pour rejoindre. Le domaine ne l'interprète jamais ; il sait seulement s'il existe |
+
+**Le monde est une racine, pas un attribut de la session, et c'est une descente
+du jeu.** Jusqu'au 2026-09-15 le jeu tenait lieu de monde partout — dans la clé
+S3, dans le nom d'hôte, dans ce que le compagnon restaure — et cela tenait tant
+qu'il n'y avait qu'un monde par jeu. Le jour où deux groupes jouent au même jeu,
+tout ce que le jeu désignait désigne en fait un monde, et le jeu remonte d'un
+cran : c'est une propriété du monde. Ce que `Game` disait de lui-même ne change
+pas — rien d'autre qu'un identifiant —, seul son porteur change.
+
+**Un monde ne contient pas ses sessions**, et ce n'est pas par petitesse
+d'agrégat : les deux n'ont pas la même durée de vie, ni le même écrivain, ni
+les mêmes règles. La session est ce qui naît et meurt ; le monde est ce qui
+survit à toutes les sessions — la frontière que `ServerHost` trace déjà entre
+un serveur et le compte. `worldId` sur la session suffit, et « une session par
+monde » n'est pas un invariant que `World` porte : c'est la cardinalité du
+document `server/current` sous lui (§5).
 
 `Session` ne voit jamais les champs réservés de `server/current`
 (`instanceId`, `ipId`, `ip`, `provisionClaimedAt`, `lastError`) : ce sont des
@@ -369,11 +401,12 @@ c'est le seul que le domaine transporte, et `ServerFacts` dit pourquoi. La
 traduction du document vers le modèle est le travail de `libs/session-record`,
 décrit plus bas.
 
-**Le jeu se fige à l'ouverture.** `game` est écrit avec le passage à
-`PROVISIONING` et ne change plus jusqu'à la destruction. C'est un invariant et
-non une commodité : le monde restauré, le conteneur lancé et le point de
-jonction publié en dépendent tous, et il n'existe aucun geste qui puisse changer
-de jeu sans détruire la machine — ce qui est précisément une nouvelle session.
+**Le jeu se fige à l'adoption, un cran plus haut qu'avant.** Jusqu'au
+2026-09-15 il se figeait à l'ouverture de la session ; il est désormais une
+propriété du monde, écrite à sa naissance et jamais réécrite. L'invariant
+garde son sens et gagne en force : le monde restauré, le conteneur lancé et le
+point de jonction publié en dépendent tous, et il n'existe aucun geste qui
+puisse changer le jeu d'un monde — un monde d'un autre jeu est un autre monde.
 
 **`JoinInfo` est du vocabulaire de domaine, pas un détail d'infrastructure**, et
 c'est le second jeu qui l'a révélé. Tant qu'il n'y en avait qu'un, « rejoindre »
@@ -447,6 +480,14 @@ système. `SessionStopped` est écrit par la Function au passage à `IDLE`, quan
 la machine est réellement détruite, et c'est lui qui porte le coût de la
 session (§11).
 
+**Tout événement porte un `worldId` à côté du `sessionId`** depuis le
+2026-09-15, avec les mêmes exceptions nulles : ce qui n'a pas de session n'a pas
+de monde non plus. Trois événements de plus, tous à sujet monde et sans session
+— `PlayerJoined`, `PlayerLeft`, `WorldRenamed`. Ils existent parce que ce sont
+les seuls gestes d'un membre sur ce qu'un autre voit, hors la session elle-même,
+et qu'un journal qui ne dirait pas qui est entré dans un monde ne dirait rien
+de la seule chose qui a changé de mains.
+
 **Trois événements peuvent porter un `sessionId` nul, et ce sont les seuls.**
 `SessionReclaimed` quand la ressource détruite portait le tag d'appartenance
 sans tag de session : elle n'appartient à aucune session — c'est même ce qui la
@@ -461,7 +502,8 @@ l'acteur est le système et le sujet « ce que personne ne réclamait » est plu
 honnête qu'un `sessionId` inventé pour remplir la colonne.
 
 `events` est un **journal d'audit**, et rien d'autre. Aucun code ne s'y abonne :
-le seul déclencheur du système est le trigger sur `server/current`. Prétendre
+le seul déclencheur du système est le trigger sur `server/current`, sous chaque
+monde. Prétendre
 que la collection sert aussi de découplage aurait décrit une architecture qui
 n'existe pas.
 
@@ -485,12 +527,19 @@ glossaire est la langue omniprésente :
 | durée d'une session | `sessionDurationMs`, libellé `Next session` | ce que dure une session à son ouverture, et la borne du clamp (§6) |
 | gabarit | `InstanceSize` | le calibre de la machine, `DEV1-L` par défaut. Le mot du fournisseur — `flavor` chez OpenStack, *commercial type* chez Scaleway — s'arrête à l'adapter et n'entre pas dans `session` |
 | sauvegarde | `Save` | un état du monde de jeu déposé dans le stockage objet |
-| monde | `World` | ce à quoi les joueurs tiennent, et la seule donnée irremplaçable du système (§8). Une sauvegarde est un de ses états ; le monde est ce qui persiste à travers eux. Pour Sunkenland il porte une identité que rien ne recrée — un GUID et un nom, lus sur le disque (§6) —, pour Enshrouded il n'en porte aucune |
-| adopter un monde | `adopt` | faire entrer dans le système un monde venu d'ailleurs, en le déposant comme une sauvegarde d'origine `manual`. **La seule opération du système qui recouvre** (§8) |
+| monde | `World`, libellé `World` | ce à quoi les joueurs tiennent, et la seule donnée irremplaçable du système (§8). Une sauvegarde est un de ses états ; le monde est ce qui persiste à travers eux. Une racine du modèle depuis le 2026-09-15 : un `worldId`, un jeu, un nom, ses joueurs. Pour Sunkenland il porte aussi une identité dans son archive que rien ne recrée — un GUID et un nom, lus sur le disque (§6) —, pour Enshrouded il n'en porte aucune |
+| identifiant du monde | `worldId` | le slug choisi à l'adoption, immuable : segment de clé S3, sous-domaine, chemin de document. Jamais affiché seul |
+| nom du monde | `name`, libellé `Name` | ce que l'écran affiche, et ce que le serveur Enshrouded annonce comme nom de serveur (§6). Modifiable par tout joueur du monde. Distinct du nom que Sunkenland montre dans sa liste, qui est celui du dossier sur le disque (§12) |
+| joueur d'un monde | `Player`, libellé `Players` | un membre qui joue dans ce monde : un document `players/{uid}` sous lui. C'est lui qui ouvre, prolonge, arrête, renomme et invite. Un membre peut être joueur de plusieurs mondes, et d'aucun |
+| mes mondes | libellé `Your worlds` | la liste des mondes où je joue, chacun avec son état ; le premier écran depuis le 2026-09-15 |
+| lien d'invitation | `inviteCode`, libellé `Invite link` | `beacon.charlouze.com/join/<worldId>/<code>` : ce qu'un joueur colle sur Discord. Celui qui l'ouvre, s'il est membre, devient joueur. Régénérer le code invalide le lien |
+| entrer dans un monde | `join`, libellé `Join` | devenir joueur d'un monde par son lien. Ne fait rien pour un visiteur |
+| quitter un monde | `leave`, libellé `Leave this world` | cesser d'en être joueur, soi-même. L'admin peut retirer quelqu'un |
+| adopter un monde | `adopt` | faire naître un monde dans le système, et y déposer s'il y a lieu un monde venu d'ailleurs comme une sauvegarde d'origine `manual`. **La seule opération du système qui recouvre** (§8) |
 | rendre un monde | `retrieve` | ressortir du système le monde qui y vit, sur la machine de l'administrateur. Ne retire rien du seau : c'est une copie, et c'est ce qui rend l'adoption acceptable |
-| jeu | `Game` | le jeu qu'une session ouvre, `enshrouded` ou `sunkenland` ; figé à l'ouverture |
+| jeu | `Game` | le jeu d'un monde, `enshrouded` ou `sunkenland` ; figé à l'adoption, lu par la session |
 | point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre. Pour Enshrouded : `hostname`, libellé `Address` ; `address`, libellé `Raw ip, if that fails` ; `port`, libellé `Port`. Pour Sunkenland : `serverId`, libellé `Server identifier` ; `region`, libellé `Region` ; `worldName`, libellé `Or in the list`. Chaque jeu apporte sa forme (§4) |
-| identifiant Steam | `steamId` | le compte Steam d'un membre, demandé à son premier passage dans l'app. Sert à lui donner le rôle d'administrateur **dans le jeu**, à ne pas confondre avec le rôle `admin` de Beacon |
+| identifiant Steam | `steamId` | le compte Steam d'un membre, demandé à son premier passage dans l'app. Sert à lui donner le rôle d'administrateur **dans le jeu**, pour les jeux qui le donnent par compte Steam — Sunkenland, pas Enshrouded (§2) —, à ne pas confondre avec le rôle `admin` de Beacon |
 | membre | `Member` | une personne autorisée, `player` ou `admin` |
 | visiteur | `Visitor` | un compte authentifié qui n'est pas membre. Il ne lit rien (§5), et l'écran ne lui montre ni état, ni adresse, ni coût |
 | l'ouvrant | `startedBy` | le membre qui a lancé la session. C'est son `uid` : les règles l'exigent (§7), et le §5 interdit à un joueur de lire le document d'un autre membre — **son nom n'est donc lisible nulle part, et l'écran n'affiche que l'heure** |
@@ -543,7 +592,7 @@ l'implémente :
 | `ServerHost` | `session` | ouvrir, fermer et décrire **un serveur de jeu**, désigné par le tag de sa session |
 | `DnsUpdater` | `session` | pointer un enregistrement A vers une IP |
 | `Clock` | `session` | fournir l'instant courant |
-| `SaveStore` | `session`, module `saves` | lister, lire, écrire les sauvegardes |
+| `SaveStore` | `session`, module `saves` | lister, lire, écrire les sauvegardes **d'un monde** — par jeu jusqu'au 2026-09-15, quand le jeu en tenait lieu |
 
 `Clock` est un port parce que tout le système tourne autour d'échéances :
 sans lui, tester la fenêtre de prolongation demanderait d'attendre 3 h 30.
@@ -554,11 +603,12 @@ instance et une IP, ou une instance, une IP **et un volume** ; `session` n'en
 sait rien et n'a pas à le savoir. Le port parle d'un serveur de jeu, l'adapter
 sait combien d'objets cela représente chez le fournisseur.
 
-**C'est aussi ce qui laisse le jeu libre.** `open()` reçoit le jeu et le
-gabarit ; l'adapter va chercher dans `deploy/cloud-init/games/` quelle image
-lancer, quels ports ouvrir et quelles options passer. Le second jeu n'a donc
-rien coûté au port : la frontière était déjà à la bonne place, et c'est le seul
-endroit de cette révision où le spec n'a pas eu à bouger.
+**C'est aussi ce qui laisse le jeu libre.** `open()` reçoit le monde — son
+identifiant, son jeu, son nom — et le gabarit ; l'adapter va chercher dans
+`deploy/cloud-init/games/` quelle image lancer, quels ports ouvrir et quelles
+options passer, et dérive du monde le nom d'hôte et le préfixe de sauvegarde. Le
+second jeu n'a donc rien coûté au port, et le monde lui a coûté trois champs
+dans sa requête : la frontière était déjà à la bonne place.
 
 **`DnsUpdater` n'est pas appelé pour tous les jeux.** Il ne l'est que si le point
 de jonction porte une adresse — vrai pour Enshrouded, faux pour Sunkenland, où
@@ -643,8 +693,12 @@ principe appliqué à d'autres faits, pas une décision à rouvrir.
 S'appuyer aujourd'hui sur ces cinq rôles est un choix assumé pour la
 simplicité, pas une dette cachée — la facture est écrite au-dessus.
 
-**`libs/session-record` est cette frontière**, sur les trois collections qui
-portent le contexte `session` : `server/current`, `config/settings` et `events`.
+**`libs/session-record` est cette frontière**, sur les collections qui portent
+le contexte `session` : `worlds/{worldId}` et ses `players`, son
+`server/current`, `config/settings` et `events`. Le monde y est entré le
+2026-09-15 par la règle qui suit : c'est une collection que le navigateur
+touche, donc elle a son module `*-record`, et c'est celui-ci — le monde est du
+contexte `session`, pas de l'appartenance.
 Le journal en fait partie — `SessionStarted`, `SessionExtended` et
 `SessionStopped` sont les événements de cette session, pas ceux d'un autre
 domaine.
@@ -652,9 +706,12 @@ domaine.
 Il ne traduit donc pas seulement `server/current` vers `Session` et retour ; il
 porte les opérations :
 
-- sur l'état — lire, s'abonner, ouvrir une session en transaction, prolonger,
-  demander l'arrêt, réclamer le provisionnement, poser les champs réservés,
-  clamper, remettre d'équerre ;
+- sur les mondes — lister les miens, s'abonner à l'un d'eux, entrer par un
+  code, quitter, renommer, régénérer le code, retirer un joueur (admin) ; côté
+  Functions, lister tous les `server/current` et lire les joueurs d'un monde ;
+- sur l'état d'un monde — lire, s'abonner, ouvrir une session en transaction,
+  prolonger, demander l'arrêt, réclamer le provisionnement, poser les champs
+  réservés, clamper, remettre d'équerre ;
 - sur les réglages — lire, s'abonner (c'est par là qu'arrive `rulesVersion`),
   écrire côté admin ;
 - sur le journal — écrire un événement dans la même écriture groupée que l'état,
@@ -754,7 +811,8 @@ invariant, où il tient et en combien de temps :
 | Invariant | Où il tient | Délai |
 |---|---|---|
 | Seul un membre écrit ; personne ne s'octroie `admin` ; les champs réservés sont hors de portée | règles Firestore | immédiat, incontournable |
-| Une seule session naît d'un double clic | transaction Firestore du navigateur, puis réclamation transactionnelle de la Function | immédiat |
+| Seul un joueur du monde lit son état et le pilote ; on n'entre qu'avec le code | règles Firestore, par l'existence de `players/{uid}` | immédiat, incontournable |
+| Une seule session naît d'un double clic, et un monde ne tourne qu'une fois | transaction Firestore du navigateur sur le `server/current` du monde, puis réclamation transactionnelle de la Function | immédiat |
 | `RUNNING` implique qu'une machine existe et que son point de jonction est publié | Functions seules — le navigateur ne peut pas écrire cet état | immédiat |
 | Transition légale, pas de `IDLE` vers `STOPPING` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
 | `deadline - maintenant ≤ durée de session` | `libs/session` dans le navigateur — contournable | jusqu'à 5 min, puis watchdog |
@@ -814,18 +872,20 @@ admin qui pourrait l'écrire redirigerait l'endroit où les machines rapportent.
 
 | Document | Contenu | Écrivain |
 |---|---|---|
-| `server/current` | champs *demandés* : `state`, `stateSince`, `sessionId`, `startedBy`, `startedAt`, `deadline`, `game` | navigateur (membre) |
-| `server/current` | `instanceSize` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
-| `server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `joinInfo`, `provisionClaimedAt`, `lastError` | Functions |
-| `provisioning/{sessionId}` | `tag`, `intendedAt`, `instanceSize`, `closedAt` — nul à la création —, puis `instanceId`, `ipId`, `ip` : l'intention de création ; ni lue ni écrite par un client | Functions |
+| `worlds/{worldId}` | `game`, `name`, `inviteCode`, `createdAt` | création : `tools/world-depot adopt` ; `name` et `inviteCode` : un joueur du monde ; tout : admin |
+| `worlds/{worldId}/players/{uid}` | `joinedAt`, et `code` à la création — le code du monde, que la règle compare | création : le sujet, avec le bon code ; suppression : le sujet ou un admin. Jamais de modification |
+| `worlds/{worldId}/server/current` | champs *demandés* : `state`, `stateSince`, `sessionId`, `startedBy`, `startedAt`, `deadline` | navigateur (joueur du monde) |
+| `worlds/{worldId}/server/current` | `instanceSize` | navigateur (admin) ; à défaut, la Function applique le gabarit de `config/settings` |
+| `worlds/{worldId}/server/current` | champs *réservés* : `instanceId`, `ipId`, `ip`, `joinInfo`, `provisionClaimedAt`, `lastError` | Functions |
+| `provisioning/{sessionId}` | `worldId`, `tag`, `intendedAt`, `instanceSize`, `closedAt` — nul à la création —, puis `instanceId`, `ipId`, `ip` : l'intention de création ; ni lue ni écrite par un client | Functions |
 | `agentTokens/{sessionId}` | `hash`, `createdAt` — document illisible par tout client | Functions |
 | `config/settings` | gabarit par défaut, durée de session, pas de prolongation, largeur de la fenêtre de prolongation, `tariffPerHour` par gabarit | navigateur (admin) |
 | `config/settings` | champs *réservés* : `rulesVersion`, `agentEndpoint` | le déploiement, via l'Admin SDK (§10) |
 | `health/watchdog` | `lastRunAt` — battement de cœur du watchdog — et `stranded`, les volumes orphelins que le dernier passage a vus | Functions |
 | `members/{uid}` | `email`, `role` : `admin` \| `player` | navigateur (admin) ; jamais par le sujet lui-même |
 | `members/{uid}` | `steamId` | **le sujet lui-même**, et personne d'autre — seule écriture du système qu'un membre fait sur son propre document |
-| `saves/{id}` | `createdAt`, `game`, `objectKey`, `sizeBytes`, `origin` : `auto` \| `manual` \| `pre-shutdown` | Functions |
-| `events/{id}` | événement de domaine : type, `sessionId`, acteur — `uid` **et nom affiché** —, horodatage, et le coût estimé sur le seul `SessionStopped` (§11) | navigateur et Functions, en création seule |
+| `saves/{id}` | `createdAt`, `worldId`, `objectKey`, `sizeBytes`, `origin` : `auto` \| `manual` \| `pre-shutdown` | Functions, et `world-depot adopt` pour ce qu'il dépose |
+| `events/{id}` | événement de domaine : type, `worldId`, `sessionId`, acteur — `uid` **et nom affiché** —, horodatage, et le coût estimé sur le seul `SessionStopped` (§11) | navigateur et Functions, en création seule |
 
 ### Qui a le droit de lire
 
@@ -835,9 +895,10 @@ au champ.
 
 | Document | Lecteur |
 |---|---|
-| `server/current` | tout membre |
+| `worlds/{worldId}` et son `server/current` | ses joueurs, et un admin |
+| `worlds/{worldId}/players/{uid}` | les joueurs du monde, et un admin ; le sujet lit le sien partout — c'est la requête « mes mondes », par groupe de collection sur son propre `uid` |
 | `config/settings` | tout membre — le front en a besoin pour calculer l'échéance |
-| `events/{id}` | tout membre — le cumul du mois se totalise par requête (§11) |
+| `events/{id}` | tout membre — le cumul du mois se totalise par requête (§11), et il reste global parce que la facture l'est. Un événement ne porte ni adresse ni point de jonction : un membre y voit qu'un autre groupe a joué, pas où |
 | `saves/{id}` | personne, hors Functions — aucun écran de la v1 ne les liste (§13) ; à ouvrir aux membres le jour où l'interface les montrera |
 | `members/{uid}` | un admin, ou le sujet lui-même |
 | `provisioning`, `agentTokens`, `health` | personne, hors Functions |
@@ -857,10 +918,13 @@ lisible est donc borné et expurgé** ; ce qui garde la trace entière est le
 journal de la plateforme, que seul l'exploitant lit. La même règle vaut pour
 `server/current.lastError`, lisible par les mêmes.
 
-**Les sauvegardes sont cloisonnées par jeu dans le seau**, et ce n'est pas du
-rangement. Deux jeux qui partageraient un préfixe finiraient par se recouvrir,
-et le §3 fait de la perte d'une sauvegarde le seul échec grave du système. Le
-préfixe se dérive du `game` de la session, jamais d'un nom saisi.
+**Les sauvegardes sont cloisonnées par monde dans le seau**, et ce n'est pas
+du rangement. Deux mondes qui partageraient un préfixe finiraient par se
+recouvrir, et le §3 fait de la perte d'une sauvegarde le seul échec grave du
+système. Le préfixe se dérive du `worldId`, un slug validé à l'adoption, jamais
+d'un nom saisi — le nom affiché, lui, change à volonté et n'entre dans aucune
+clé. Par jeu jusqu'au 2026-09-15 ; le jeu n'apparaît plus dans la clé, le monde
+le porte.
 
 **Et les fichiers de jeu vivent dans un second seau, pas dans un second
 préfixe.** `beacon-saves` porte les sauvegardes, que la VM écrit ; `beacon-games`
@@ -884,8 +948,18 @@ seau se relit, là où une politique de préfixe se vérifie caractère par
 caractère —, mais il ne se suffit pas, et cette section l'affirmait.
 
 **Chaque sauvegarde est une clé neuve, jamais une clé réécrite.** L'`objectKey`
-s'écrit `saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`, et un document
-`saves/{id}` existe par objet déposé. C'est ce qui fait de la règle d'or une
+s'écrit `{origine}/{worldId}/{instant}-{sessionId}.tar.gz` pour une poussée de
+session, et `{origine}/{worldId}/{instant}.tar.gz` pour une adoption, qui n'a
+pas de session et n'en invente plus une. Un document `saves/{id}` existe par
+objet déposé. **Le format a changé le 2026-09-15** : il s'écrivait
+`saves/{jeu}/{origine}/{sessionId}/{instant}.tar.gz`. Le préfixe `saves/` est
+tombé — le seau s'appelle déjà ainsi —, le jeu aussi — le monde le porte —, et
+le `sessionId` est passé dans le nom de fichier, où `agentReport` le lit encore
+pour refuser à une session d'enregistrer une clé qui n'est pas la sienne. Une
+clé de l'ancien format ne se lit plus : le lecteur l'ignore, les `auto/`
+s'élaguent seules, et les autres restent dans le seau sans être listées. Les
+deux mondes d'alors migrent par les deux gestes qui existent, `retrieve` puis
+`adopt` vers leur slug. C'est ce qui fait de la règle d'or une
 propriété et non une politique : le compagnon n'a pas à *éviter* d'écraser une
 sauvegarde, il n'en a jamais l'occasion. Une poussée fautive ajoute un objet
 suspect à côté des bons, là où une clé stable l'aurait mis à leur place.
@@ -898,32 +972,41 @@ le §7 tient à l'écart ; et il est *filtré littéralement* par les règles de
 de vie du seau, qui ne sont pas du code. Rien ne casse quand ces trois-là
 divergent — c'est un test qui épingle la chaîne entière qui les tient ensemble.
 La réponse permanente est un module sans SDK exportant le préfixe, que la
-Function et l'adapter importent tous deux ; elle attend une tranche qui touche à
-ce chemin. Le troisième endroit, lui, restera manuel : il est chez le
-fournisseur, et le dépôt n'en garde que l'énoncé, dans `deploy/scaleway/`.
+Function et l'adapter importent tous deux ; **la révision du 2026-09-15 est la
+tranche qui touche à ce chemin, et elle le paie**. Le troisième endroit, lui,
+restera manuel : il est chez le fournisseur, et le dépôt n'en garde que
+l'énoncé, dans `deploy/scaleway/`.
 
-**L'origine est dans le chemin, et haut**, avant tout ce qui varie d'une session
-à l'autre. Ce n'est pas du rangement : les règles de cycle de vie d'un seau
-filtrent par préfixe littéral, et c'est ce qui permet à une poussée régulière de
-ne pas vivre aussi longtemps que la dernière d'une soirée. Une origine placée
-plus bas rendrait ces deux durées indistinguables.
+**L'origine est dans le chemin, et en tête**, avant le monde et avant tout ce
+qui varie d'une session à l'autre. Ce n'est pas du rangement : les règles de
+cycle de vie d'un seau filtrent par préfixe littéral, et c'est ce qui permet à
+une poussée régulière de ne pas vivre aussi longtemps que la dernière d'une
+soirée. Une origine placée plus bas rendrait ces deux durées indistinguables.
+**Et placée après le monde, elle demanderait une règle de console par monde**, à
+chaque adoption — c'est la seule raison pour laquelle le monde n'est pas en
+tête, et elle tient au fournisseur, pas au goût. Le commanditaire préférait le
+monde en tête ; une règle filtrée par étiquette d'objet plutôt que par préfixe
+l'aurait permis, mais c'est une capacité supposée, et le §2 en a déjà payé une.
 
 L'élagage est alors la seule chose qui supprime, et il vit **dans la règle de
 cycle de vie du seau**, jamais dans le dépôt. `saves/{id}` n'a pas de politique
 de rétention à tenir de son côté : ses documents survivent aux objets, et un
 document qui pointe une clé expirée dit une vérité — cette sauvegarde a existé.
 
-**Les règles ne portent que sur les poussées régulières** : `{jeu}/auto/` expire
-à sept jours. Ni `pre-shutdown/` ni `manual/` ne sont touchés par quoi que ce
+**Les règles ne portent que sur les poussées régulières** : `auto/` expire à
+sept jours. Ni `pre-shutdown/` ni `manual/` ne sont touchés par quoi que ce
 soit, et c'est le §8 qui l'impose — une règle qui effacerait la dernière
 sauvegarde d'un monde parce que personne n'y a joué pendant un an optimiserait
 quelques centimes par mois contre la seule chose que ce système existe pour
 empêcher. Ce que coûte cette rétention sans fin est au §11 : une croissance
 lente, et acceptée.
 
-Le préfixe étant littéral, **il y a une règle par jeu et non une règle**. Une
-seule est posée aujourd'hui, sur `saves/enshrouded/auto/` ; celle de Sunkenland
-naît avec la tranche qui l'implémente, et aucun test ne réclamera cette ligne.
+Le préfixe étant littéral, et l'origine en tête, **il y a une règle, et une
+seule, pour tous les mondes de tous les jeux** : `auto/`. Jusqu'au 2026-09-15
+il y en avait une par jeu, `saves/enshrouded/auto/` et
+`saves/sunkenland/auto/` ; elles deviennent lettre morte et sont remplacées
+une fois, dans `deploy/scaleway/`, par un geste de console — le dernier que ce
+chemin demande.
 
 **Un piège que rien ne laisse deviner, et qui a failli passer.** Sur un seau
 **versionné**, une règle `Expiration` ne supprime rien : elle pose un marqueur
@@ -966,13 +1049,20 @@ dépendance de l'écran principal envers la collection d'audit, acceptable parce
 que l'état et son événement partent dans la même écriture groupée, donc atomique
 (§8).
 
-**`server/current` et `config/settings` ne sont jamais créés par un client.**
-Les deux sont semés au déploiement. C'est la conséquence d'un piège des règles
+**`server/current`, `worlds/{worldId}` et `config/settings` ne sont jamais créés
+par un client.** Le dernier est semé au déploiement ; les deux premiers naissent
+ensemble, avec le monde, sous l'Admin SDK de `world-depot adopt` — jusqu'au
+2026-09-15 `server/current` était unique et semé lui aussi. C'est la
+conséquence d'un piège des règles
 Firestore : la restriction champ par champ s'écrit `diff(resource.data)`, or
 `resource` est nul sur une création. Un document absent que le client pourrait
 créer contournerait donc d'un coup toute la propriété des champs — il suffirait
 de naître `RUNNING` avec une IP inventée. `create` est refusé aux clients sur
-ces deux documents, et les tests de §9 le vérifient explicitement.
+ces documents, et les tests de §9 le vérifient explicitement. **`players/{uid}`
+est l'exception, et elle est bornée** : le sujet crée son propre document, avec
+son propre `uid` pour nom et le code du monde dedans, et rien d'autre ; il n'a
+aucun champ dont la création contournerait une propriété, puisqu'il n'en a
+qu'un et que la règle le lit.
 
 **Le rôle vit dans `members/{uid}`, et nulle part ailleurs.** Les règles le
 lisent par un `get()` à l'évaluation. Ce n'est pas la solution la moins chère en
@@ -1026,9 +1116,10 @@ une seconde fusion ne l'annule pas : elle ajoute le bon **à côté** du mauvais
 Le geste de console, lui, se fait au moment où l'`uid` existe naturellement,
 l'erreur se voit dans la liste des membres, et elle se défait d'un clic.
 
-Ce que le semis crée reste donc `server/current` et `config/settings` (§10) —
-les deux documents qu'aucun client ne peut créer, et dont la valeur ne dépend de
-personne.
+Ce que le semis crée reste donc `config/settings` (§10) — le document qu'aucun
+client ne peut créer et dont la valeur ne dépend de personne. `server/current`
+en faisait partie jusqu'au 2026-09-15 ; il dépend maintenant d'un monde, donc
+d'une adoption, et c'est elle qui le crée.
 
 Ce qui reste vrai entre-temps, et que le §7 assume : **un visiteur non autorisé
 peut se connecter**. Il obtient un compte, aucune lecture, aucune écriture, et
@@ -1061,9 +1152,13 @@ vit dans `config/settings`, par gabarit. Il ne peut pas être compilé dans le
 bundle : l'hébergeur change ses prix, et un tarif faux fausserait silencieusement le
 seul chiffre que l'interface affiche sur l'argent.
 
-`server/current` est un document unique dont les champs ont deux propriétaires.
-Les règles l'imposent champ par champ : une écriture du navigateur qui touche un
-champ réservé est refusée en bloc, même si le reste de l'écriture est légitime.
+`server/current` est un document unique **par monde** dont les champs ont deux
+propriétaires. Les règles l'imposent champ par champ : une écriture du
+navigateur qui touche un champ réservé est refusée en bloc, même si le reste de
+l'écriture est légitime. Unique par monde et non par système depuis le
+2026-09-15, et c'est ce qui rend « un monde ne tourne qu'une fois » gratuit :
+la transaction d'ouverture lit ce document-là, et il n'y en a pas d'autre sous
+ce monde.
 
 **`stateSince` dit quand l'état courant a commencé**, et il est réécrit à chaque
 changement d'état, quel qu'en soit l'auteur. C'est ce qui rend mesurables les
@@ -1080,8 +1175,8 @@ tard de quelques minutes, jamais une machine.
 
 Le hachage du jeton d'agent n'y figure pas, et c'est délibéré. Les règles
 Firestore filtrent la lecture au niveau du document, pas du champ : posé dans
-`server/current`, que tout membre lit en temps réel, il aurait été lisible par
-tous. Il vit donc dans `agentTokens/{sessionId}`, qu'aucun client ne lit.
+`server/current`, que tout joueur du monde lit en temps réel, il aurait été
+lisible par tous. Il vit donc dans `agentTokens/{sessionId}`, qu'aucun client ne lit.
 
 **`provisioning/{sessionId}` porte l'intention de création**, écrite avant tout
 appel à Scaleway (§6, étape 4). C'est la pièce qui empêche une machine fantôme de
@@ -1154,11 +1249,11 @@ suivant.
 donc un membre qui ne l'écrit pas hérite du gabarit par défaut appliqué par la
 Function.
 
-États possibles de `server/current.state` :
+États possibles de `server/current.state`, sous chaque monde :
 
 ```mermaid
 stateDiagram-v2
-    [*] --> IDLE : semé au déploiement
+    [*] --> IDLE : créé avec le monde, à l'adoption
     IDLE --> PROVISIONING : un membre ouvre une session
     PROVISIONING --> RUNNING : le point de jonction est publié
     RUNNING --> STOPPING : bouton, ou échéance atteinte
@@ -1191,19 +1286,23 @@ jamais bloqué ».
 
 ### Démarrage
 
-1. Le navigateur exécute une transaction Firestore qui fait passer
-   `server/current` de `IDLE` à `PROVISIONING`, en y inscrivant `sessionId`,
-   `game`, `stateSince`, `startedBy`, `startedAt`, `deadline` — et `instanceSize`
-   seulement s'il est admin, sinon la Function appliquera le gabarit par défaut —
-   plus l'événement `SessionStarted` dans la même écriture, c'est lui qui porte
-   le nom affiché.
+1. Un joueur du monde, depuis l'écran de ce monde, exécute une transaction
+   Firestore qui fait passer son `server/current` de `IDLE` à `PROVISIONING`,
+   en y inscrivant `sessionId`, `stateSince`, `startedBy`, `startedAt`,
+   `deadline` — et `instanceSize` seulement s'il est admin, sinon la Function
+   appliquera le gabarit par défaut — plus l'événement `SessionStarted` dans la
+   même écriture, c'est lui qui porte le nom affiché. Le jeu n'est pas écrit :
+   il est celui du monde.
    L'échéance est calculée par `libs/session` à partir de `config/settings`.
    Lire l'état et écrire dans la même transaction est le verrou contre deux
    personnes qui cliquent simultanément : la seconde transaction rejoue sa
-   lecture, voit `PROVISIONING` et renonce.
+   lecture, voit `PROVISIONING` et renonce. Le document étant celui du monde,
+   le même verrou tient « un monde ne tourne qu'une fois » ; deux mondes, eux,
+   s'ouvrent sans se voir.
 2. Les règles vérifient seulement ce qui relève de l'autorisation : l'auteur
-   figure dans `members`, `startedBy` est bien son propre `uid`, et l'écriture
-   ne touche aucun champ réservé ni n'affirme un état réservé aux Functions.
+   est joueur de ce monde — `players/{uid}` existe sous lui —, `startedBy` est
+   bien son propre `uid`, et l'écriture ne touche aucun champ réservé ni
+   n'affirme un état réservé aux Functions.
 3. Le passage à `PROVISIONING` déclenche la Function `onServerStateChange`,
    seule frontière vers les secrets. Elle **réclame le provisionnement dans une
    transaction** : elle abandonne si `provisionClaimedAt` est déjà posé. Les
@@ -1211,8 +1310,9 @@ jamais bloqué ».
    un double déclenchement créerait deux instances facturées.
 4. Elle génère un jeton d'agent aléatoire de 32 octets, dont seul le hachage est
    stocké, dans `agentTokens/{sessionId}`, puis écrit l'**intention de
-   création** dans `provisioning/{sessionId}` — tag `session:{sessionId}`,
-   instant, gabarit, **`closedAt` à `null`** — **avant** d'appeler Scaleway. Sans
+   création** dans `provisioning/{sessionId}` — `worldId`, tag
+   `session:{sessionId}`, instant, gabarit, **`closedAt` à `null`** — **avant**
+   d'appeler Scaleway. Sans
    cela, un crash entre l'appel et l'enregistrement de l'`instanceId` laisserait
    une machine facturée dont plus personne ne connaît l'existence. Les deux
    documents sont créés en création stricte : un `sessionId` déjà vu fait échouer
@@ -1225,7 +1325,13 @@ jamais bloqué ».
 5. Création de l'IP puis de l'instance, **toutes deux portant les deux tags**,
    avec un `cloud-init` contenant : le jeton, l'URL de l'endpoint, une clé S3
    qui écrit dans `beacon-saves` et lit `beacon-games` — deux seaux, et le §5
-   dit pourquoi ce n'est pas un préfixe — et la configuration serveur.
+   dit pourquoi ce n'est pas un préfixe —, **le monde** — son `worldId`, dont
+   le compagnon dérive le préfixe qu'il restaure et pousse, et son nom, que le
+   serveur Enshrouded annonce comme nom de serveur — et la configuration
+   serveur. **Pour Sunkenland, les `steamId` qui deviennent administrateurs du
+   jeu sont ceux des joueurs du monde**, lus dans sa sous-collection puis dans
+   `members` ; tous les membres jusqu'au 2026-09-15. Enshrouded n'en reçoit
+   aucun, il n'a pas d'option pour ça (§2).
 
    **L'échéance n'y est pas**, et son absence est ce qui la garde vraie :
    l'agent la relit dans la réponse à chacun de ses rapports, donc une valeur
@@ -1303,7 +1409,10 @@ jamais bloqué ».
    fait de la VM l'élément le moins fiable du système. L'`ip` du rapport ne sert
    qu'à corroborer ; si les deux diffèrent, c'est un incident à journaliser, pas
    une valeur à suivre — sans quoi une VM compromise pointerait
-   `enshrouded.beacon.charlouze.com` où elle veut. Elle recopie ensuite
+   `<worldId>.beacon.charlouze.com` où elle veut. Le nom pointé est dérivé du
+   monde par le catalogue, plus un littéral par jeu, et il n'existe que si un
+   admin a créé l'enregistrement à l'adoption (§2) ; sinon c'est le `nohost` du
+   §12, et le §8 ne coupe rien. Elle recopie ensuite
    `instanceId`, `ipId`, `ip` et le gabarit `instanceSize` effectivement
    provisionné de `provisioning/{sessionId}` vers `server/current`, et fait
    passer l'état à `RUNNING`, `stateSince` avec lui. Recopier le gabarit évite
@@ -1459,6 +1568,14 @@ Déclenché par le bouton ou par l'atteinte de l'échéance.
 
 Cloud Scheduler, toutes les 5 minutes. C'est le composant le plus important du
 système pour le budget.
+
+**Il lit tous les `server/current` en un passage** — une requête de groupe de
+collection, depuis le 2026-09-15 — et applique à chacun, séparément, les
+décisions du tableau ci-dessous. Rien n'y est écrit « la session » qui ne se
+lise « chaque session ». La réconciliation par tag, elle, n'a pas eu à changer :
+elle confrontait déjà tout ce que Scaleway déclare à *l'ensemble* des intentions
+ouvertes, pas au seul document courant, et deux mondes qui tournent sont deux
+intentions ouvertes.
 
 | Condition | Action |
 |---|---|
@@ -1623,12 +1740,23 @@ structurels : la création d'un document absent contourne toute restriction cham
 par champ, et l'absence de borne sur les chaînes écrites par un client ouvre un
 épuisement de ressource qui se paie en euros.
 
-Un troisième se traite ici. `server/current` est écrit par n'importe quel
-membre, sans contrôle de propriété : c'est délibéré, la ressource est commune et
-chacun doit pouvoir arrêter la session d'un autre. Le seul champ attaché à une
-personne est `startedBy`, que les règles exigent égal à l'`uid` de l'auteur.
-Restreindre *quels* champs sont écrits sans restreindre *qui* les écrit serait un
-défaut ailleurs ; ici c'est le comportement voulu.
+Un troisième se traite ici. Le `server/current` d'un monde est écrit par
+n'importe lequel de ses joueurs, sans contrôle de propriété : c'est délibéré,
+la ressource est commune à ceux qui la partagent, et chacun d'eux doit pouvoir
+arrêter la session d'un autre. Le seul champ attaché à une personne est
+`startedBy`, que les règles exigent égal à l'`uid` de l'auteur. Restreindre
+*quels* champs sont écrits sans restreindre *qui* les écrit serait un défaut
+ailleurs ; ici c'est le comportement voulu. Ce qui a changé le 2026-09-15 est
+le *qui* : un membre qui n'est pas joueur du monde ne lit ni n'écrit rien de
+lui — il ne sait même pas qu'il existe, hors le journal.
+
+**Le code d'invitation est le seul secret qu'un membre tient**, et il est
+faible à dessein. Le tenir, c'est pouvoir entrer dans un monde et y faire ce
+qu'un joueur fait — ouvrir une session, donc dépenser. Ce que ça borne : seul
+un membre de la liste blanche peut s'en servir, donc quelqu'un que l'admin a
+déjà autorisé à dépenser ; tout joueur peut le régénérer ; et l'admin peut
+retirer qui il veut. Un lien qui traîne sur Discord est un lien vers un salon
+où tout le monde est déjà membre.
 
 Les règles se testent donc comme de la sécurité : par leurs refus (voir §9).
 
@@ -1695,10 +1823,13 @@ l'instance, et le watchdog balaie les IP non réclamées.
 
 | Panne | Réponse |
 |---|---|
-| Deux démarrages simultanés | Transaction Firestore côté navigateur : la seconde relit `PROVISIONING` et renonce. Si les deux passent malgré tout, la réclamation transactionnelle de la Function ne laisse naître qu'une machine |
+| Deux démarrages simultanés sur le même monde | Transaction Firestore côté navigateur : la seconde relit `PROVISIONING` et renonce. Si les deux passent malgré tout, la réclamation transactionnelle de la Function ne laisse naître qu'une machine |
+| Deux mondes démarrés le même soir | Ce n'est pas une panne : deux documents, deux transactions, deux intentions ouvertes, deux machines. Le watchdog les traite l'une après l'autre et la réconciliation par tag les distingue par leur `session:{sessionId}` |
+| Lien d'invitation périmé, ou code faux | La règle refuse la création de `players/{uid}` ; l'écran dit que le lien ne vaut plus et de demander le nouveau |
+| Le dernier joueur quitte un monde | Le monde reste, avec son état et ses sauvegardes ; aucun verbe ne le détruit. Le lien d'invitation y ramène quelqu'un, et l'admin le voit toujours |
 | Double livraison du trigger Firestore | `onServerStateChange` réclame le provisionnement dans une transaction et abandonne si `provisionClaimedAt` est déjà posé ; si deux instances naissent malgré tout, le tag unique permet au watchdog d'en détruire une |
 | Membre qui écrit en base hors de l'interface | Les règles lui interdisent tout ce qui engage une ressource ou un privilège ; une échéance ou un état incohérents sont ramenés à la norme par le watchdog en moins de 5 min |
-| Membre qui tente de recréer un document semé au déploiement | `create` refusé aux clients sur `server/current` et `config/settings` — sans quoi la restriction champ par champ, qui n'existe que sur `update`, serait contournée |
+| Membre qui tente de créer un monde, son `server/current`, ou `config/settings` | `create` refusé aux clients sur ces documents — sans quoi la restriction champ par champ, qui n'existe que sur `update`, serait contournée. Un monde naît d'une adoption, pas d'un clic |
 | Perte du dernier admin | La console Firebase recrée `members/{uid}` en `admin` — le même geste qu'à l'installation (§5). Le semis n'y peut rien : il ne touche pas `members` |
 | Écriture d'état réussie mais entrée d'audit absente | L'état et l'événement partent dans la même écriture groupée, donc atomique ; une Function qui décide seule écrit son propre événement avec l'acteur `system` |
 | Création d'instance refusée par le fournisseur | Nettoyage, puis `IDLE` avec `lastError` : le bouton est immédiatement recliquable |
@@ -1802,7 +1933,7 @@ elles divergent (`objectKeyFor`, voir §5).
 Ensuite, **il doit pouvoir en nommer une autre**, sans quoi la réparation
 décrite au paragraphe précédent n'existe pas : réparer demande la clé
 *précédente*, pas la dernière, qui est justement celle qu'on veut défaire.
-`retrieve` liste donc l'historique d'un jeu et accepte qu'on désigne une
+`retrieve` liste donc l'historique d'un monde et accepte qu'on désigne une
 sauvegarde. C'est aussi ce qui rend vraie la ligne du §13 sur la restauration
 d'une ancienne sauvegarde hors interface.
 
@@ -1852,15 +1983,16 @@ restent les deux gestes.
    de disposition, pas de complétude — le §8 vient de dire pourquoi la seconde
    est hors de portée.
 
-**Un monde adopté est visible à la restauration et invisible à l'audit**, et
-c'est à écrire parce que rien ne le signale. L'objet porte l'origine `manual`,
-donc `list()` le voit et la session suivante le restaure comme n'importe quelle
-sauvegarde. Mais `saves/{id}` (§5) n'est écrit que par les Functions, sur
-rapport de l'agent : une adoption ne produit aucun document, donc aucune trace
-dans l'audit et rien dans les cumuls du §11. L'écart est assumé — faire écrire
-un document à un outil d'administration lui demanderait un identifiant Firebase
-que le §7 lui refuse — mais il veut dire qu'un monde peut changer sans que
-l'historique en porte la moindre ligne.
+**Un monde adopté était visible à la restauration et invisible à l'audit**, et
+ce paragraphe l'écrivait comme un écart assumé : `saves/{id}` (§5) n'était
+écrit que par les Functions, sur rapport de l'agent, et faire écrire un
+document à un outil d'administration lui aurait demandé un identifiant Firebase.
+**L'écart est tombé le 2026-09-15 avec sa raison.** `adopt` doit créer le
+monde, donc il a une identité — celle du compte qui possède le projet, sur le
+poste de l'admin, par `gcloud` — et il écrit le document de ce qu'il dépose.
+Un monde ne change plus sans que l'historique en porte une ligne. Ce que cette
+identité n'est pas : un secret de plus. Elle vit sur la machine qui tient déjà
+la clé S3 d'administration et le compte Steam (§7), et rien d'autre ne l'a.
 
 **Ce que cette section ne prétend pas.** L'adoption reste le seul geste du
 système dont une erreur demande de savoir qu'on peut la réparer. Le seau garde
@@ -1888,30 +2020,41 @@ soi-même en admin, modification ou suppression d'une entrée d'audit.
 
 **Les refus de lecture se testent au même titre que ceux d'écriture**, et
 collection par collection : un compte authentifié absent de `members` ne lit
-rien — ni `server/current`, ni `config/settings`, ni `events`, ni `saves`, ni
-`members`. Un membre ordinaire ne lit pas le `members/{uid}` d'un autre. Une
-suite qui ne teste que les écritures laisse la moitié de la surface ouverte, et
-c'est la moitié silencieuse : une lecture de trop ne casse rien, elle fuit.
+rien — ni un monde, ni son `server/current`, ni `config/settings`, ni `events`,
+ni `saves`, ni `members`. Un membre ordinaire ne lit pas le `members/{uid}` d'un
+autre. **Et un membre qui n'est pas joueur d'un monde ne lit ni n'écrit rien de
+ce monde** — ni son document, ni son état, ni ses joueurs — même avec le lien :
+le lien ne donne qu'une chose, créer son propre `players/{uid}` avec le bon
+code, et c'est le code faux qui se teste. Une suite qui ne teste que les
+écritures laisse la moitié de la surface ouverte, et c'est la moitié
+silencieuse : une lecture de trop ne casse rien, elle fuit.
 
 Trois refus comptent plus que les autres, parce qu'ils ferment des trous
-identifiés à la conception plutôt que des cas théoriques : **création** de
-`server/current` ou de `config/settings` par un client, `members/{uid}` modifié
-par son propre sujet, et écriture d'une chaîne au-delà de la borne. Chacun est
+identifiés à la conception plutôt que des cas théoriques : **création** d'un
+monde, de son `server/current` ou de `config/settings` par un client,
+`members/{uid}` modifié par son propre sujet, et écriture d'une chaîne au-delà
+de la borne. S'y ajoute depuis le 2026-09-15 la création de `players/{autre}` —
+inscrire quelqu'un d'autre —, qui est la seule création qu'un client fait sous
+un monde et doit rester la sienne. Chacun est
 testé sur `create` **et** sur `update` : une règle correcte en modification et
 permissive en création ne protège rien.
 
 Ces tests ne contiennent aucune date ni aucune durée. Une assertion sur une
 fenêtre de 30 minutes dans un test de règles est le signe qu'une règle métier a
 fui dans la couche sécurité, et elle est à remonter dans `libs/session`. Le
-pendant statique : les règles font un `get()` sur `members` et sur rien d'autre
-— un `get()` sur `config/settings` serait la même fuite, côté lecture.
+pendant statique : les règles font un `get()` sur `members` et sur le monde —
+pour son code —, un `exists()` sur `players`, et rien d'autre — un `get()` sur
+`config/settings` serait la même fuite, côté lecture.
 
 Le watchdog est l'autre moitié de cette garantie, et se teste contre l'émulateur
 avec un `ServerHost` en mémoire : échéance forgée au-delà de la durée de session
 ramenée à la borne, état incohérent recollé sur ce que déclare `ServerHost`,
 double livraison du trigger de provisionnement qui ne crée qu'une seule
 instance, ressource taguée sans intention de création ouverte qui se fait
-détruire, et **sortie de `FAILED` vers `IDLE` une fois la destruction réussie**.
+détruire, **sortie de `FAILED` vers `IDLE` une fois la destruction réussie**,
+et, depuis le 2026-09-15, **deux mondes dans deux états en un seul passage** —
+l'un expiré, l'autre sain — où le premier passe à `STOPPING` et le second n'est
+pas touché.
 
 Trois tests gardent chacun une frontière :
 
@@ -2009,11 +2152,12 @@ Le workflow s'arrête à la première étape rouge :
 2. **tests des règles Firestore contre l'émulateur** — c'est une barrière : les
    règles ne partent jamais si leurs refus ne sont pas verts (§9) ;
 3. déploiement des règles, des index, des Functions et du Hosting ;
-4. **semis idempotent** de `server/current` et de `config/settings` s'ils
-   n'existent pas. C'est cela, « au déploiement » : un script du dépôt,
-   relançable sans effet de bord, qui ne touche jamais un document existant.
-   Ces deux-là et pas un troisième : ce sont les seuls documents qu'aucun
-   client ne peut créer et dont la valeur initiale ne dépend de personne ;
+4. **semis idempotent** de `config/settings` s'il n'existe pas. C'est cela,
+   « au déploiement » : un script du dépôt, relançable sans effet de bord, qui
+   ne touche jamais un document existant. Celui-là et pas un autre : c'est le
+   seul document qu'aucun client ne peut créer et dont la valeur initiale ne
+   dépend de personne. `server/current` en était jusqu'au 2026-09-15 ; il
+   dépend maintenant d'un monde, et c'est l'adoption qui le crée (§5) ;
 5. **écriture des champs réservés de `config/settings`** — `rulesVersion` avec
    la référence du commit déployé, et `agentEndpoint` avec l'url que l'étape 3
    vient de publier, relue du déploiement plutôt que fournie. Écriture ciblée
@@ -2100,6 +2244,14 @@ ailleurs.
 Référence à battre : 7,90 €/mois. Point d'équilibre : environ **143 h
 facturées** par mois.
 
+**Le tableau est par machine, et il y en a une par monde qui tourne.** Depuis
+le 2026-09-15, deux groupes qui jouent le même soir font deux colonnes « mois à
+32 h », et rien ne les plafonne (§2). Le point d'équilibre ne bouge pas : il se
+compte en heures facturées, quel que soit le nombre de machines qui les
+consomment, et chaque groupe remplace son propre serveur dédié. Ce qui se
+partage est le stockage — quelques kilo-octets par monde et par soirée — et le
+plan de contrôle, qui reste à zéro.
+
 **Facturées, et non jouées** : l'heure entamée est due, chaque ressource ayant
 son propre minimum de 60 minutes. Une soirée de 4 h plus ses cinq minutes de
 démarrage se paie 5 h. Les 32 h de jeu de la colonne ci-dessus valent donc
@@ -2170,9 +2322,11 @@ close et sa durée connue. Les autres le laissent vide. Sans cette règle, une
 session qui démarre, se prolonge deux fois et s'arrête produirait quatre
 montants qu'une somme naïve compterait quatre fois.
 
-Le cumul du mois est donc la somme des `SessionStopped` du mois, plus la session
-en cours si elle est ouverte — celle-ci se calcule en direct, sans passer par le
-journal. La requête filtre `type == 'SessionStopped'` côté serveur, égalité
+Le cumul du mois est donc la somme des `SessionStopped` du mois, plus les
+sessions en cours s'il y en a — celles-ci se calculent en direct, sans passer
+par le journal, et depuis le 2026-09-15 il peut y en avoir plusieurs, une par
+monde qui tourne parmi les miens. Le cumul reste global, tous mondes confondus,
+parce qu'il n'y a qu'une facture (§5). La requête filtre `type == 'SessionStopped'` côté serveur, égalité
 simple donc index automatique, et ne trie le mois que sur les quelques dizaines
 de documents ramenés. Sans ce filtre, elle rapatrierait jusqu'à 400 jours
 d'événements pour n'en garder qu'une poignée.
@@ -2322,6 +2476,22 @@ pas mesurée — les quatre autres sont passées au tableau ci-dessus.
   non mesuré. Le §2 accepte la dérive en s'appuyant dessus ; si la déduction est
   fausse, la décision est plus confortable qu'écrit, pas moins.
 
+Et deux que la révision du 2026-09-15 ouvre, sans qu'aucune sonde n'ait tourné.
+
+- **Le nom d'un monde Sunkenland se change-t-il en renommant son dossier ?** Le
+  §2 pose que le nom du dossier `<nom>~<GUID>` se fige à la création ; le
+  commanditaire pense qu'un renommage du dossier suffit, le GUID portant seul
+  l'identité à laquelle les personnages sont attachés. Si c'est vrai, le `name`
+  du monde peut descendre jusqu'à la liste de serveurs du jeu, comme il le fait
+  déjà pour Enshrouded par le nom de serveur ; sinon les deux noms divergent, et
+  le glossaire du §4 le dit déjà. Se mesure sur une archive adoptée, renommée
+  avant restauration, dont on vérifie qu'un personnage existant y entre.
+- **Une identité DynHost en `*` met-elle bien à jour tout enregistrement de la
+  zone ?** Elle est créée, pas encore exercée : le premier monde adopté sous
+  `<worldId>.beacon.charlouze.com` le dira à sa première session, et le §8
+  couvre le cas où elle ne le fait pas — l'IP brute reste dans le point de
+  jonction.
+
 ## 13. Hors périmètre v1
 
 - Tout jeu autre qu'Enshrouded et Sunkenland.
@@ -2341,8 +2511,18 @@ pas mesurée — les quatre autres sont passées au tableau ci-dessus.
 - **La détection d'un décalage de version avant une session.** L'identifiant de
   build de la branche publique est lisible sans compte, donc la comparaison est
   possible ; elle n'est simplement pas faite en v1.
-- Plusieurs serveurs simultanés : le modèle suppose une seule instance à la fois,
-  quel que soit le nombre de jeux disponibles.
+- ~~Plusieurs serveurs simultanés.~~ **Entré dans le périmètre le 2026-09-15**,
+  un serveur par monde. La ligne reste, barrée, parce qu'elle était la seule de
+  cette liste à décrire une limite du modèle plutôt qu'un choix, et qu'elle a
+  tenu treize jours.
+- **Retirer un monde.** Aucun verbe ne détruit un monde, ni depuis l'écran ni
+  depuis l'outil ; un monde rendu par `retrieve` reste listé chez ses joueurs,
+  et un monde que tous ont quitté reste chez l'admin. C'est cohérent avec le §8 —
+  la seule chose qui supprime est une règle de cycle de vie — et c'est accepté
+  tant que les mondes se comptent sur une main.
+- **Des réglages par monde.** Durée de session, gabarit et tarif restent
+  globaux ; un monde n'a ni sa durée ni son calibre.
+- **Un plafond de machines.** Décidé sans plafond (§2), pas reporté.
 
 ## 14. Ce qui instancie quoi
 
