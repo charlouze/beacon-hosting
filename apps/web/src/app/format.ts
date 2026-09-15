@@ -1,4 +1,4 @@
-import type { Game } from '@beacon/session';
+import type { Game, SessionState, World } from '@beacon/session';
 
 /**
  * How the screen renders what it is given. Pure functions, no Angular, and no
@@ -66,4 +66,24 @@ export function readyWindow(stateSince: Date): { from: string; to: string } {
     from: hourLabel(new Date(stateSince.getTime() + earliest)),
     to: hourLabel(new Date(stateSince.getTime() + latest)),
   };
+}
+
+export type Tone = 'live' | 'off' | 'warn';
+
+export type Announced = { readonly label: string; readonly tone: Tone };
+
+export function stateLabel(state: SessionState | 'unreadable'): Announced {
+  const states: Record<SessionState | 'unreadable', Announced> = {
+    IDLE: { label: 'Out of service', tone: 'off' },
+    PROVISIONING: { label: 'Preparing', tone: 'off' },
+    RUNNING: { label: 'In service', tone: 'live' },
+    STOPPING: { label: 'Closing', tone: 'off' },
+    FAILED: { label: 'Not cleared', tone: 'warn' },
+    unreadable: { label: 'Unknown', tone: 'warn' },
+  };
+  return states[state];
+}
+
+export function inviteLink(origin: string, world: World): string {
+  return `${origin}/join/${world.worldId}/${world.inviteCode}`;
 }

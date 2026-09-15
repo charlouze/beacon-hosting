@@ -2,30 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { Member } from '@beacon/membership-record/client';
 import type { ServerView } from '@beacon/session-record/client';
 import type { Game, SessionSettings } from '@beacon/session';
-import { gameLabel } from '../format';
+import { gameLabel, stateLabel } from '../format';
 import { ClosingComponent } from './closing.component';
 import { InServiceComponent } from './in-service.component';
 import { NotClearedComponent } from './not-cleared.component';
 import { OutOfServiceComponent } from './out-of-service.component';
 import { PreparingComponent } from './preparing.component';
 import { SteamDeclarationComponent } from './steam-declaration.component';
-
-/**
- * What the state is called on the board, and the tone it is announced in.
- *
- * A table declared once, not a run of `@if`. The null row — a document this
- * vocabulary cannot read — is a sixth case of the same table rather than a
- * special path, and it says what happened instead of falling silent: an empty
- * board is the one thing worse than bad news.
- */
-const STATES = {
-  IDLE: { label: 'Out of service', tone: 'off' },
-  PROVISIONING: { label: 'Preparing', tone: 'off' },
-  RUNNING: { label: 'In service', tone: 'live' },
-  STOPPING: { label: 'Closing', tone: 'off' },
-  FAILED: { label: 'Not cleared', tone: 'warn' },
-  unreadable: { label: 'Unknown', tone: 'warn' },
-} as const;
 
 /**
  * The board every state is announced on: the name, the state and its pip, the
@@ -66,7 +49,7 @@ export class SessionPage {
   readonly signedOut = output<void>();
 
   readonly state = computed(() => this.view()?.session.state ?? 'unreadable');
-  readonly announced = computed(() => STATES[this.state()]);
+  readonly announced = computed(() => stateLabel(this.state()));
 
   /** The game only once it is frozen — which is to say, once a session exists (§4). */
   readonly game = computed(() => {

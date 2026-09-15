@@ -1,10 +1,13 @@
+import { World } from '@beacon/session';
 import {
   BOOT_WINDOW_MS,
   euroLabel,
   gameLabel,
   hourLabel,
+  inviteLink,
   readyWindow,
   splitCountdown,
+  stateLabel,
 } from './format';
 
 describe('gameLabel', () => {
@@ -75,5 +78,33 @@ describe('readyWindow', () => {
 
   it('holds the measured bounds, and says where they come from', () => {
     expect(BOOT_WINDOW_MS).toEqual([300_000, 480_000]);
+  });
+});
+
+describe('stateLabel', () => {
+  it.each([
+    ['IDLE', 'Out of service', 'off'],
+    ['PROVISIONING', 'Preparing', 'off'],
+    ['RUNNING', 'In service', 'live'],
+    ['STOPPING', 'Closing', 'off'],
+    ['FAILED', 'Not cleared', 'warn'],
+    ['unreadable', 'Unknown', 'warn'],
+  ] as const)('announces %s as "%s", tone %s', (state, label, tone) => {
+    expect(stateLabel(state)).toEqual({ label, tone });
+  });
+});
+
+describe('inviteLink', () => {
+  it('is the origin, the world id and the code, and nothing else', () => {
+    const world = World.from({
+      worldId: 'les-copains',
+      game: 'enshrouded',
+      name: 'Les copains',
+      inviteCode: '7f3a9c2e',
+      players: ['u1'],
+    });
+    expect(inviteLink('https://beacon.charlouze.com', world)).toBe(
+      'https://beacon.charlouze.com/join/les-copains/7f3a9c2e',
+    );
   });
 });
