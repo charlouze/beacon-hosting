@@ -22,7 +22,10 @@ function render(): string {
   const serverPassword = process.env['SERVER_PASSWORD'];
   if (!serverPassword) throw new Error('SERVER_PASSWORD is required');
   return renderCloudInit(game, {
-    serverName: process.env['SERVER_NAME'] ?? 'Beacon',
+    world: {
+      worldId: process.env['WORLD_ID'] ?? 'render',
+      name: process.env['SERVER_NAME'] ?? 'Beacon',
+    },
     serverPassword,
     slotCount: Number(process.env['SLOT_COUNT'] ?? 4),
     // No register is read here: this target renders, it never touches

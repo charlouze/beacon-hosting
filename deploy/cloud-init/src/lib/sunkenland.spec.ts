@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { catalogFor, refuseWorldLayout, renderCloudInit, renderCompose } from './catalog.js';
-import { REQUEST, serviceBlock } from './catalogue-fixtures.spec-helper.js';
+import { REQUEST, request, serviceBlock } from './catalogue-fixtures.spec-helper.js';
 import { SERVERID_FILTER, sunkenland } from './sunkenland.js';
 
 /**
@@ -370,7 +370,15 @@ describe('the sunkenland catalogue entry', () => {
   // direct UDP that NAT traverses. A port one does not call costs less than a
   // port made optional (§4).
   it('announces no hostname, so nothing points a dns record at it', () => {
-    expect(catalogFor('sunkenland').hostname).toBeNull();
+    expect(catalogFor('sunkenland').hostname('les-copains')).toBeNull();
+  });
+
+  // The companion reports under the world's id whichever game it watches —
+  // this game just has no server name to render alongside it.
+  it('tells the companion its world', () => {
+    expect(
+      sunkenland.render(request({ world: { worldId: 'les-copains', name: 'Les copains' } })),
+    ).toContain('BEACON_WORLD=les-copains');
   });
 });
 

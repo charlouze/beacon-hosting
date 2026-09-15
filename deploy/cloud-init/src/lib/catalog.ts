@@ -1,4 +1,4 @@
-import type { Game, JoinInfo } from '@beacon/session';
+import type { Game, JoinInfo, WorldId } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 import { sunkenland } from './sunkenland.js';
 
@@ -14,8 +14,19 @@ export interface SaveAccess {
   readonly secretKey: string;
 }
 
+/**
+ * The world a session opens on, as far as a boot needs it: enough to name the
+ * server (Enshrouded) and to derive the hostname a dns record points at. The
+ * domain's own `World` carries far more (§4) — this is the slice that reaches
+ * a machine.
+ */
+export interface BootWorld {
+  readonly worldId: WorldId;
+  readonly name: string;
+}
+
 export interface BootRequest {
-  readonly serverName: string;
+  readonly world: BootWorld;
   readonly serverPassword: string;
   readonly slotCount: number;
   /**
@@ -52,6 +63,11 @@ export interface BootRequest {
 export interface JoinFacts {
   /** What the function reserved. Always known by the time a join point is built. */
   readonly address: string;
+  /**
+   * The world the session was opened on. Absent only in a fixture — a real
+   * boot always names one — and what Enshrouded's hostname derives from.
+   */
+  readonly worldId?: WorldId;
   /** What the machine declared (§7). Present only for a game that announces one. */
   readonly serverId?: string;
   /**
@@ -70,11 +86,13 @@ export interface JoinFacts {
 export interface GameCatalogEntry {
   readonly game: Game;
   /**
-   * The name a dns record points at, or null when nothing does. Null is not a
-   * missing value: one of the two games announces no address at all, and a
-   * port one does not call is cheaper than a port made optional (§4).
+   * The name a dns record points at, derived from the world so that two
+   * worlds of the same game never contend for one hostname — or null when
+   * nothing does. Null is not a missing value: one of the two games announces
+   * no address at all, and a port one does not call is cheaper than a port
+   * made optional (§4).
    */
-  readonly hostname: string | null;
+  hostname(worldId: WorldId): string | null;
   compose(): string;
   render(request: BootRequest): string;
   /**
@@ -129,7 +147,8 @@ export function catalogFor(game: Game): GameCatalogEntry {
  * covers it is `refuseAnythingButDigits` below, which is stricter than this one.
  */
 const exposedValues = (request: BootRequest): readonly (readonly [string, string])[] => [
-  ['serverName', request.serverName],
+  ['world.name', request.world.name],
+  ['world.worldId', request.world.worldId],
   ['serverPassword', request.serverPassword],
   ['sessionId', request.sessionId],
   ['agentToken', request.agentToken],
