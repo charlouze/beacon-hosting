@@ -24,7 +24,7 @@ BEACON_SAVES_BUCKET=beacon-saves npx nx run world-depot:retrieve -- ...
 ## `world-depot:retrieve` — rendre un monde
 
 ```bash
-npx nx run world-depot:retrieve -- --game=sunkenland --to=./monde.tar.gz
+npx nx run world-depot:retrieve -- --world=les-copains --to=./monde.tar.gz
 ```
 
 Lit la clé d'administration dans le remote rclone `scw-admin` (aucune valeur
