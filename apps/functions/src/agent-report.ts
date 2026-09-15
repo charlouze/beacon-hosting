@@ -11,11 +11,10 @@ import {
   type Session,
   type SessionId,
 } from '@beacon/session';
-import type { ServerStateStore, SettingsStore } from '@beacon/session-record';
+import type { SaveRecords, ServerStateStore, SettingsStore } from '@beacon/session-record';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { sanitizeLastError } from './sanitize-last-error.js';
-import type { SaveRecords } from './save-records.js';
 
 export interface AgentReportDeps {
   readonly clock: Clock;

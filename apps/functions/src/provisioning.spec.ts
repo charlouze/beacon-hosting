@@ -1,17 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Deadline, DEFAULT_SETTINGS, Session } from '@beacon/session';
+import { Deadline, DEFAULT_SETTINGS, Game, Session, World } from '@beacon/session';
+import type { AdminMembershipRecord } from '@beacon/membership-record/admin';
 import { adminMembershipRecord, MEMBERS } from '@beacon/membership-record/admin';
 import { defaultApp } from './firebase-app.js';
 import { runStateChange, type ProvisionDeps } from './provisioning.js';
 
 const NOW = new Date('2026-09-06T20:00:00Z');
+const WORLD_ID = 'les-copains';
 
-const provisioning = () =>
+const provisioningSession = (sessionId: string, worldId: string, game: Game) =>
   Session.from({
     state: 'PROVISIONING',
-    sessionId: 's1',
-    game: 'enshrouded',
+    sessionId,
+    worldId,
+    game,
     startedBy: 'u1',
     startedAt: NOW,
     deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
@@ -19,16 +22,41 @@ const provisioning = () =>
     hasJoinInfo: false,
   });
 
+const provisioning = () => provisioningSession('s1', WORLD_ID, 'enshrouded');
+
 const stopping = () => Session.from({ ...fieldsOf(provisioning()), state: 'STOPPING' });
 
 /** The one game whose cloud-init carries `-adminSteamIDs` at all. */
-const provisioningSunkenland = () =>
-  Session.from({ ...fieldsOf(provisioning()), state: 'PROVISIONING', game: 'sunkenland' });
+const provisioningSunkenland = () => provisioningSession('s1', WORLD_ID, 'sunkenland');
 
-let deps: ProvisionDeps;
+const defaultWorld = (): World =>
+  World.from({
+    worldId: WORLD_ID,
+    game: 'enshrouded',
+    name: 'Les copains',
+    inviteCode: 'c',
+    players: ['u1'],
+  });
 
-beforeEach(() => {
-  deps = {
+interface FakeDepsOptions {
+  readonly world?: World;
+  readonly members?: Partial<AdminMembershipRecord>;
+}
+
+/**
+ * One fake `ProvisionDeps`, built afresh for each test so that a mutation in
+ * one never leaks into the next. `world` and `members` are the two knobs the
+ * suite turns; everything else keeps a default that answers the happy path.
+ */
+const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
+  const state = {
+    claimProvisioning: vi.fn(async () => true),
+    publish: vi.fn(async () => undefined),
+    apply: vi.fn(async () => undefined),
+    read: vi.fn(async () => null),
+    readSession: vi.fn(async () => null),
+  };
+  return {
     clock: { now: () => NOW },
     host: {
       open: vi.fn(async () => ({
@@ -40,13 +68,9 @@ beforeEach(() => {
       list: vi.fn(async () => []),
       sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
     },
-    state: {
-      claimProvisioning: vi.fn(async () => true),
-      publish: vi.fn(async () => undefined),
-      apply: vi.fn(async () => undefined),
-      read: vi.fn(async () => null),
-      readSession: vi.fn(async () => null),
-    },
+    // The same object every call: a test that grabs it via `deps.states.for(...)`
+    // and mutates one of its methods reaches the very instance `provision` uses.
+    states: { for: () => state, all: vi.fn(async () => [WORLD_ID]) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -54,9 +78,10 @@ beforeEach(() => {
       read: vi.fn(async () => null),
       close: vi.fn(async () => undefined),
       openSessions: vi.fn(async () => []),
+      worldOf: vi.fn(async () => null),
     },
     serverPassword: () => 'hunter2',
-    members: { declaredSteamIds: vi.fn(async () => []) },
+    members: { declaredSteamIds: vi.fn(async () => []), ...options.members },
     tokens: { issue: vi.fn(async () => undefined), verify: vi.fn(async () => false) },
     agentEndpoint: async () => 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
     saveKeys: () => ({
@@ -67,15 +92,25 @@ beforeEach(() => {
       accessKey: 'SCWXXXXXXXXXXXXXXXXX',
       secretKey: 's3cr3t',
     }),
+    worlds: {
+      read: vi.fn(async () => options.world ?? defaultWorld()),
+      create: vi.fn(async () => undefined),
+    },
   };
+};
+
+let deps: ProvisionDeps;
+
+beforeEach(() => {
+  deps = fakeDeps();
 });
 
 describe('provisioning', () => {
   // §6 étape 3, §8: triggers are delivered at least once. Without the claim, a
   // double delivery creates two billed machines.
   it('does nothing at all when another delivery already claimed it', async () => {
-    deps.state.claimProvisioning = vi.fn(async () => false);
-    await runStateChange(deps, provisioning());
+    deps.states.for(WORLD_ID).claimProvisioning = vi.fn(async () => false);
+    await runStateChange(deps, WORLD_ID, provisioning());
     expect(deps.ledger.open).not.toHaveBeenCalled();
     expect(deps.host.open).not.toHaveBeenCalled();
   });
@@ -89,12 +124,12 @@ describe('provisioning', () => {
       order.push('provider');
       return { address: '51.15.42.7', size: 'DEV1-L', references: { instanceId: 'srv-1', ipId: 'ip-1' } };
     });
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     expect(order).toEqual(['intent', 'provider']);
   });
 
   it('hands the provider the cloud-init the catalogue rendered', async () => {
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     const request = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(request.bootstrap).toContain('#cloud-config');
     expect(request.bootstrap).toContain('SERVER_PASSWORD=hunter2');
@@ -106,8 +141,8 @@ describe('provisioning', () => {
   // §6 makes the agent the one who knows it — the function knew only that an ip
   // had been reserved, which is why RUNNING lied for five to eight minutes.
   it('leaves the state in PROVISIONING, and publishes nothing', async () => {
-    await runStateChange(deps, provisioning());
-    expect(deps.state.publish).not.toHaveBeenCalled();
+    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(deps.states.for(WORLD_ID).publish).not.toHaveBeenCalled();
   });
 
   // §6 étape 4: the token is issued in the same breath as the intent, before
@@ -125,16 +160,16 @@ describe('provisioning', () => {
         references: { instanceId: 'srv-1', ipId: 'ip-1' },
       };
     });
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     expect(order).toEqual(['token', 'intent', 'provider']);
   });
 
   it('hands the machine a token, and never the same one twice', async () => {
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     const first = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0].bootstrap;
     expect(first).toMatch(/BEACON_TOKEN=[0-9a-f]{64}/);
 
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     const second = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[1][0].bootstrap;
     expect(tokenIn(second)).not.toBe(tokenIn(first));
   });
@@ -145,7 +180,7 @@ describe('provisioning', () => {
   // green, and the machine's first report would meet a 401 it can never
   // recover from — twenty-five minutes in PROVISIONING for nothing.
   it('issues the very token it sows, not merely a token', async () => {
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     const bootstrap = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0].bootstrap;
     expect(deps.tokens.issue).toHaveBeenCalledWith('s1', tokenIn(bootstrap), NOW);
   });
@@ -153,7 +188,7 @@ describe('provisioning', () => {
   // The intent still carries what the provider answered — the watchdog compares
   // against it, and agentReport publishes from it.
   it('records what the provider answered, address included', async () => {
-    await runStateChange(deps, provisioning());
+    await runStateChange(deps, WORLD_ID, provisioning());
     expect(deps.ledger.record).toHaveBeenCalledWith('s1', {
       instanceId: 'srv-1',
       ipId: 'ip-1',
@@ -169,9 +204,9 @@ describe('provisioning', () => {
     });
     // Precisely where a pass has work to do: a boot that failed is retried at
     // once rather than waiting out the schedule.
-    expect(await runStateChange(deps, provisioning())).toBe(true);
+    expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(true);
     expect(deps.host.close).toHaveBeenCalledWith('s1');
-    expect(deps.state.apply).toHaveBeenCalledWith(
+    expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'IDLE', clearFacts: true }),
       NOW,
     );
@@ -188,8 +223,8 @@ describe('provisioning', () => {
     });
     // A cleanup that could not be guaranteed is exactly when a pass must run
     // again — the resource may still be billed, and nothing else will retry.
-    expect(await runStateChange(deps, provisioning())).toBe(true);
-    expect(deps.state.apply).toHaveBeenCalledWith(
+    expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(true);
+    expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'FAILED', clearFacts: false }),
       NOW,
     );
@@ -212,7 +247,7 @@ describe('provisioning', () => {
 
     beforeEach(async () => {
       await clearMembers();
-      deps = { ...deps, members: adminMembershipRecord(db) };
+      deps = { ...fakeDeps(), members: adminMembershipRecord(db) };
     });
 
     // And after, which matters more: `immediate-pass.spec.ts` builds a real
@@ -224,23 +259,75 @@ describe('provisioning', () => {
 
     // A `player`, and that is the point: §2 gives the in-game administrator
     // role to every member. What reaches the cloud-init is a member's declared
-    // identifier, never a Beacon role.
+    // identifier, never a Beacon role. `alice` must be one of the world's
+    // players (§4 delimits the world to them): `defaultWorld` names `u1` alone.
     it('names any member who declared an identifier', async () => {
-      await db.doc(`${MEMBERS}/alice`).set({ role: 'player', steamId: '76561197965918116' });
+      await db.doc(`${MEMBERS}/u1`).set({ role: 'player', steamId: '76561197965918116' });
 
-      await runStateChange(deps, provisioningSunkenland());
+      await runStateChange(deps, WORLD_ID, provisioningSunkenland());
 
       expect(bootstrapOf(deps)).toContain('-adminSteamIDs 76561197965918116');
     });
 
     // Not an empty option: a flag with no value eats the argument after it.
     it('leaves the option out when nobody declared one', async () => {
-      await db.doc(`${MEMBERS}/alice`).set({ role: 'player' });
+      await db.doc(`${MEMBERS}/u1`).set({ role: 'player' });
 
-      await runStateChange(deps, provisioningSunkenland());
+      await runStateChange(deps, WORLD_ID, provisioningSunkenland());
 
       expect(bootstrapOf(deps)).not.toContain('-adminSteamIDs');
     });
+
+    // §4 delimits a world to its players: a member outside the world's roster
+    // must not become an in-game admin on it, however declared their identifier is.
+    it('never names a member who is not one of the world players', async () => {
+      await db.doc(`${MEMBERS}/u1`).set({ role: 'player', steamId: '76561197965918116' });
+      await db.doc(`${MEMBERS}/stranger`).set({ role: 'player', steamId: '76561197965918117' });
+
+      await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+      expect(bootstrapOf(deps)).toContain('76561197965918116');
+      expect(bootstrapOf(deps)).not.toContain('76561197965918117');
+    });
+  });
+
+  // The heart of this tranche: the world descends all the way to the
+  // provider request and the cloud-init, and the players it hands `members`
+  // are its own — never the whole register.
+  it('renders the cloud-init with the world, and only its players as in-game admins', async () => {
+    const world = World.from({
+      worldId: WORLD_ID,
+      game: 'sunkenland',
+      name: 'Les copains',
+      inviteCode: 'c',
+      players: ['u1', 'u2'],
+    });
+    const declaredSteamIds = vi.fn(async (among: readonly string[]) =>
+      among.map((uid) => `7656119${uid.slice(1)}`),
+    );
+    deps = fakeDeps({ world, members: { declaredSteamIds } });
+
+    await runStateChange(deps, WORLD_ID, provisioningSession('s1', WORLD_ID, 'sunkenland'));
+
+    expect(declaredSteamIds).toHaveBeenCalledWith(['u1', 'u2']);
+    const request = (deps.host.open as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // Not `toEqual` against a plain object: `world` is the domain's own
+    // `World` (§4), and `OpenServerRequest.world` carries the very instance
+    // `deps.worlds.read` answered — the same object, not a copy of its shape.
+    expect(request.world).toBe(world);
+    expect(request.world.worldId).toBe(WORLD_ID);
+    expect(request.world.game).toBe('sunkenland');
+    expect(request.world.name).toBe('Les copains');
+    expect(request.bootstrap).toContain('BEACON_WORLD=les-copains');
+  });
+
+  it('records the world in the intent before calling the provider', async () => {
+    await runStateChange(deps, WORLD_ID, provisioningSession('s1', WORLD_ID, 'enshrouded'));
+    expect(deps.ledger.open).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ worldId: WORLD_ID }),
+      expect.any(Date),
+    );
   });
 
   // `server/current.lastError` is read by every member's browser, live —
@@ -253,8 +340,8 @@ describe('provisioning', () => {
       deps.host.open = vi.fn(async () => {
         throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
       });
-      await runStateChange(deps, provisioning());
-      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      await runStateChange(deps, WORLD_ID, provisioning());
+      const applied = (deps.states.for(WORLD_ID).apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(applied.lastError).not.toContain(secret);
       expect(applied.lastError).toContain('[redacted]');
     });
@@ -263,8 +350,8 @@ describe('provisioning', () => {
       deps.host.open = vi.fn(async () => {
         throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
       });
-      await runStateChange(deps, provisioning());
-      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      await runStateChange(deps, WORLD_ID, provisioning());
+      const applied = (deps.states.for(WORLD_ID).apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(applied.events[0].detail).toContain(secret);
     });
 
@@ -272,8 +359,8 @@ describe('provisioning', () => {
       deps.host.open = vi.fn(async () => {
         throw new Error('refused '.repeat(200));
       });
-      await runStateChange(deps, provisioning());
-      const applied = (deps.state.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      await runStateChange(deps, WORLD_ID, provisioning());
+      const applied = (deps.states.for(WORLD_ID).apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(applied.lastError.length).toBeLessThan(600);
     });
   });
@@ -286,23 +373,23 @@ describe('provisioning', () => {
 // report (agent-report.ts); this trigger has nothing left to do on STOPPING.
 describe('stopping', () => {
   it('does nothing at all: destruction now waits for the agent to report saved', async () => {
-    expect(await runStateChange(deps, stopping())).toBe(false);
+    expect(await runStateChange(deps, WORLD_ID, stopping())).toBe(false);
     expect(deps.host.close).not.toHaveBeenCalled();
-    expect(deps.state.apply).not.toHaveBeenCalled();
+    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
     expect(deps.ledger.close).not.toHaveBeenCalled();
   });
 });
 
 describe('what the caller learns', () => {
   it('says it acted when it provisioned', async () => {
-    expect(await runStateChange(deps, provisioning())).toBe(true);
+    expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(true);
   });
 
   // A double delivery claimed by someone else did nothing, so there is nothing
   // for a pass to look at either.
   it('says it did not act when another delivery had claimed it', async () => {
-    deps.state.claimProvisioning = vi.fn(async () => false);
-    expect(await runStateChange(deps, provisioning())).toBe(false);
+    deps.states.for(WORLD_ID).claimProvisioning = vi.fn(async () => false);
+    expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(false);
   });
 
   // What bounds the loop: a pass writes IDLE, FAILED, RUNNING or STOPPING, and
@@ -312,7 +399,11 @@ describe('what the caller learns', () => {
     'says it did not act on %s',
     async (state) => {
       expect(
-        await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state })),
+        await runStateChange(
+          deps,
+          WORLD_ID,
+          Session.from({ ...fieldsOf(provisioning()), state }),
+        ),
       ).toBe(false);
     },
   );
@@ -320,7 +411,7 @@ describe('what the caller learns', () => {
 
 describe('every other state', () => {
   it.each(['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const)('does nothing on %s', async (state) => {
-    await runStateChange(deps, Session.from({ ...fieldsOf(provisioning()), state }));
+    await runStateChange(deps, WORLD_ID, Session.from({ ...fieldsOf(provisioning()), state }));
     expect(deps.host.open).not.toHaveBeenCalled();
     expect(deps.host.close).not.toHaveBeenCalled();
   });
@@ -333,6 +424,7 @@ describe('every other state', () => {
  */
 const fieldsOf = (session: Session) => ({
   sessionId: session.sessionId as string,
+  worldId: session.worldId as string,
   game: session.game as 'enshrouded',
   startedBy: session.startedBy,
   startedAt: NOW,

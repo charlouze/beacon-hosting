@@ -27,12 +27,12 @@ describe('the admin face of the membership record', () => {
   // The order is sorted and not "whatever Firestore returned": the cloud-init is
   // written at every provisioning, and two identical evenings must produce two
   // identical files.
-  it('lists the steam ids every member declared, sorted', async () => {
+  it('lists the steam ids every named member declared, sorted', async () => {
     await seed('members/root', { role: 'admin', steamId: '76561197965918116' });
     await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });
     await seed('members/alice', { role: 'player', steamId: '22222222222222222' });
 
-    expect(await record.declaredSteamIds()).toEqual([
+    expect(await record.declaredSteamIds(['root', 'zoe', 'alice'])).toEqual([
       '11111111111111111',
       '22222222222222222',
       '76561197965918116',
@@ -46,7 +46,7 @@ describe('the admin face of the membership record', () => {
   it('names a player, the role of Beacon being none of its business', async () => {
     await seed('members/alice', { role: 'player', steamId: '22222222222222222' });
 
-    expect(await record.declaredSteamIds()).toEqual(['22222222222222222']);
+    expect(await record.declaredSteamIds(['alice'])).toEqual(['22222222222222222']);
   });
 
   // Declaring one is optional, and §5 says an identifier grants nothing. A member
@@ -55,14 +55,20 @@ describe('the admin face of the membership record', () => {
     await seed('members/root', { role: 'admin' });
     await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });
 
-    expect(await record.declaredSteamIds()).toEqual(['11111111111111111']);
+    expect(await record.declaredSteamIds(['root', 'zoe'])).toEqual(['11111111111111111']);
   });
 
   it('is empty when nobody declared one', async () => {
     await seed('members/root', { role: 'admin' });
     await seed('members/zoe', { role: 'player' });
 
-    expect(await record.declaredSteamIds()).toEqual([]);
+    expect(await record.declaredSteamIds(['root', 'zoe'])).toEqual([]);
+  });
+
+  it('is empty when named nobody', async () => {
+    await seed('members/root', { role: 'admin', steamId: '76561197965918116' });
+
+    expect(await record.declaredSteamIds([])).toEqual([]);
   });
 
   // §5 calls a steam id "a public integer", and says the one consequence of a
@@ -73,6 +79,17 @@ describe('the admin face of the membership record', () => {
     await seed('members/root', { role: 'admin', steamId: '$(id > /tmp/pwned)' });
     await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });
 
-    expect(await record.declaredSteamIds()).toEqual(['11111111111111111']);
+    expect(await record.declaredSteamIds(['root', 'zoe'])).toEqual(['11111111111111111']);
+  });
+
+  // §4 delimits a world to its players: a member who never joined this world
+  // must not become an in-game admin on it, however declared their identifier is.
+  it('answers the steam ids of the named members only, sorted, skipping the malformed', async () => {
+    await seed('members/u1', { role: 'player', email: null, steamId: '76561198000000002' });
+    await seed('members/u2', { role: 'player', email: null, steamId: 'not-a-steam-id' });
+    await seed('members/u3', { role: 'admin', email: null, steamId: '76561198000000001' });
+
+    expect(await record.declaredSteamIds(['u1', 'u2'])).toEqual(['76561198000000002']);
+    expect(await record.declaredSteamIds([])).toEqual([]);
   });
 });

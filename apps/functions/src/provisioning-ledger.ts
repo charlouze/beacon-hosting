@@ -1,9 +1,10 @@
-import type { SessionId } from '@beacon/session';
+import type { SessionId, WorldId } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 
 export const PROVISIONING = 'provisioning';
 
 export interface ProvisioningIntent {
+  readonly worldId: WorldId;
   readonly tag: string;
   readonly instanceSize: string;
 }
@@ -41,6 +42,12 @@ export interface ProvisioningLedger {
    */
   read(sessionId: SessionId): Promise<RecordedProvisioning | null>;
   close(sessionId: SessionId, at: Date): Promise<void>;
+  /**
+   * The world a session was opened on, as `open` recorded it — never as the
+   * machine declares it (§6). This is how `agentReport` (T11) finds the world
+   * of a session without trusting anything the machine says.
+   */
+  worldOf(sessionId: SessionId): Promise<WorldId | null>;
 }
 
 export function provisioningLedger(db: Firestore): ProvisioningLedger {
@@ -56,6 +63,7 @@ export function provisioningLedger(db: Firestore): ProvisioningLedger {
 
     async open(sessionId: SessionId, intent: ProvisioningIntent, at: Date): Promise<void> {
       await db.doc(`${PROVISIONING}/${sessionId}`).create({
+        worldId: intent.worldId,
         tag: intent.tag,
         intendedAt: Timestamp.fromDate(at),
         instanceSize: intent.instanceSize,
@@ -99,6 +107,13 @@ export function provisioningLedger(db: Firestore): ProvisioningLedger {
       const snapshot = await doc.get();
       if (!snapshot.exists) return;
       await doc.update({ closedAt: Timestamp.fromDate(at) });
+    },
+
+    async worldOf(sessionId: SessionId): Promise<WorldId | null> {
+      const snapshot = await db.doc(`${PROVISIONING}/${sessionId}`).get();
+      if (!snapshot.exists) return null;
+      const worldId = snapshot.data()?.['worldId'];
+      return typeof worldId === 'string' ? worldId : null;
     },
   };
 }

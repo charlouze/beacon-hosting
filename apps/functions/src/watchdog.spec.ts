@@ -105,6 +105,7 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
   record: (sessionId, facts) => inner.record(sessionId, facts),
   read: (sessionId) => inner.read(sessionId),
   close: (sessionId, at) => inner.close(sessionId, at),
+  worldOf: (sessionId) => inner.worldOf(sessionId),
 });
 
 const deps = (): WatchdogDeps => ({

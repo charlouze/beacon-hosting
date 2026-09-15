@@ -2,7 +2,6 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { parseReport } from '@beacon/agent-protocol';
-import { sessionFrom } from '@beacon/session-record';
 import {
   buildAgentReportDeps,
   buildDeps,
@@ -45,22 +44,30 @@ export const watchdog = onSchedule(
  */
 export const onServerStateChange = onDocumentWritten(
   {
-    document: 'server/current',
+    document: 'worlds/{worldId}/server/current',
     region: 'europe-west1',
     secrets: [SCW_SECRET_KEY, SERVER_PASSWORD, S3_SECRET_KEY],
     timeoutSeconds: 540,
-    // One at a time. Two deliveries racing is what the transactional claim
-    // answers; two *sessions* provisioning at once is not a case this system
-    // has — one instance at a time, whatever the number of games (§13).
+    // One at a time, whatever the number of worlds writing at once (§13). Two
+    // deliveries racing on the same world is what the transactional claim
+    // answers; two *worlds* provisioning the same second only serialises them
+    // for a few seconds of provider calls, and raising the concurrency is a
+    // setting to take the day those seconds matter — not a hypothesis to pay
+    // for in advance.
     concurrency: 1,
     retry: false,
   },
   async (event) => {
     const after = event.data?.after;
     if (after === undefined || !after.exists) return;
-    const session = sessionFrom(after.data() ?? {});
+    const worldId = event.params.worldId;
+    const deps = buildProvisionDeps();
+    // One read more than `sessionFrom(after.data())` would have been: the
+    // game lives on the world (§4), and a trigger has no business inventing
+    // one from the document alone.
+    const session = await deps.states.for(worldId).readSession();
     if (session === null) return;
-    const acted = await runStateChange(buildProvisionDeps(), session);
+    const acted = await runStateChange(deps, worldId, session);
     // In addition to the schedule, never instead of it. The five-minute pass
     // catches what nothing announces — a resource no session explains — and
     // that is worth exactly as much as the fact that nobody has to trigger it.

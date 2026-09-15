@@ -25,7 +25,7 @@ vi.mock('./container.js', async (importOriginal) => {
 });
 
 import { runAgentReport } from './agent-report.js';
-import { agentReport } from './main.js';
+import { agentReport, onServerStateChange } from './main.js';
 
 const mockRunAgentReport = vi.mocked(runAgentReport);
 
@@ -128,5 +128,18 @@ describe('the agentReport http wrapper', () => {
       sessionId: 's1',
       phase: 'alive',
     });
+  });
+});
+
+describe('the onServerStateChange trigger', () => {
+  // §4: the game is on the world, not on `server/current` alone — a trigger
+  // that still listened on the old top-level path would never fire once a
+  // world moves in, and nothing would say why.
+  it('listens on the world-scoped server document', () => {
+    const endpoint = (onServerStateChange as unknown as { __endpoint: { eventTrigger: { eventFilterPathPatterns: { document: string } } } })
+      .__endpoint;
+    expect(endpoint.eventTrigger.eventFilterPathPatterns.document).toBe(
+      'worlds/{worldId}/server/current',
+    );
   });
 });

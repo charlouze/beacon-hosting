@@ -1,5 +1,12 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
-import { deploymentRecord, serverStateStore, settingsStore } from '@beacon/session-record';
+import {
+  adminWorldRecord,
+  deploymentRecord,
+  saveRecords,
+  serverStateStore,
+  settingsStore,
+  worldStateStores,
+} from '@beacon/session-record';
 import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
 import { adminMembershipRecord } from '@beacon/membership-record/admin';
@@ -9,7 +16,6 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { agentTokens } from './agent-tokens.js';
-import { saveRecords } from './save-records.js';
 import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import type { ProvisionDeps } from './provisioning.js';
@@ -101,9 +107,10 @@ export function buildProvisionDeps(): ProvisionDeps {
   return {
     clock: shared.clock,
     host: shared.host,
-    state: shared.state,
+    states: worldStateStores(db),
     settings: shared.settings,
     ledger: shared.ledger,
+    worlds: adminWorldRecord(db),
     serverPassword: () => SERVER_PASSWORD.value(),
     members: adminMembershipRecord(db),
     tokens: agentTokens(db),
