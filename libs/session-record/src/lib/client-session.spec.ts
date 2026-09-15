@@ -176,15 +176,10 @@ describe('a member and their worlds', () => {
     expect(await eventTypes()).toContain('PlayerJoined');
   });
 
-  it('refuses a wrong code before writing anything', async () => {
-    await seedWorld('les-copains', { players: ['bob'], inviteCode: 'c0de' });
-
-    await expect(
-      record().join('les-copains', 'nope', { uid: 'alice', name: 'Alice' }),
-    ).rejects.toThrow(/code/);
-
-    expect(await eventTypes()).toEqual([]);
-  });
+  // Moved to `authorised-writes.spec.ts` (T9): the code is now refused by the
+  // rule itself, comparing `request.resource.data.code` to the world's own
+  // via a `get()` — and the `'owner'` token this file connects with bypasses
+  // rules entirely, so a wrong code written here would go through uncontested.
 
   it('leaves, renames and regenerates the code, each filed as the spec says', async () => {
     await seedWorld('les-copains', { players: ['alice'], inviteCode: 'c0de' });

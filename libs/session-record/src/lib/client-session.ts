@@ -107,7 +107,13 @@ export interface ClientSessionRecord {
    * never been stamped, and reloading on it would loop on first boot.
    */
   watchVersionDrift(compiled: string, onDrift: () => void): () => void;
-  /** The domain has said yes first (`World.join`); the rules say theirs (T9). */
+  /**
+   * The rule alone says yes or no (T9): it compares `code` to the world's own
+   * `inviteCode` with a `get()`, which is why a first joiner — not yet a
+   * player, and so unable to read the world at all — never has to read it
+   * first. A refusal surfaces as a domain error naming the invite code, not
+   * as Firestore's own `permission-denied`.
+   */
   join(worldId: WorldId, code: string, actor: Actor): Promise<void>;
   leave(worldId: WorldId, actor: Actor): Promise<void>;
   rename(worldId: WorldId, name: string, actor: Actor): Promise<void>;
@@ -166,7 +172,13 @@ export function clientSessionRecord(
     sessionId: session.sessionId,
   });
 
-  /** A world-carried event: `join`, `leave`, `rename` open no session at all. */
+  /**
+   * A world-carried event: `join`, `leave`, `rename` open no session at all.
+   * `sessionId` is left off rather than written `null`: the rule's
+   * `bounded()` only ever accepts a string, so a `null` key present in the
+   * document is refused where an absent one reads back the same `null` on
+   * the way out (`event.sessionId ?? null` in `eventDocument`).
+   */
   const eventForWorld = (
     worldId: WorldId,
     event: { type: string; detail: string },
@@ -174,7 +186,6 @@ export function clientSessionRecord(
   ) => ({
     ...eventBase(event, actor),
     worldId,
-    sessionId: null,
   });
 
   /**
@@ -392,16 +403,28 @@ export function clientSessionRecord(
     },
 
     async join(worldId, code, actor) {
-      const world = await readWorld(worldId);
-      // The domain says yes before anything reaches Firestore: a wrong code
-      // must leave nothing behind for the rules to have an opinion on.
-      const decided = world.join(actor.uid, code, actor);
+      // T9 moved the code check into the rule itself — a `get()` on the world,
+      // compared against `request.resource.data.code` — precisely so a first
+      // joiner, who by definition is not yet a player, never has to read a
+      // world it cannot see. The rule refuses the write, not the domain.
       const batch = writeBatch(db);
       batch.set(playerDoc(worldId, actor.uid), playerDocument(actor.uid, code, serverTimestamp()));
-      for (const event of decided.events) {
-        batch.set(doc(collection(db, EVENTS)), eventForWorld(worldId, event, actor));
+      batch.set(
+        doc(collection(db, EVENTS)),
+        eventForWorld(worldId, { type: 'PlayerJoined', detail: `${actor.name} joined` }, actor),
+      );
+      try {
+        await batch.commit();
+      } catch (error) {
+        // The rejection the sdk actually throws here is a `FirebaseError`,
+        // not the narrower `FirestoreError` its own types promise for this
+        // call — `.code` is the one property both shapes carry, so that is
+        // what this checks rather than an `instanceof` that would miss it.
+        if ((error as { code?: string }).code === 'permission-denied') {
+          throw new Error('wrong invite code');
+        }
+        throw error;
       }
-      await batch.commit();
     },
 
     async leave(worldId, actor) {

@@ -237,6 +237,33 @@ describe('what the browser really writes, through the rules that are really depl
     expect((await admin().doc(serverDocPath(WORLD_ID)).get()).get('state')).toBe('IDLE');
     expect((await admin().collection(EVENTS).get()).size).toBe(0);
   });
+
+  // T9 moved the invite code check into the rule itself (a `get()` on the
+  // world, compared to `request.resource.data.code`) so `join` no longer
+  // reads the world first — the case the review of that change found
+  // untested: a first joiner is, by definition, not yet a player, so
+  // `join`'s only door into the world is this rule.
+  it('lets a first, non-member player in with the right code', async () => {
+    const record = recordAs(BOB);
+
+    await record.join(WORLD_ID, WORLD.inviteCode, { uid: BOB, name: 'Bob' });
+
+    expect((await admin().doc(`worlds/${WORLD_ID}/players/${BOB}`).get()).exists).toBe(true);
+    const events = await admin().collection(EVENTS).get();
+    expect(events.docs.map((entry) => entry.get('type'))).toEqual(['PlayerJoined']);
+    expect(events.docs[0].get('detail')).toBe('Bob joined');
+  });
+
+  it('refuses a non-member joining with the wrong code, before writing anything', async () => {
+    const record = recordAs(BOB);
+
+    await expect(record.join(WORLD_ID, 'nope', { uid: BOB, name: 'Bob' })).rejects.toThrow(
+      /code/,
+    );
+
+    expect((await admin().doc(`worlds/${WORLD_ID}/players/${BOB}`).get()).exists).toBe(false);
+    expect((await admin().collection(EVENTS).get()).size).toBe(0);
+  });
 });
 
 /**
