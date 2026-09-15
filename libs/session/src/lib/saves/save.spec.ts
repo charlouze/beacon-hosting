@@ -3,8 +3,8 @@ import { isPlausibleSaveSize, Save, SAVE_FLOOR_BYTES } from './save.js';
 
 const FIELDS = {
   createdAt: new Date('2026-09-07T20:00:00Z'),
-  game: 'enshrouded' as const,
-  objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-07T20-00-00Z.tar.gz',
+  worldId: 'les-copains',
+  objectKey: 'saves/les-copains/pre-shutdown/s1/2026-09-07T20-00-00Z.tar.gz',
   sizeBytes: 31_374,
   origin: 'pre-shutdown' as const,
 };
@@ -42,5 +42,19 @@ describe('Save', () => {
     const save = Save.of({ ...FIELDS, createdAt });
     createdAt.setFullYear(1999);
     expect(save.createdAt).toEqual(new Date('2026-09-07T20:00:00Z'));
+  });
+});
+
+describe('Save on a world', () => {
+  it('names its world and no game', () => {
+    const save = Save.of({
+      createdAt: new Date('2026-09-15T20:00:00Z'),
+      worldId: 'les-copains',
+      objectKey: 'pre-shutdown/les-copains/2026-09-15T20-00-00Z-s1.tar.gz',
+      sizeBytes: 4096,
+      origin: 'pre-shutdown',
+    });
+    expect(save.worldId).toBe('les-copains');
+    expect('game' in save).toBe(false);
   });
 });
