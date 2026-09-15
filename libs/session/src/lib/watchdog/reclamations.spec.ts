@@ -5,7 +5,7 @@ import { Session } from '../session-aggregate.js';
 import type { SessionState } from '../session.js';
 import { DEFAULT_SETTINGS } from '../settings.js';
 import { reclamations } from './reclamations.js';
-import { DEFAULT_LIMITS, type ServerRecord, type WatchdogView } from './view.js';
+import { DEFAULT_LIMITS, type ServerRecord, type WatchdogView, type WorldView } from './view.js';
 
 const NOW = new Date('2026-09-04T21:00:00Z');
 const minutesAgo = (n: number) => new Date(NOW.getTime() - n * 60_000);
@@ -21,17 +21,6 @@ const record = (
   stateSince: Date | null,
 ): ServerRecord => ({ state, sessionId, stateSince, hasReservedFacts: false });
 
-const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
-  now: NOW,
-  server: null,
-  hosted: [],
-  openSessions: [],
-  alreadyAnnounced: [],
-  session: null,
-  settings: DEFAULT_SETTINGS,
-  ...parts,
-});
-
 const runningSession = (sessionId: string, deadlineIso: string) =>
   Session.from({
     state: 'RUNNING',
@@ -44,6 +33,24 @@ const runningSession = (sessionId: string, deadlineIso: string) =>
     instanceSize: 'DEV1-L',
     hasJoinInfo: true,
   });
+
+// The one-world shape most scenarios need — a world named 'w' carrying
+// whatever record and session that scenario is about.
+const singleWorld = (server: ServerRecord | null, session: Session | null = null): WorldView => ({
+  worldId: 'w',
+  server,
+  session,
+});
+
+const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
+  now: NOW,
+  worlds: [singleWorld(null)],
+  hosted: [],
+  openSessions: [],
+  alreadyAnnounced: [],
+  settings: DEFAULT_SETTINGS,
+  ...parts,
+});
 
 const reasons = (v: WatchdogView) =>
   reclamations(v, DEFAULT_LIMITS).destroy.map((r) => `${r.sessionId}:${r.reason}`);
@@ -71,7 +78,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(26)),
+      worlds: [singleWorld(record('PROVISIONING', 's1', minutesAgo(26)))],
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });
@@ -80,7 +87,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', minutesAgo(24)),
+      worlds: [singleWorld(record('PROVISIONING', 's1', minutesAgo(24)))],
     });
     expect(reasons(v)).toEqual([]);
   });
@@ -89,7 +96,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('STOPPING', 's1', minutesAgo(11)),
+      worlds: [singleWorld(record('STOPPING', 's1', minutesAgo(11)))],
     });
     expect(reasons(v)).toEqual(['s1:stopping-timeout']);
   });
@@ -99,7 +106,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('FAILED', 's1', minutesAgo(0)),
+      worlds: [singleWorld(record('FAILED', 's1', minutesAgo(0)))],
     });
     expect(reasons(v)).toEqual(['s1:failed-retry']);
   });
@@ -110,12 +117,18 @@ describe('reclamations', () => {
   // close() is idempotent by contract, so reclaiming an empty session costs two
   // reads at the provider and is what lets reconcile ground the state.
   it('reclaims a stuck session even when the provider holds nothing', () => {
-    const v = view({ openSessions: ['s1'], server: record('STOPPING', 's1', minutesAgo(30)) });
+    const v = view({
+      openSessions: ['s1'],
+      worlds: [singleWorld(record('STOPPING', 's1', minutesAgo(30)))],
+    });
     expect(reasons(v)).toEqual(['s1:stopping-timeout']);
   });
 
   it('says as much in the detail, rather than inventing provider wording', () => {
-    const v = view({ openSessions: ['s1'], server: record('PROVISIONING', 's1', minutesAgo(26)) });
+    const v = view({
+      openSessions: ['s1'],
+      worlds: [singleWorld(record('PROVISIONING', 's1', minutesAgo(26)))],
+    });
     const [first] = reclamations(v, DEFAULT_LIMITS).destroy;
     expect(first.detail).toBe('the provider holds nothing for this session');
   });
@@ -126,7 +139,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record(null, 's1', minutesAgo(60)),
+      worlds: [singleWorld(record(null, 's1', minutesAgo(60)))],
     });
     expect(reasons(v)).toEqual([]);
   });
@@ -135,7 +148,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: [],
-      server: record('PROVISIONING', 's1', minutesAgo(26)),
+      worlds: [singleWorld(record('PROVISIONING', 's1', minutesAgo(26)))],
     });
     expect(reasons(v)).toEqual(['s1:provisioning-timeout']);
   });
@@ -146,7 +159,7 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('PROVISIONING', 's1', null),
+      worlds: [singleWorld(record('PROVISIONING', 's1', null))],
     });
     expect(reasons(v)).toEqual([]);
   });
@@ -162,8 +175,7 @@ describe('reclamations', () => {
   // before the agent ever learned it was stopping.
   it('destroys nothing when a deadline passes the grace', () => {
     const v = view({
-      server: record('RUNNING', 's1', null),
-      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      worlds: [singleWorld(record('RUNNING', 's1', null), runningSession('s1', '2026-09-07T00:00:00Z'))],
       now: new Date('2026-09-07T00:02:01Z'),
     });
     expect(reclamations(v, DEFAULT_LIMITS).destroy).toEqual([]);
@@ -174,17 +186,15 @@ describe('reclamations', () => {
   // last save, and reports it; that report is what destroys, in agentReport.
   it('asks a session to stop once its deadline passes the grace', () => {
     const v = view({
-      server: record('RUNNING', 's1', null),
-      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      worlds: [singleWorld(record('RUNNING', 's1', null), runningSession('s1', '2026-09-07T00:00:00Z'))],
       now: new Date('2026-09-07T00:02:01Z'),
     });
-    expect(expired(v)).toEqual([{ sessionId: 's1', detail: 'closing time was 00:00 UTC' }]);
+    expect(expired(v)).toEqual([{ worldId: 'w', sessionId: 's1', detail: 'closing time was 00:00 UTC' }]);
   });
 
   it('leaves a session alone inside the grace', () => {
     const v = view({
-      server: record('RUNNING', 's1', null),
-      session: runningSession('s1', '2026-09-07T00:00:00Z'),
+      worlds: [singleWorld(record('RUNNING', 's1', null), runningSession('s1', '2026-09-07T00:00:00Z'))],
       now: new Date('2026-09-07T00:01:59Z'),
     });
     expect(reclamations(v, DEFAULT_LIMITS)).toEqual({ destroy: [], expired: [] });
@@ -197,12 +207,57 @@ describe('reclamations', () => {
     const v = view({
       hosted: [hosted('s1')],
       openSessions: ['s1'],
-      server: record('STOPPING', 's1', minutesAgo(11)),
+      worlds: [singleWorld(record('STOPPING', 's1', minutesAgo(11)))],
     });
     const decision = reclamations(v, DEFAULT_LIMITS);
     expect(decision.destroy).toEqual([
       { sessionId: 's1', reason: 'stopping-timeout', detail: 'server for s1' },
     ]);
     expect(decision.expired).toEqual([]);
+  });
+
+  describe('two worlds in one pass', () => {
+    const worldView = (
+      worldId: string,
+      state: SessionState,
+      sessionId: string,
+      deadlineIso: string,
+    ): WorldView => ({
+      worldId,
+      server: { state, sessionId, stateSince: NOW, hasReservedFacts: true },
+      session: runningSession(sessionId, deadlineIso),
+    });
+
+    it('asks the expired one to stop and leaves the healthy one alone', () => {
+      const decision = reclamations(
+        view({
+          worlds: [
+            worldView('a', 'RUNNING', 's-a', '2026-09-04T20:00:00Z'), // échue depuis une heure
+            worldView('b', 'RUNNING', 's-b', '2026-09-05T01:00:00Z'), // quatre heures devant
+          ],
+          hosted: [hosted('s-a'), hosted('s-b')],
+          openSessions: ['s-a', 's-b'],
+        }),
+        DEFAULT_LIMITS,
+      );
+      expect(decision.expired).toEqual([{ worldId: 'a', sessionId: 's-a', detail: expect.any(String) }]);
+      expect(decision.destroy).toEqual([]);
+    });
+
+    it('counts an unexplained machine once, whatever the number of worlds', () => {
+      const decision = reclamations(
+        view({
+          worlds: [
+            worldView('a', 'IDLE', 's-a', '2026-09-05T01:00:00Z'),
+            worldView('b', 'IDLE', 's-b', '2026-09-05T01:00:00Z'),
+          ],
+          hosted: [hosted('s-ghost')],
+          openSessions: [],
+        }),
+        DEFAULT_LIMITS,
+      );
+      expect(decision.destroy).toHaveLength(1);
+      expect(decision.destroy[0]).toMatchObject({ sessionId: 's-ghost', reason: 'no-open-session' });
+    });
   });
 });
