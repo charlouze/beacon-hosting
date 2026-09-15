@@ -1,7 +1,7 @@
 import { assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { describe, it } from 'vitest';
-import { ALICE, env, MALLORY, ROOT, as, useRulesEnvironment } from './harness.js';
+import { ALICE, env, given, MALLORY, ROOT, as, useRulesEnvironment } from './harness.js';
 
 const SEALED = ['saves/s1', 'provisioning/sess1', 'agentTokens/sess1', 'health/watchdog'];
 
@@ -37,5 +37,12 @@ describe('what leaves the functions never', () => {
 
   it('refuses a second document in the config collection', async () => {
     await assertFails(setDoc(doc(as(env, ROOT), 'config', 'other'), { anything: true }));
+  });
+
+  it('no longer serves a server document at the root', async () => {
+    await given(env, 'server/current', { state: 'IDLE' });
+    for (const uid of [ROOT, ALICE, MALLORY]) {
+      await assertFails(getDoc(doc(as(env, uid), 'server', 'current')));
+    }
   });
 });
