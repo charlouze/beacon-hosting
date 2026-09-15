@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
@@ -128,6 +128,42 @@ describe('a member and their worlds', () => {
 
     expect(seen.map((w) => w.world.worldId)).toEqual(['les-copains']);
     expect(seen[0].server?.session.state).toBe('IDLE');
+  });
+
+  it('keeps publishing the readable worlds when one of them is unreadable', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    // Malformed on purpose — an invalid game — so `worldFrom` reads it as
+    // null, the same way a rules refusal would once T9 lands.
+    await getFirestore().doc('worlds/le-mauvais').set({ game: 'not-a-game', name: 'x', inviteCode: 'c0de' });
+    await getFirestore()
+      .doc('worlds/le-mauvais/players/alice')
+      .set(playerDocument('alice', 'c0de', NOW));
+
+    const seen = await firstValue<readonly WorldSummary[]>((on) =>
+      record().watchMyWorlds('alice', on),
+    );
+
+    expect(seen.map((w) => w.world.worldId)).toEqual(['les-copains']);
+  });
+
+  it('shows a player who joins, and drops one who leaves, without a new subscription', async () => {
+    await seedWorld('les-copains', { players: ['alice'], inviteCode: 'c0de' });
+    const seen: (WorldSummary | null)[] = [];
+    const unsubscribe = record().watchWorld('les-copains', (view) => seen.push(view));
+    await vi.waitFor(() => expect(seen.some((v) => v !== null)).toBe(true));
+
+    await record().join('les-copains', 'c0de', { uid: 'bob', name: 'Bob' });
+    await vi.waitFor(() =>
+      expect(seen.some((v) => v?.world.hasPlayer('bob') === true)).toBe(true),
+    );
+
+    await record().leave('les-copains', { uid: 'bob', name: 'Bob' });
+    await vi.waitFor(() => {
+      const last = seen.at(-1);
+      expect(last?.world.hasPlayer('bob')).toBe(false);
+    });
+
+    unsubscribe();
   });
 
   it('joins with the code, and is then a player', async () => {

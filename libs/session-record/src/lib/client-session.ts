@@ -203,54 +203,91 @@ export function clientSessionRecord(
   ): Unsubscribe {
     let worldData: Record<string, unknown> | null | undefined;
     let serverData: Record<string, unknown> | undefined;
+    let playerUids: readonly string[] | undefined;
     let publishing = Promise.resolve();
 
     const publish = (): void => {
-      // Serialised: a slow `getDocs` for one snapshot must not overtake the
-      // publication of the snapshot that followed it.
-      publishing = publishing.then(async () => {
-        if (worldData === undefined || serverData === undefined) return;
-        if (worldData === null) {
+      // Serialised: a slow read for one snapshot must not overtake the
+      // publication of the snapshot that followed it. Chained with `.catch`
+      // rather than left to reject: a denied read must not permanently stop
+      // every publication that follows it on this subscription.
+      publishing = publishing
+        .then(async () => {
+          if (worldData === undefined || serverData === undefined || playerUids === undefined) {
+            return;
+          }
+          if (worldData === null) {
+            onSummary(null);
+            return;
+          }
+          const world = worldFrom(worldId, worldData, playerUids);
+          if (world === null) {
+            onSummary(null);
+            return;
+          }
+          const session = sessionFrom(serverData, world);
+          onSummary({
+            world,
+            server:
+              session === null
+                ? null
+                : {
+                    session,
+                    facts: displayedFactsFrom(serverData),
+                    stateSince: toDate(serverData['stateSince']),
+                  },
+          });
+        })
+        .catch(() => {
           onSummary(null);
-          return;
-        }
-        const players = await getDocs(playersCollection(worldId));
-        const world = worldFrom(
-          worldId,
-          worldData,
-          players.docs.map((entry) => entry.id),
-        );
-        if (world === null) {
-          onSummary(null);
-          return;
-        }
-        const session = sessionFrom(serverData, world);
-        onSummary({
-          world,
-          server:
-            session === null
-              ? null
-              : {
-                  session,
-                  facts: displayedFactsFrom(serverData),
-                  stateSince: toDate(serverData['stateSince']),
-                },
         });
-      });
     };
 
-    const unsubWorld = onSnapshot(worldDoc(worldId), (snapshot) => {
-      worldData = snapshot.exists() ? (snapshot.data() ?? {}) : null;
-      publish();
-    });
-    const unsubServer = onSnapshot(serverDoc(worldId), (snapshot) => {
-      serverData = snapshot.data() ?? {};
-      publish();
-    });
+    // A rules refusal completes the stream rather than rejecting a promise —
+    // handled here the same way as an unreadable document, so that a world
+    // T9's rules start hiding from some members does not stall the other two
+    // listeners' publications for ever.
+    const unsubWorld = onSnapshot(
+      worldDoc(worldId),
+      (snapshot) => {
+        worldData = snapshot.exists() ? (snapshot.data() ?? {}) : null;
+        publish();
+      },
+      () => {
+        worldData = null;
+        publish();
+      },
+    );
+    const unsubServer = onSnapshot(
+      serverDoc(worldId),
+      (snapshot) => {
+        serverData = snapshot.data() ?? {};
+        publish();
+      },
+      () => {
+        serverData = {};
+        publish();
+      },
+    );
+    // A third listener rather than `getDocs` per publication: join and leave
+    // write no field on `worlds/{worldId}` or `server/current`, so without its
+    // own subscription the roster this publishes would never move.
+    const unsubPlayers = onSnapshot(
+      playersCollection(worldId),
+      (snapshot) => {
+        playerUids = snapshot.docs.map((entry) => entry.id);
+        publish();
+      },
+      () => {
+        playerUids = [];
+        publish();
+      },
+    );
 
     return () => {
       unsubWorld();
       unsubServer();
+      unsubPlayers();
     };
   }
 
@@ -288,6 +325,11 @@ export function clientSessionRecord(
     watchMyWorlds(uid, onWorlds) {
       const playersQuery = query(collectionGroup(db, PLAYERS), where('uid', '==', uid));
       const summaries = new Map<WorldId, WorldSummary>();
+      // Distinct from `summaries`: a world whose summary is null (unreadable,
+      // or malformed) has still reported. Counting `summaries.size` against it
+      // would hold the gate below forever the day one world in the list can
+      // never publish — and the other worlds would never be shown either.
+      const reported = new Set<WorldId>();
       let worldIds: readonly WorldId[] = [];
       let stopWorlds: Unsubscribe[] = [];
 
@@ -295,13 +337,14 @@ export function clientSessionRecord(
         // Wait until every world found by the last query has reported once —
         // otherwise the first publication would show fewer worlds than the
         // query already found, which is not "not yet loaded", it is wrong.
-        if (summaries.size < worldIds.length) return;
+        if (reported.size < worldIds.length) return;
         onWorlds(worldIds.flatMap((worldId) => summaries.get(worldId) ?? []));
       };
 
       const stopGroup = onSnapshot(playersQuery, (snapshot) => {
         for (const stop of stopWorlds.splice(0)) stop();
         summaries.clear();
+        reported.clear();
         const found = new Set<WorldId>();
         for (const entry of snapshot.docs) {
           const worldId = entry.ref.parent.parent?.id;
@@ -310,6 +353,7 @@ export function clientSessionRecord(
         worldIds = [...found];
         stopWorlds = worldIds.map((worldId) =>
           watchWorldSummary(worldId, (summary) => {
+            reported.add(worldId);
             if (summary === null) summaries.delete(worldId);
             else summaries.set(worldId, summary);
             publish();
