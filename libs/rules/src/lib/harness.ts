@@ -71,9 +71,11 @@ export const remove = (
 
 /**
  * The documents §5 says are seeded at deployment and never created by a
- * client, plus the three members the suites act as and the one world they
- * share: `ALICE` a player of it, `BOB` a member of no world, `ROOT` an admin
- * of no world — its own privilege comes from `members`, never from a world's
+ * client, plus the three members the suites act as and the two worlds they
+ * share: `ALICE` a player of `w1` and of no other world, `BOB` a player of
+ * `w2` and of no other world — the pair that lets a suite prove isolation
+ * between worlds rather than only between roles — `ROOT` an admin of no
+ * world — its own privilege comes from `members`, never from a world's
  * roster — and `MALLORY`, absent from `members` entirely, the visitor.
  *
  * Their fields are present and null rather than filled: §9 forbids a date or a
@@ -106,6 +108,31 @@ const seed = async (): Promise<void> => {
     code: null,
   });
   await given(env, 'worlds/w1/server/current', {
+    state: 'IDLE',
+    stateSince: null,
+    sessionId: null,
+    startedBy: null,
+    startedAt: null,
+    deadline: null,
+    instanceId: null,
+    ipId: null,
+    ip: null,
+    joinInfo: null,
+    provisionClaimedAt: null,
+    lastError: null,
+  });
+  await given(env, 'worlds/w2', {
+    game: 'enshrouded',
+    name: 'w2',
+    inviteCode: 'c0de',
+    createdAt: null,
+  });
+  await given(env, `worlds/w2/players/${BOB}`, {
+    uid: BOB,
+    joinedAt: null,
+    code: null,
+  });
+  await given(env, 'worlds/w2/server/current', {
     state: 'IDLE',
     stateSince: null,
     sessionId: null,

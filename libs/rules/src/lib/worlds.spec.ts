@@ -10,6 +10,13 @@ const player = (uid: string | null, who: string) => doc(as(env, uid), 'worlds', 
 const server = (uid: string | null) => doc(as(env, uid), 'worlds', 'w1', 'server', 'current');
 const joining = (who: string, code: string) => ({ uid: who, joinedAt: serverTimestamp(), code });
 
+// A world named by its id, for the isolation suite below — `world`, `player`
+// and `server` above stay pinned to `w1` for every other suite in this file.
+const worldNamed = (uid: string | null, worldId: string) => doc(as(env, uid), 'worlds', worldId);
+const playerOf = (uid: string | null, worldId: string, who: string) =>
+  doc(as(env, uid), 'worlds', worldId, 'players', who);
+const serverOf = (uid: string | null, worldId: string) => doc(as(env, uid), 'worlds', worldId, 'server', 'current');
+
 describe('worlds/{worldId}', () => {
   it('is read by its players and by an admin, and by nobody else', async () => {
     await assertSucceeds(getDoc(world(ALICE)));
@@ -20,7 +27,7 @@ describe('worlds/{worldId}', () => {
   });
 
   it('is never created nor deleted by a client, admin included', async () => {
-    await assertFails(setDoc(doc(as(env, ROOT), 'worlds', 'w2'), { game: 'enshrouded', name: 'x', inviteCode: 'c' }));
+    await assertFails(setDoc(doc(as(env, ROOT), 'worlds', 'w3'), { game: 'enshrouded', name: 'x', inviteCode: 'c' }));
     await assertFails(deleteDoc(world(ROOT)));
   });
 
@@ -112,5 +119,37 @@ describe('worlds/{worldId}/server/current', () => {
   it('is never created, by a client of any rank', async () => {
     await assertFails(setDoc(doc(as(env, ROOT), 'worlds', 'w1', 'server', 'other'), { state: 'IDLE' }));
     await assertFails(setDoc(doc(as(env, ALICE), 'worlds', 'w9', 'server', 'current'), { state: 'RUNNING', ip: '1.2.3.4' }));
+  });
+});
+
+// `isPlayerOf(worldId)` is what stands between a player of one world and
+// every other one's roster and session — a version that ignored its argument
+// and hardcoded `w1` would pass every test above (they never vary the world)
+// while leaving `w2` wide open to `w1`'s players, and reciprocally.
+describe('isolation between worlds', () => {
+  it('refuses a player of w1 everything on w2', async () => {
+    await assertFails(getDoc(worldNamed(ALICE, 'w2')));
+    await assertFails(updateDoc(worldNamed(ALICE, 'w2'), { name: 'stolen' }));
+
+    await assertFails(getDoc(playerOf(ALICE, 'w2', BOB)));
+    await assertFails(deleteDoc(playerOf(ALICE, 'w2', BOB)));
+
+    await assertFails(getDoc(serverOf(ALICE, 'w2')));
+    await assertFails(
+      updateDoc(serverOf(ALICE, 'w2'), { state: 'STOPPING', stateSince: serverTimestamp() }),
+    );
+  });
+
+  it('refuses a player of w2 everything on w1', async () => {
+    await assertFails(getDoc(worldNamed(BOB, 'w1')));
+    await assertFails(updateDoc(worldNamed(BOB, 'w1'), { name: 'stolen' }));
+
+    await assertFails(getDoc(playerOf(BOB, 'w1', ALICE)));
+    await assertFails(deleteDoc(playerOf(BOB, 'w1', ALICE)));
+
+    await assertFails(getDoc(serverOf(BOB, 'w1')));
+    await assertFails(
+      updateDoc(serverOf(BOB, 'w1'), { state: 'STOPPING', stateSince: serverTimestamp() }),
+    );
   });
 });
