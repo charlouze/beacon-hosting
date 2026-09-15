@@ -42,25 +42,14 @@ describe('OutOfServiceComponent', () => {
     expect(text).toContain('exact time');
   });
 
-  it('records the game without opening anything by itself', async () => {
+  it('offers no game, and opens with nothing but the intent', async () => {
     const fixture = await render();
     const opened = vi.fn();
     fixture.componentInstance.opened.subscribe(opened);
-    const [enshrouded] = [...fixture.nativeElement.querySelectorAll('[data-game]')];
-    enshrouded.click();
-    await fixture.whenStable();
-    expect(opened).not.toHaveBeenCalled();
-    expect(enshrouded.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('opens with the game that was recorded', async () => {
-    const fixture = await render();
-    const opened = vi.fn();
-    fixture.componentInstance.opened.subscribe(opened);
-    fixture.nativeElement.querySelector('[data-game="sunkenland"]').click();
-    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[data-game]')).toBeNull();
     fixture.nativeElement.querySelector('[data-action="open"]').click();
-    expect(opened).toHaveBeenCalledWith('sunkenland');
+    await fixture.whenStable();
+    expect(opened).toHaveBeenCalledOnce();
   });
 
   describe('after a refusal', () => {

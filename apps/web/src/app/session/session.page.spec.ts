@@ -1,7 +1,16 @@
 import { TestBed } from '@angular/core/testing';
-import { DEFAULT_SETTINGS, Deadline, Session } from '@beacon/session';
+import { provideRouter } from '@angular/router';
+import { DEFAULT_SETTINGS, Deadline, Session, World } from '@beacon/session';
 import { CLOCK } from '../clock';
 import { SessionPage } from './session.page';
+
+const WORLD = World.from({
+  worldId: 'les-bras-casses',
+  game: 'sunkenland',
+  name: 'Les bras cassés',
+  inviteCode: '7f3a9c2e',
+  players: ['u1', 'u2', 'u3'],
+});
 
 const NO_FACTS = { ip: null, joinInfo: null, lastError: null };
 
@@ -34,9 +43,12 @@ describe('SessionPage', () => {
   // already instantiated refuses to be configured again.
   const render = async (session: Session, facts = NO_FACTS) => {
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: FIXED_CLOCK }] });
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), { provide: CLOCK, useValue: FIXED_CLOCK }],
+    });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', { session, facts, stateSince: STARTED_AT });
+    fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', MEMBER);
     await fixture.whenStable();
@@ -57,19 +69,20 @@ describe('SessionPage', () => {
     );
   });
 
-  it('carries the product name always, and the game only once it is frozen', async () => {
-    const idle = await render(Session.idle());
-    expect(idle.nativeElement.querySelector('[data-field="wordmark"]').textContent).toContain(
-      'Beacon',
+  it('carries the product name as the way back to the list, and the name of the world', async () => {
+    const fixture = await render(Session.idle());
+    const home = fixture.nativeElement.querySelector('[data-action="home"]') as HTMLAnchorElement;
+    expect(home.textContent).toContain('Beacon');
+    expect(home.getAttribute('href')).toBe('/');
+    expect(fixture.nativeElement.querySelector('[data-field="world-name"]').textContent).toContain(
+      'Les bras cassés',
     );
-    expect(idle.nativeElement.querySelector('[data-field="wordmark"]').textContent).not.toContain(
-      'Sunkenland',
-    );
+  });
 
-    const running = await render(sessionIn('RUNNING'));
-    expect(running.nativeElement.querySelector('[data-field="wordmark"]').textContent).toContain(
-      'Sunkenland',
-    );
+  it('offers no game to choose: the world already has one', async () => {
+    const fixture = await render(Session.idle());
+    expect(fixture.nativeElement.querySelector('[data-game]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="group"]')).toBeNull();
   });
 
   /**
@@ -92,9 +105,13 @@ describe('SessionPage', () => {
   });
 
   it('says so plainly when the record cannot be read, rather than showing an empty board', async () => {
-    TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: FIXED_CLOCK }] });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), { provide: CLOCK, useValue: FIXED_CLOCK }],
+    });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', null);
+    fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', MEMBER);
     await fixture.whenStable();

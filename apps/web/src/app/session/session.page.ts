@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import type { Member } from '@beacon/membership-record/client';
 import type { ServerView } from '@beacon/session-record/client';
-import type { Game, SessionSettings } from '@beacon/session';
-import { gameLabel, stateLabel } from '../format';
+import type { SessionSettings, World } from '@beacon/session';
+import { stateLabel } from '../format';
 import { ClosingComponent } from './closing.component';
 import { InServiceComponent } from './in-service.component';
 import { NotClearedComponent } from './not-cleared.component';
@@ -31,6 +32,7 @@ import { SteamDeclarationComponent } from './steam-declaration.component';
     NotClearedComponent,
     OutOfServiceComponent,
     PreparingComponent,
+    RouterLink,
     SteamDeclarationComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,21 +41,21 @@ import { SteamDeclarationComponent } from './steam-declaration.component';
 })
 export class SessionPage {
   readonly view = input.required<ServerView | null>();
+  readonly world = input.required<World>();
   readonly settings = input.required<SessionSettings>();
   readonly member = input.required<Member>();
 
-  readonly opened = output<Game>();
+  readonly opened = output<void>();
   readonly extended = output<void>();
   readonly closed = output<void>();
   readonly declared = output<string>();
   readonly signedOut = output<void>();
 
+  /** Declared for `world-band` (T8), which alone renders them. */
+  readonly renamed = output<string>();
+  readonly reinvited = output<void>();
+  readonly left = output<void>();
+
   readonly state = computed(() => this.view()?.session.state ?? 'unreadable');
   readonly announced = computed(() => stateLabel(this.state()));
-
-  /** The game only once it is frozen — which is to say, once a session exists (§4). */
-  readonly game = computed(() => {
-    const game = this.view()?.session.game ?? null;
-    return game === null ? null : gameLabel(game);
-  });
 }

@@ -1,7 +1,8 @@
 <div class="board">
   <div class="lede">
     <div class="wordmark" data-field="wordmark">
-      Beacon @if (game(); as game) {<span>· {{ game }}</span>}
+      <a data-action="home" routerLink="/">Beacon</a><span class="sep"> · </span
+      ><span data-field="world-name">{{ world().name }}</span>
     </div>
     <div class="status" [attr.data-tone]="announced().tone">
       <span class="dot" data-field="state-pip"></span>
@@ -24,7 +25,7 @@
         data-state-body
         [view]="view()!"
         [settings]="settings()"
-        (opened)="opened.emit($event)"
+        (opened)="opened.emit()"
       />
     }
     @case ('PROVISIONING') {
