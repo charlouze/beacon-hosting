@@ -26,12 +26,13 @@ cloudflared = "2026.8.3"
 # FIRESTORE_EMULATOR_HOST ne *peut pas* atteindre la base de production, meme
 # lancee par distraction. La cible est l'emulateur, toujours.
 
-# Le semis ne cree que les deux documents qu'aucun client ne peut creer. Le
-# premier membre n'en est pas : son identifiant n'existe qu'apres une connexion,
-# donc il se cree a la main — dans l'ui de l'emulateur en local, dans la console
-# Firebase en production. C'est le meme geste que pour tous les suivants.
+# Le semis ne cree que le document qu'aucun client ne peut creer. Le premier
+# membre n'en est pas : son identifiant n'existe qu'apres une connexion, donc
+# il se cree a la main — dans l'ui de l'emulateur en local, dans la console
+# Firebase en production. C'est le meme geste que pour tous les suivants. Un
+# monde et son `server/current` naissent d'une adoption, jamais du semis.
 [tasks.seed]
-description = "Seme server/current et config/settings dans l'emulateur"
+description = "Seme config/settings dans l'emulateur"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", GCLOUD_PROJECT = "demo-beacon" }
 run = "npx nx run @beacon/functions:seed"
 
@@ -83,15 +84,15 @@ run = "npx nx serve web"
 # et cette contrainte-la ne protege rien en local. Elles portent un fournisseur
 # `google.com` parce que c'est la seule connexion que l'app propose.
 [tasks.personas]
-description = "Seme admin, player, rookie et visitor dans l'emulateur Auth et dans members"
+description = "Seme admin, player, rookie et visitor dans l'emulateur Auth et dans members, et le monde dev-world qu'ils habitent"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
 run = "npx nx run @beacon/functions:personas"
 
 # Le tableau n'a pas de route : l'ecran affiche est une lecture de
-# `server/current`. Le choisir, c'est donc ecrire ce document — et l'onglet
-# ouvert suit sans rechargement, puisqu'il y est abonne.
+# `worlds/dev-world/server/current`. Le choisir, c'est donc ecrire ce
+# document — et l'onglet ouvert suit sans rechargement, puisqu'il y est abonne.
 [tasks.screen]
-description = "Met le serveur dans l'etat que l'ecran a voir demande (idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
+description = "Met worlds/dev-world/server/current dans l'etat que l'ecran a voir demande (idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
 usage = 'arg "<screen>" help="idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
 run = "npx nx run @beacon/functions:screen -- {{ usage.screen }}"
