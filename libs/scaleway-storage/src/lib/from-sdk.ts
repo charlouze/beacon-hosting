@@ -1,9 +1,10 @@
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, statSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import { GetObjectCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import type { ObjectApi, ObjectSummary } from './object-api.js';
+import { partSizeFor } from './part-size.js';
 
 /**
  * The sdk, behind the seam. Everything in this file is translation; there is no
@@ -45,9 +46,17 @@ export function fromS3(client: S3Client, bucket: string): ObjectApi {
       // above it, it splits the stream into parts on its own — never
       // buffering more than a few parts' worth in memory on a machine that is
       // also running a game server.
+      //
+      // `partSize` is given explicitly: left to itself, `Upload` sizes parts
+      // for AWS S3's 10 000-part cap, not Scaleway's 1000.
+      const sizeBytes = statSync(fromFile).size;
       const body = createReadStream(fromFile);
       try {
-        await new Upload({ client, params: { Bucket: bucket, Key: key, Body: body } }).done();
+        await new Upload({
+          client,
+          params: { Bucket: bucket, Key: key, Body: body },
+          partSize: partSizeFor(sizeBytes),
+        }).done();
       } catch (error) {
         // A send that fails before reading the body — a bad endpoint, a refused
         // signature — leaves this stream with nobody to consume it, while every
