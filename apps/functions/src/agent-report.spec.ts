@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Deadline, DEFAULT_SETTINGS, Session, type Game } from '@beacon/session';
+import { Deadline, DEFAULT_SETTINGS, Session, type Game, type WorldId } from '@beacon/session';
 import { runAgentReport, type AgentReportDeps } from './agent-report.js';
 
 /**
@@ -21,7 +21,7 @@ vi.mock('@beacon/cloud-init', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@beacon/cloud-init')>();
   const refusesEverything = {
     game: 'sunkenland',
-    hostname: null,
+    hostname: () => null,
     compose: () => '',
     render: () => '',
     joinInfo: (facts: unknown) => {
@@ -36,37 +36,68 @@ vi.mock('@beacon/cloud-init', async (importOriginal) => {
   };
 });
 
-const NOW = new Date('2026-09-06T20:10:00Z');
+const NOW = new Date('2026-09-15T20:10:00Z');
 const TOKEN = 'a'.repeat(64);
 
-const sessionIn = (state: 'PROVISIONING' | 'RUNNING' | 'STOPPING') =>
-  Session.from({
-    state,
-    sessionId: 's1',
-    game: 'enshrouded',
-    startedBy: 'u1',
-    startedAt: new Date('2026-09-06T20:00:00Z'),
-    deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
-    instanceSize: 'DEV1-L',
-    hasJoinInfo: false,
-  });
+/** The only world every test opens a session on, unless one says otherwise. */
+const WORLD: WorldId = 'les-copains';
 
-let deps: AgentReportDeps;
+const fieldsFor = (
+  state: 'IDLE' | 'PROVISIONING' | 'RUNNING' | 'STOPPING' | 'FAILED',
+  sessionId: string,
+  game: Game = 'enshrouded',
+) => ({
+  state,
+  sessionId,
+  worldId: WORLD,
+  game,
+  startedBy: 'u1',
+  startedAt: new Date('2026-09-15T20:00:00Z'),
+  deadline: Deadline.at(new Date('2026-09-16T00:00:00Z')),
+  instanceSize: 'DEV1-L' as const,
+  hasJoinInfo: false,
+});
 
-beforeEach(() => {
-  deps = {
+const provisioningSession = (sessionId: string, game: Game = 'enshrouded') =>
+  Session.from(fieldsFor('PROVISIONING', sessionId, game));
+const runningSession = (sessionId: string) => Session.from(fieldsFor('RUNNING', sessionId));
+const stoppingSession = (sessionId: string) => Session.from(fieldsFor('STOPPING', sessionId));
+
+/**
+ * The object key an honest machine deposits: this world, this session, the
+ * origin under test. `keys.spec.ts` pins the format itself; here it is only
+ * ever assembled, never invented.
+ */
+const key = (origin: string, sessionId: string, instant = '2026-09-15T20-10-00Z') =>
+  `${origin}/${WORLD}/${instant}-${sessionId}.tar.gz`;
+
+interface FakeDepsOptions {
+  readonly session?: Session | null;
+  readonly worldOf?: () => Promise<WorldId | null>;
+}
+
+/**
+ * One fake `AgentReportDeps`, built afresh for each test. `states.for` answers
+ * the same store whatever world it is asked for — every test here opens on
+ * one world at a time — which is what lets a test reach it back through
+ * `deps.states.for(WORLD)` after the call, the same way `provisioning.spec.ts`
+ * does.
+ */
+const fakeDeps = (options: FakeDepsOptions = {}): AgentReportDeps => {
+  const store = {
+    readSession: vi.fn(async () => options.session ?? null),
+    publish: vi.fn(async () => undefined),
+    apply: vi.fn(async () => undefined),
+    read: vi.fn(async () => null),
+    claimProvisioning: vi.fn(async () => false),
+  };
+  return {
     clock: { now: () => NOW },
     tokens: {
       issue: vi.fn(async () => undefined),
       verify: vi.fn(async () => true),
     },
-    state: {
-      readSession: vi.fn(async () => sessionIn('PROVISIONING')),
-      publish: vi.fn(async () => undefined),
-      apply: vi.fn(async () => undefined),
-      read: vi.fn(async () => null),
-      claimProvisioning: vi.fn(async () => false),
-    },
+    states: { for: vi.fn(() => store), all: vi.fn(async () => [WORLD]) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -79,6 +110,7 @@ beforeEach(() => {
         ip: '51.15.42.7',
         instanceSize: 'DEV1-L',
       })),
+      worldOf: vi.fn(options.worldOf ?? (async () => WORLD)),
     },
     saves: { record: vi.fn(async () => undefined) },
     dns: { point: vi.fn(async () => undefined) },
@@ -89,6 +121,18 @@ beforeEach(() => {
       sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
     },
   };
+};
+
+/** Every event any pass of this call filed, across every `apply`. */
+const filed = (deps: AgentReportDeps) =>
+  (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock.calls.flatMap(
+    (call: any[]) => call[0].events,
+  );
+
+let deps: AgentReportDeps;
+
+beforeEach(() => {
+  deps = fakeDeps({ session: provisioningSession('s1') });
 });
 
 describe('agentReport', () => {
@@ -100,18 +144,29 @@ describe('agentReport', () => {
       phase: 'ready',
     });
     expect(answer).toBeNull();
-    expect(deps.state.publish).not.toHaveBeenCalled();
+    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
+  });
+
+  // §7: the machine is the least reliable element of the system, so the world
+  // is never taken from anything it reports — only from the registry the
+  // function itself wrote when it opened the session.
+  it('stands down a session the ledger knows no world for', async () => {
+    const deps = fakeDeps({ worldOf: async () => null });
+    expect(await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive' })).toEqual({
+      state: 'IDLE',
+      deadlineIso: null,
+    });
   });
 
   // §6 étape 7: the join point is published, and *this* is what RUNNING means.
   it('publishes the join point from what the ledger reserved', async () => {
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
-    expect(deps.state.publish).toHaveBeenCalledWith(
+    expect(deps.states.for(WORLD).publish).toHaveBeenCalledWith(
       {
         ip: '51.15.42.7',
         joinInfo: {
           game: 'enshrouded',
-          hostname: 'enshrouded.beacon.charlouze.com',
+          hostname: 'les-copains.beacon.charlouze.com',
           address: '51.15.42.7',
           port: 15637,
         },
@@ -125,7 +180,7 @@ describe('agentReport', () => {
   it('points the dns record before it publishes', async () => {
     const order: string[] = [];
     deps.dns.point = vi.fn(async () => void order.push('dns'));
-    deps.state.publish = vi.fn(async () => void order.push('publish'));
+    deps.states.for(WORLD).publish = vi.fn(async () => void order.push('publish'));
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
     expect(order).toEqual(['dns', 'publish']);
   });
@@ -137,11 +192,9 @@ describe('agentReport', () => {
       throw new Error('http 404');
     });
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
-    expect(deps.state.publish).toHaveBeenCalled();
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('DnsUpdateFailed');
-    expect(correction.state).toBeNull();
+    expect(deps.states.for(WORLD).publish).toHaveBeenCalled();
+    const events = filed(deps);
+    expect(events[0].type).toBe('DnsUpdateFailed');
   });
 
   // §6, §7: the machine is the least trusted element of the system. Its address
@@ -153,13 +206,8 @@ describe('agentReport', () => {
       phase: 'ready',
       ip: '10.0.0.1',
     });
-    expect(deps.dns.point).toHaveBeenCalledWith(
-      'enshrouded.beacon.charlouze.com',
-      '51.15.42.7',
-    );
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('AgentContradicted');
+    expect(deps.dns.point).toHaveBeenCalledWith('les-copains.beacon.charlouze.com', '51.15.42.7');
+    expect(filed(deps)[0].type).toBe('AgentContradicted');
   });
 
   // §6 étape 7: RUNNING means "the join point is published". When the catalogue
@@ -167,31 +215,28 @@ describe('agentReport', () => {
   // provisioning delay, which already exists and covers exactly this case. A
   // second path to death would buy nothing.
   it('publishes nothing when the catalogue refuses what the machine declared', async () => {
-    deps.state.readSession = vi.fn(async () =>
-      Session.from({ ...fieldsOf(sessionIn('PROVISIONING')), game: 'sunkenland' }),
-    );
+    deps = fakeDeps({ session: provisioningSession('s1', 'sunkenland') });
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'ready',
       serverId: 'forged',
     });
-    expect(deps.state.publish).not.toHaveBeenCalled();
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('AgentContradicted');
+    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
+    const events = filed(deps);
+    expect(events[0].type).toBe('AgentContradicted');
     // The audit line, and nothing else: `stateSince` stays where it is, so the
     // provisioning delay keeps counting from the boot and not from this report.
+    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(correction.state).toBeNull();
   });
 
   // Le monde n'est plus une constante du catalogue : il arrive dans le rapport,
-  // lu sur le disque par la machine. Si la Function ne le transmettait pas,
-  // l'entree refuserait chaque session sans que rien ne le dise.
+  // lu sur le disque par la machine — et celui de la session, connu par le
+  // registre, l'accompagne desormais pour que l'entree derive le nom d'hote.
   it('passe a l entree le monde que la machine a annonce', async () => {
     declared.facts = [];
-    deps.state.readSession = vi.fn(async () =>
-      Session.from({ ...fieldsOf(sessionIn('PROVISIONING')), game: 'sunkenland' }),
-    );
+    deps = fakeDeps({ session: provisioningSession('s1', 'sunkenland') });
     const world = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
@@ -200,7 +245,12 @@ describe('agentReport', () => {
       world,
     });
     expect(declared.facts).toEqual([
-      { address: '51.15.42.7', serverId: `${world.guid}~639242318300625638`, world },
+      {
+        address: '51.15.42.7',
+        serverId: `${world.guid}~639242318300625638`,
+        world,
+        worldId: WORLD,
+      },
     ]);
   });
 
@@ -212,20 +262,18 @@ describe('agentReport', () => {
       phase: 'ready',
       ip: '51.15.42.7',
     });
-    expect(deps.state.publish).toHaveBeenCalled();
+    expect(deps.states.for(WORLD).publish).toHaveBeenCalled();
   });
 
   // A ready that arrives after the world moved on. Publishing here would put a
   // join point on a session that is not the one running.
   it('publishes nothing when the current session is another one', async () => {
-    deps.state.readSession = vi.fn(async () =>
-      Session.from({ ...fieldsOf(sessionIn('RUNNING')), sessionId: 's2' }),
-    );
+    deps = fakeDeps({ session: Session.from({ ...fieldsFor('RUNNING', 's2') }) });
     const answer = await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'ready',
     });
-    expect(deps.state.publish).not.toHaveBeenCalled();
+    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
     // And it is told to stop, rather than being left to run: a machine whose
     // session is over has nothing left to do.
     expect(answer).toEqual({ state: 'IDLE', deadlineIso: null });
@@ -236,16 +284,13 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's1'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
     });
-    const recorded = (deps.saves.record as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(recorded.objectKey).toBe(
-      'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
-    );
+    const recorded = (deps.saves.record as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(recorded.objectKey).toBe(key('auto', 's1'));
     expect(recorded.sizeBytes).toBe(50_000);
   });
 
@@ -257,63 +302,58 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/x.tar.gz',
+        objectKey: key('auto', 's1', 'x'),
         sizeBytes: 12,
         origin: 'auto',
       },
     });
     expect(deps.saves.record).not.toHaveBeenCalled();
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('SaveRefused');
+    expect(filed(deps)[0].type).toBe('SaveRefused');
   });
 
   // A valid token only proves the machine belongs to this session — nothing
   // about which key it may name. Without this, that token could register a
-  // document pointing at another session's archive, and `game` — taken from
-  // this session, not from the key — would vouch for it.
+  // document pointing at another session's archive, and `worldId` — taken
+  // from the registry, not from the key — would vouch for it.
   it('refuses a deposit whose key names another session, and journals the refusal', async () => {
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s2/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's2'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
     });
     expect(deps.saves.record).not.toHaveBeenCalled();
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('SaveRefused');
+    expect(filed(deps)[0].type).toBe('SaveRefused');
   });
 
-  it('refuses a deposit whose key names another game, and journals the refusal', async () => {
+  it('refuses a deposit whose key names another world, and journals the refusal', async () => {
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/sunkenland/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: 'auto/les-autres/2026-09-15T20-10-00Z-s1.tar.gz',
         sizeBytes: 50_000,
         origin: 'auto',
       },
     });
     expect(deps.saves.record).not.toHaveBeenCalled();
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0].type).toBe('SaveRefused');
+    expect(filed(deps)[0].type).toBe('SaveRefused');
   });
 
   // Pinned exactly as `keys.spec.ts` pins the whole key: this is the second
   // place that recognises `objectKeyFor`'s format, and the two must not drift
-  // apart silently. A session id that is merely a *prefix* of the real one —
-  // `s1` inside `s10` — must not pass a check that forgets the trailing slash.
+  // apart silently. A session id that is merely a *suffix collision* of the
+  // real one — `s10` ending where `s1` would — must not pass a check that
+  // forgets the leading dash.
   it('refuses a key whose session id only resembles its own, and records the honest one', async () => {
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s10/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's10'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
@@ -324,7 +364,7 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's1'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
@@ -332,38 +372,69 @@ describe('agentReport', () => {
     expect(deps.saves.record).toHaveBeenCalled();
   });
 
+  // Le brief de la tache 11 : le prefixe seul laisserait une session
+  // enregistrer la cle d'une autre session du meme monde ; le suffixe seul,
+  // celle d'un autre monde. Les deux ensemble, et rien d'autre, sont reconnus.
+  it('records a save whose key names this world and this session, and refuses every other', async () => {
+    const deps = fakeDeps({ session: runningSession('s1') });
+    const saved = (objectKey: string) =>
+      runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'saved',
+        save: { objectKey, sizeBytes: 4096, origin: 'auto' },
+      });
+    await saved('auto/les-copains/2026-09-15T20-00-00Z-s1.tar.gz');
+    expect(deps.saves.record).toHaveBeenCalledTimes(1);
+    for (const foreign of [
+      'auto/les-autres/2026-09-15T20-00-00Z-s1.tar.gz', // un autre monde
+      'auto/les-copains/2026-09-15T20-00-00Z-s2.tar.gz', // une autre session
+      'auto/les-copains/2026-09-15T20-00-00Z.tar.gz', // pas de session du tout
+      'saves/enshrouded/auto/s1/2026-09-15T20-00-00Z.tar.gz', // l'ancien format
+    ]) {
+      await saved(foreign);
+    }
+    expect(deps.saves.record).toHaveBeenCalledTimes(1);
+    expect(filed(deps).filter((e) => e.type === 'SaveRefused')).toHaveLength(4);
+  });
+
+  it('points the record derived from the world', async () => {
+    const deps = fakeDeps({ session: provisioningSession('s1') });
+    await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready', ip: '51.15.42.7' });
+    expect(deps.dns.point).toHaveBeenCalledWith('les-copains.beacon.charlouze.com', '51.15.42.7');
+  });
+
   // §6: the deadline rides on every answer, which is what makes "the agent
   // learns an extension in under a minute" a property of the protocol.
   it('answers the state and the closing time on a plain heartbeat', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('RUNNING'));
+    deps = fakeDeps({ session: runningSession('s1') });
     const answer = await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'alive',
     });
     expect(answer).toEqual({
       state: 'RUNNING',
-      deadlineIso: '2026-09-07T00:00:00.000Z',
+      deadlineIso: '2026-09-16T00:00:00.000Z',
     });
   });
 
   // §4: the bound is applied on read, the same way the screen applies it. The
   // agent must not be told a closing time the watchdog is about to pull back.
   it('answers a forged closing time already brought back to the bound', async () => {
-    deps.state.readSession = vi.fn(async () =>
-      Session.from({
-        ...fieldsOf(sessionIn('RUNNING')),
-        deadline: Deadline.at(new Date('2026-09-08T00:00:00Z')),
+    deps = fakeDeps({
+      session: Session.from({
+        ...fieldsFor('RUNNING', 's1'),
+        deadline: Deadline.at(new Date('2026-09-17T00:00:00Z')),
       }),
-    );
+    });
     const answer = await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'alive',
     });
-    expect(answer?.deadlineIso).toBe('2026-09-07T00:10:00.000Z');
+    expect(answer?.deadlineIso).toBe('2026-09-16T00:10:00.000Z');
   });
 
   it('tells a machine to stop as soon as the state says STOPPING', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    deps = fakeDeps({ session: stoppingSession('s1') });
     const answer = await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'alive',
@@ -377,7 +448,7 @@ describe('agentReport', () => {
   // destruction is one more consequence of the deposit, never a replacement
   // for it (brief bullet 4, review finding 5).
   it('records the save, then destroys the instance and the ip, once the final save is reported on a STOPPING session', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    deps = fakeDeps({ session: stoppingSession('s1') });
     const order: string[] = [];
     deps.saves.record = vi.fn(async () => void order.push('record'));
     deps.host.close = vi.fn(async () => void order.push('destroy'));
@@ -385,14 +456,14 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('pre-shutdown', 's1'),
         sizeBytes: 50_000,
         origin: 'pre-shutdown',
       },
     });
     expect(order).toEqual(['record', 'destroy']);
     expect(deps.host.close).toHaveBeenCalledWith('s1');
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
@@ -408,21 +479,22 @@ describe('agentReport', () => {
   // STOPPING for this session by the time the re-read runs — and this call
   // has nothing left to record.
   it('destroys the machine but records nothing when the stopping-timeout net already moved the session on', async () => {
-    deps.state.readSession = vi
+    deps = fakeDeps({ session: stoppingSession('s1') });
+    deps.states.for(WORLD).readSession = vi
       .fn()
-      .mockResolvedValueOnce(sessionIn('STOPPING'))
+      .mockResolvedValueOnce(stoppingSession('s1'))
       .mockResolvedValueOnce(Session.idle());
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('pre-shutdown', 's1'),
         sizeBytes: 50_000,
         origin: 'pre-shutdown',
       },
     });
     expect(deps.host.close).toHaveBeenCalledWith('s1');
-    expect(deps.state.apply).not.toHaveBeenCalled();
+    expect(deps.states.for(WORLD).apply).not.toHaveBeenCalled();
     expect(deps.ledger.close).not.toHaveBeenCalled();
   });
 
@@ -430,12 +502,12 @@ describe('agentReport', () => {
   // every ten minutes of ordinary play — confusing it with the last one would
   // kill the machine mid-game, every session.
   it('destroys nothing when a saved report arrives while RUNNING', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('RUNNING'));
+    deps = fakeDeps({ session: runningSession('s1') });
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's1'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
@@ -452,12 +524,12 @@ describe('agentReport', () => {
   // `pre-shutdown` naming nothing. The ten-minute stopping-timeout net still
   // covers a final save that never arrives at all.
   it('destroys nothing when an in-flight cadence save reports saved on a STOPPING session', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    deps = fakeDeps({ session: stoppingSession('s1') });
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('auto', 's1'),
         sizeBytes: 50_000,
         origin: 'auto',
       },
@@ -470,7 +542,7 @@ describe('agentReport', () => {
   // read by every member's browser, live, and nothing proves the provider's
   // SDK keeps a secret out of an error's text.
   it('sanitises lastError when the destruction itself is refused', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('STOPPING'));
+    deps = fakeDeps({ session: stoppingSession('s1') });
     const secret = 'a'.repeat(64);
     deps.host.close = vi.fn(async () => {
       throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
@@ -479,12 +551,12 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('pre-shutdown', 's1'),
         sizeBytes: 50_000,
         origin: 'pre-shutdown',
       },
     });
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBe('FAILED');
     expect(correction.lastError).not.toContain(secret);
@@ -494,14 +566,12 @@ describe('agentReport', () => {
   // session-equality guard above answers for it before destruction is ever a
   // question.
   it('destroys nothing when a saved report names a session that is not the current one', async () => {
-    deps.state.readSession = vi.fn(async () =>
-      Session.from({ ...fieldsOf(sessionIn('STOPPING')), sessionId: 's2' }),
-    );
+    deps = fakeDeps({ session: Session.from({ ...fieldsFor('STOPPING', 's2') }) });
     const answer = await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/pre-shutdown/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: key('pre-shutdown', 's1'),
         sizeBytes: 50_000,
         origin: 'pre-shutdown',
       },
@@ -519,9 +589,7 @@ describe('agentReport', () => {
       phase: 'failed',
       detail: 'restore refused: the bucket did not answer',
     });
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0]).toEqual({
+    expect(filed(deps)[0]).toEqual({
       type: 'ProvisioningFailed',
       sessionId: 's1',
       detail: 'restore refused: the bucket did not answer',
@@ -529,6 +597,8 @@ describe('agentReport', () => {
     // Not FAILED, and not IDLE. §5 keeps FAILED for a cleanup that could not be
     // guaranteed; here nothing has been destroyed and nothing has been tried.
     // The provisioning delay of §6 is what ends this session, and it destroys.
+    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(correction.state).toBeNull();
   });
 
@@ -536,33 +606,19 @@ describe('agentReport', () => {
   // a crashed game process or a failed push reported mid-session must not be
   // journalled as the dishonesty `DnsUpdateFailed`'s comment already names.
   it('files an operational failure, not a provisioning one, once the machine is running', async () => {
-    deps.state.readSession = vi.fn(async () => sessionIn('RUNNING'));
+    deps = fakeDeps({ session: runningSession('s1') });
     await runAgentReport(deps, TOKEN, {
       sessionId: 's1',
       phase: 'failed',
       detail: 'the game process crashed',
     });
-    const correction = (deps.state.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.events[0]).toEqual({
+    expect(filed(deps)[0]).toEqual({
       type: 'AgentReportedFailure',
       sessionId: 's1',
       detail: 'the game process crashed',
     });
+    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(correction.state).toBeNull();
   });
 });
-
-/** The aggregate exposes no field bag; this rebuilds one for the variants above. */
-function fieldsOf(session: Session) {
-  return {
-    state: session.state,
-    sessionId: session.sessionId as string,
-    game: session.game as Game,
-    startedBy: session.startedBy,
-    startedAt: new Date('2026-09-06T20:00:00Z'),
-    deadline: session.deadline,
-    instanceSize: session.instanceSize,
-    hasJoinInfo: false,
-  };
-}

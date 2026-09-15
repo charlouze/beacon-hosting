@@ -5,13 +5,13 @@ import {
   type Clock,
   type DnsUpdater,
   type DomainEvent,
-  type Game,
   type SaveOrigin,
   type ServerHost,
   type Session,
   type SessionId,
+  type WorldId,
 } from '@beacon/session';
-import type { SaveRecords, ServerStateStore, SettingsStore } from '@beacon/session-record';
+import type { ServerStateStore, SaveRecords, SettingsStore, WorldStateStores } from '@beacon/session-record';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { sanitizeLastError } from './sanitize-last-error.js';
@@ -19,7 +19,7 @@ import { sanitizeLastError } from './sanitize-last-error.js';
 export interface AgentReportDeps {
   readonly clock: Clock;
   readonly tokens: AgentTokens;
-  readonly state: ServerStateStore;
+  readonly states: WorldStateStores;
   readonly settings: SettingsStore;
   readonly ledger: ProvisioningLedger;
   readonly saves: SaveRecords;
@@ -51,7 +51,15 @@ export async function runAgentReport(
 ): Promise<AgentInstructions | null> {
   if (!(await deps.tokens.verify(report.sessionId, token))) return null;
 
-  const session = await deps.state.readSession();
+  // The world comes from the registry the function itself wrote when it
+  // opened the session, never from the report (§7 holds the machine for the
+  // least reliable element of the system). No world recorded for this session
+  // is the same "nothing left to do" as any other stale report.
+  const worldId = await deps.ledger.worldOf(report.sessionId);
+  if (worldId === null) return STAND_DOWN;
+  const state = deps.states.for(worldId);
+
+  const session = await state.readSession();
   // A report about a session that is no longer the current one. The machine is
   // told to stand down rather than being handed the running session's state —
   // which would tell an orphan to keep going, on a world that is not its own.
@@ -59,9 +67,9 @@ export async function runAgentReport(
     return STAND_DOWN;
 
   const now = deps.clock.now();
-  if (report.phase === 'ready') await becomeRunning(deps, session, report, now);
-  if (report.phase === 'saved') await recordSave(deps, session, report, now);
-  if (report.phase === 'failed') await fileFailure(deps, session, report, now);
+  if (report.phase === 'ready') await becomeRunning(deps, state, worldId, session, report, now);
+  if (report.phase === 'saved') await recordSave(deps, state, worldId, session, report, now);
+  if (report.phase === 'failed') await fileFailure(state, session, report, now);
 
   // From the session as it was read, not as this call may have just left it: a
   // `ready` that published RUNNING answers PROVISIONING, and the machine learns
@@ -101,6 +109,8 @@ async function instructionsFor(
  */
 async function becomeRunning(
   deps: AgentReportDeps,
+  state: ServerStateStore,
+  worldId: WorldId,
   session: Session,
   report: AgentReport,
   now: Date,
@@ -117,7 +127,7 @@ async function becomeRunning(
   if (facts === null || session.game === null) return;
 
   if (report.ip !== undefined && report.ip !== facts.ip) {
-    await fileEvent(deps, now, {
+    await fileEvent(state, now, {
       type: 'AgentContradicted',
       sessionId,
       detail: `reported ip ${report.ip}, reserved ${facts.ip}`,
@@ -132,6 +142,7 @@ async function becomeRunning(
     address: facts.ip,
     serverId: report.serverId,
     world: report.world,
+    worldId,
   });
   // The catalogue refused: whatever the machine declared does not name the
   // world this session booted. Checked before the dns pointing below — a
@@ -139,7 +150,7 @@ async function becomeRunning(
   // with no reader, and the session dies of the provisioning delay exactly as
   // it would if the ledger had never recorded anything (§6, task brief).
   if (joinInfo === null) {
-    await fileEvent(deps, now, {
+    await fileEvent(state, now, {
       type: 'AgentContradicted',
       sessionId,
       detail: `declared server id ${boundedServerId(report.serverId)}, refused by the catalogue`,
@@ -147,14 +158,15 @@ async function becomeRunning(
     return;
   }
 
-  if (entry.hostname !== null) {
+  const hostname = entry.hostname(worldId);
+  if (hostname !== null) {
     try {
-      await deps.dns.point(entry.hostname, facts.ip);
+      await deps.dns.point(hostname, facts.ip);
     } catch (error) {
       // §8: the session is not interrupted. The join point already carries the
       // raw address as its fallback, and the evening of 2026-09-06 was played
       // through it.
-      await fileEvent(deps, now, {
+      await fileEvent(state, now, {
         type: 'DnsUpdateFailed',
         sessionId,
         detail: String(error),
@@ -162,7 +174,7 @@ async function becomeRunning(
     }
   }
 
-  await deps.state.publish(
+  await state.publish(
     {
       ip: facts.ip,
       joinInfo,
@@ -196,33 +208,30 @@ function boundedServerId(serverId: string | undefined): string {
  */
 async function recordSave(
   deps: AgentReportDeps,
+  state: ServerStateStore,
+  worldId: WorldId,
   session: Session,
   report: AgentReport,
   now: Date,
 ): Promise<void> {
   const sessionId = report.sessionId;
-  if (report.save === undefined || session.game === null) return;
+  if (report.save === undefined) return;
 
   let save: Save;
   try {
-    assertOwnKey(
-      report.save.objectKey,
-      session.game,
-      report.save.origin,
-      sessionId,
-    );
+    assertOwnKey(report.save.objectKey, worldId, report.save.origin, sessionId);
     save = Save.of({
       // The instant this control plane recorded it, not one the machine chose:
       // the key already carries the machine's, and two clocks that disagree
       // must not both be authoritative.
       createdAt: now,
-      game: session.game,
+      worldId,
       objectKey: report.save.objectKey,
       sizeBytes: report.save.sizeBytes,
       origin: report.save.origin,
     });
   } catch (error) {
-    await fileEvent(deps, now, {
+    await fileEvent(state, now, {
       type: 'SaveRefused',
       sessionId,
       detail: String(error),
@@ -250,7 +259,7 @@ async function recordSave(
   // the final save from one merely arriving during the wait; a final save
   // that never comes is still covered, by the stopping-timeout net.
   if (session.state === 'STOPPING' && report.save.origin === 'pre-shutdown') {
-    await destroy(deps, session, now);
+    await destroy(deps, state, session, now);
   }
 }
 
@@ -270,7 +279,12 @@ async function recordSave(
  * nothing left for it to record — the net's own apply and `ledger.close`
  * already did it.
  */
-async function destroy(deps: AgentReportDeps, session: Session, now: Date): Promise<void> {
+async function destroy(
+  deps: AgentReportDeps,
+  state: ServerStateStore,
+  session: Session,
+  now: Date,
+): Promise<void> {
   const sessionId = session.sessionId;
   if (sessionId === null) return;
   const settings = await deps.settings.read();
@@ -278,7 +292,7 @@ async function destroy(deps: AgentReportDeps, session: Session, now: Date): Prom
   try {
     await deps.host.close(sessionId);
   } catch (error) {
-    await deps.state.apply(
+    await state.apply(
       {
         state: 'FAILED',
         lastError: sanitizeLastError(String(error)),
@@ -292,7 +306,7 @@ async function destroy(deps: AgentReportDeps, session: Session, now: Date): Prom
     return;
   }
 
-  const current = await deps.state.readSession();
+  const current = await state.readSession();
   if (current === null || current.sessionId !== sessionId || current.state !== 'STOPPING') {
     return;
   }
@@ -306,7 +320,7 @@ async function destroy(deps: AgentReportDeps, session: Session, now: Date): Prom
     costEuros: session.estimatedCost(deps.clock, settings),
   };
 
-  await deps.state.apply(
+  await state.apply(
     {
       state: 'IDLE',
       lastError: null,
@@ -321,13 +335,16 @@ async function destroy(deps: AgentReportDeps, session: Session, now: Date): Prom
 }
 
 /**
- * A token proves it belongs to `sessionId`, and nothing about which game or
- * origin the machine may claim — so a valid token can name a key under
- * *any* prefix, and the `game` field of the record it produces would vouch for
- * whatever it named. Refusing anything but the machine's own prefix closes
- * that: a session may only ever register a key that names itself.
+ * A token proves it belongs to `sessionId`, and nothing about which world or
+ * origin the machine may claim — so a valid token can name a key under *any*
+ * prefix, and the `worldId` field of the record it produces would vouch for
+ * whatever it named. The prefix alone would still let a session register the
+ * key of another session on the same world; the suffix alone would still let
+ * it register a key naming another world entirely. Both together close that:
+ * a session may only ever register a key that names its own world **and**
+ * itself.
  *
- * `saves/{game}/{origin}/{sessionId}/…` is `objectKeyFor` in
+ * `{origin}/{worldId}/{instant}[-{sessionId}].tar.gz` is `objectKeyFor` in
  * `libs/scaleway-storage/src/lib/keys.ts`, the one place that *builds* it.
  * This is a second place that only *recognises* it, and that duplication is
  * accepted debt: the domain must not hold an adapter's key format (§4,
@@ -340,13 +357,16 @@ async function destroy(deps: AgentReportDeps, session: Session, now: Date): Prom
  */
 function assertOwnKey(
   objectKey: string,
-  game: Game,
+  worldId: WorldId,
   origin: SaveOrigin,
   sessionId: SessionId,
 ): void {
-  const prefix = `saves/${game}/${origin}/${sessionId}/`;
-  if (!objectKey.startsWith(prefix)) {
-    throw new Error(`object key ${objectKey} does not start with ${prefix}`);
+  const prefix = `${origin}/${worldId}/`;
+  const suffix = `-${sessionId}.tar.gz`;
+  if (!objectKey.startsWith(prefix) || !objectKey.endsWith(suffix)) {
+    throw new Error(
+      `object key ${objectKey} does not name world ${worldId} and session ${sessionId}`,
+    );
   }
 }
 
@@ -358,7 +378,7 @@ function assertOwnKey(
  * already names, and it would read the same way to whoever opens the journal.
  */
 async function fileFailure(
-  deps: AgentReportDeps,
+  state: ServerStateStore,
   session: Session,
   report: AgentReport,
   now: Date,
@@ -370,7 +390,7 @@ async function fileFailure(
     session.state === 'PROVISIONING'
       ? { type: 'ProvisioningFailed', sessionId, detail }
       : { type: 'AgentReportedFailure', sessionId, detail };
-  await fileEvent(deps, now, event);
+  await fileEvent(state, now, event);
 }
 
 /**
@@ -379,11 +399,11 @@ async function fileFailure(
  * filed about a session must not reset the clock that decides its fate.
  */
 async function fileEvent(
-  deps: AgentReportDeps,
+  state: ServerStateStore,
   now: Date,
   event: DomainEvent,
 ): Promise<void> {
-  await deps.state.apply(
+  await state.apply(
     {
       state: null,
       lastError: null,

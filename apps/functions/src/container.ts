@@ -135,7 +135,7 @@ export function buildAgentReportDeps(): AgentReportDeps {
   return {
     clock: shared.clock,
     tokens: agentTokens(db),
-    state: shared.state,
+    states: worldStateStores(db),
     settings: shared.settings,
     ledger: shared.ledger,
     saves: saveRecords(db),
