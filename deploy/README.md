@@ -1,5 +1,26 @@
 # deploy
 
+## Qui instancie quoi, et par quelle commande
+
+Huit mécanismes créent des ressources dans ce projet. **Le §14 du spec dit
+lequel possède quoi et pourquoi la frontière est là** ; cette table dit par quel
+geste, et c'est tout ce qu'elle ajoute.
+
+| Ce qui est instancié | Le geste |
+|---|---|
+| Règles, index, Functions, Hosting, le semis, le tampon | une fusion dans `main`. Rien à taper — et c'est la seule voie |
+| Services GCP, IAM, fédération, secrets, variables du dépôt, protection de `main` | `npx nx run deploy-setup:audit`, `:secrets`, `:repo` — chacun avec `-- --check` pour lire l'écart sans rien écrire |
+| Les seaux, la clé S3, les deux alertes et leur canal, l'enregistrement A | **la console, et rien d'autre.** C'est ce que la tranche 6 supprime |
+| La politique de `beacon-games`, le cycle de vie de `beacon-saves` | `scw`, à la main — [les commandes exactes](scaleway/README.md) |
+| L'image du compagnon | un tag `companion-v*` poussé à la main |
+| Les fichiers de jeu, les mondes | `npx nx run game-depot:push` / `:update`, `world-depot:adopt` / `:retrieve` |
+| L'instance, son disque, l'IP flottante, l'IP du sous-domaine | personne. **Le système les crée en tournant**, et les réconcilie par tag |
+| Les conteneurs, les unités, les montages de la machine | personne. `cloud-init/` les décrit, la Function qui provisionne les pose |
+
+Les deux lignes qui n'ont pas de commande rejouable — la console et les JSON de
+`scaleway/` — sont les deux que la tranche 6 reprend. Les autres se relancent
+sans risque : elles ne font rien quand il n'y a rien à faire.
+
 ## `cloud-init/`
 
 Le projet `@beacon/cloud-init` : le catalogue par jeu, et le `cloud-init` que la
@@ -74,3 +95,8 @@ sauvegardes. Ce ne sont pas des fichiers que le dépôt exécute : ce sont l'én
 de la frontière du §7 et la seule chose du système qui supprime quelque chose.
 Ils se posent à la main, et [leur README](scaleway/README.md) porte les
 commandes.
+
+**Avec la console, c'est l'un des deux seuls mécanismes que rien ne rejoue**
+(§14). Ces fichiers se relisent en revue, mais personne ne vérifie que le seau
+dit encore la même chose qu'eux — ce qui est précisément la panne qu'ils
+documentent plus bas.

@@ -2343,3 +2343,142 @@ pas mesurée — les quatre autres sont passées au tableau ci-dessus.
   possible ; elle n'est simplement pas faite en v1.
 - Plusieurs serveurs simultanés : le modèle suppose une seule instance à la fois,
   quel que soit le nombre de jeux disponibles.
+
+## 14. Ce qui instancie quoi
+
+**Ajouté le 2026-09-15**, en cadrant la tranche 6. Huit mécanismes créent des
+ressources dans ce projet, et aucun document ne les mettait côte à côte : les §4
+et §6 décrivent ce que le système fait tourner, le §10 ce qu'une fusion publie,
+`STACK.md` ce qui est emprunté à qui. Rien ne disait **qui possède quoi**, ce qui
+est exactement la configuration qui finit par mettre deux outils sur le même
+objet — et deux outils sur le même objet est une guerre d'états, que le plus
+têtu gagne après avoir fait échouer l'autre.
+
+Ce paragraphe est placé en fin de document parce qu'il y est arrivé tard, pas
+parce qu'il est accessoire : le renuméroter l'aurait fait rentrer au prix de
+plus de mille renvois réécrits.
+
+### La frontière, et tout le reste en découle
+
+**Ce que le système possède est ce qui naît et meurt avec une session. Tout ce
+qui survit à toutes les sessions est le compte, et le compte se déclare — il ne
+se manipule pas à l'exécution.**
+
+C'est le §4 lu une ligne plus loin. `ServerHost` « ouvre et ferme *un serveur de
+jeu*, pas des ressources » : ce qui n'est pas un serveur de jeu n'a donc pas de
+port pour l'atteindre, et n'en aura pas. La durée de vie est le critère, et il
+tranche tous les cas sans qu'on ait à les énumérer.
+
+**La frontière porte sur qui crée la ressource, jamais sur qui écrit dedans.**
+Une sauvegarde survit à sa session et le système l'écrit pourtant à chaque fois :
+elle n'est pas une ressource, elle est du contenu. Le seau est la ressource, il
+appartient au compte, et `SaveStore` y écrit sans rien en posséder. La même
+lecture vaut pour Firestore, dont les documents naissent et meurent au rythme
+des sessions dans une base qui, elle, se déclare.
+
+Trois conséquences, et ce sont les décisions que ce paragraphe existe pour
+porter.
+
+**Le watchdog garde l'instance et l'IP flottante, seul.** Elles meurent avec la
+session ; elles se réconcilient par tag (§6) et ne se déclarent nulle part. Un
+outil de mise en place qui croirait les détenir se battrait avec le faucheur —
+et le faucheur gagne, parce qu'il tourne toutes les minutes et que l'autre
+attend qu'on le lance.
+
+**L'enregistrement DNS se déclare en existence, jamais en valeur.** Le *record*
+survit à toutes les sessions : c'est le compte. Son *IP* est réécrite à chaque
+session par `DnsUpdater` : c'est la session. Déclarer la valeur repointerait le
+sous-domaine vers une session morte pendant qu'une autre tourne. La règle tombe
+de la frontière, elle n'est pas un contournement d'outil — et c'est l'existence
+qui manquait le jour du `http 404` du §12, DynHost *mettant à jour* un
+enregistrement sans jamais le *créer*.
+
+**Aucun outil de mise en place n'acquiert de verbe de destruction.** Il déclare
+**le contenant, jamais le contenu** : la configuration d'un seau, pas ses
+objets. C'est la raison pour laquelle le mécanisme reste **sans état** — il lit
+ce qui existe, calcule l'écart avec ce qui est déclaré, et comble ; il ne tient
+pas de registre de ce qu'il croit avoir créé, donc il n'a pas de notion de
+« remplacer », donc il n'existe aucun chemin par lequel un changement de nom
+emporte un seau et les mondes dedans. Le §8 reste vrai mot pour mot, `SaveStore`
+ne gagne aucun verbe (§4), et la garde qu'un outil à état aurait rendue
+obligatoire n'a jamais à être posée.
+
+### La carte
+
+```mermaid
+flowchart TB
+    subgraph compte["Le compte — survit à toutes les sessions, se déclare"]
+        direction TB
+        c1["services GCP · IAM du projet · fédération OIDC · secrets · variables du dépôt"]
+        c2["les deux seaux et leurs politiques · la clé S3 · les deux alertes et le canal"]
+        c3["l'enregistrement A — son existence, jamais son IP"]
+        c4["règles · index · Functions · Hosting · le job Scheduler qu'onSchedule emporte"]
+    end
+    subgraph session["La session — naît et meurt avec elle, ne se déclare jamais"]
+        direction TB
+        s1["l'instance et son disque"]
+        s2["l'IP flottante"]
+        s3["l'IP que porte l'enregistrement A"]
+        s4["les conteneurs, les unités, les montages"]
+    end
+    compte -->|"doit exister avant"| session
+```
+
+| Ce qui est instancié | Par quoi | Déclenché par |
+|---|---|---|
+| Règles, index, Functions — le job Scheduler compris —, Hosting, puis le semis et le tampon | `firebase deploy`, dans `.github/workflows/deploy.yml` | **la fusion dans `main`**, qui *est* la mise en production (§10) |
+| Services GCP, IAM du projet, fédération OIDC, valeurs des secrets, variables du dépôt, protection de `main` | `tools/deploy-setup` — `audit`, `secrets`, `repo`, chacun avec un `--check` qui imprime l'écart sans écrire | un humain, avant la première fusion |
+| Les deux seaux, la clé S3, l'alerte de budget, l'alerte Cloud Monitoring et son canal, l'enregistrement A | **la console** | un humain, une fois, sans trace |
+| La politique de `beacon-games`, la règle de cycle de vie de `beacon-saves` | les deux JSON de `deploy/scaleway/`, posés par `scw` | un humain, une fois, sans trace |
+| L'image du compagnon sur ghcr.io | `.github/workflows/companion.yml` | un tag `companion-v*` — jamais une fusion (§10) |
+| Les fichiers de jeu et les mondes, dans les seaux | `tools/game-depot`, `tools/world-depot` | un administrateur, depuis sa machine (§2) |
+| L'instance, son disque, l'IP flottante, l'IP du sous-domaine | les Functions, par `ServerHost` et `DnsUpdater` ; réconciliées par tag | une session, et le watchdog qui la ferme (§6) |
+| Les conteneurs, les unités et les montages de la machine | `deploy/cloud-init`, rendu au provisionnement | la Function qui provisionne |
+
+**Deux lignes de cette table n'ont pas d'énoncé qu'on puisse rejouer** : la
+console et les deux JSON de `deploy/scaleway/`. Ce sont les deux seules, et
+c'est précisément ce que la tranche 6 existe pour supprimer. Le coût de leur
+absence a déjà été payé une fois : `beacon-saves` était versionné sans que
+personne l'ait décidé, et sur un seau versionné une règle d'expiration ne
+supprime rien tout en paraissant correcte à la relecture (§8).
+
+### Ce que « reconstructible » veut dire
+
+La cible de la tranche 6 : **Beacon se réinstalle sur un compte vide par une
+suite de gestes écrits, en un temps connu.** Pas pour changer de compte — il n'y
+en a qu'un, et le §10 en fait une décision — mais parce que c'est le seul
+énoncé qui se vérifie. Un fichier qui décrit un compte déjà conforme ne prouve
+rien ; le même fichier sur un compte vide prouve tout.
+
+**L'écart connu au 2026-09-15**, et il est exemplaire :
+`tools/deploy-setup/src/lib/wanted.ts` code en dur le numéro du projet, dont
+`agentBindings()` compose trois membres, parce que seul le numéro est accepté
+dans un `principalSet`. Sur un projet neuf, l'outil qui prétend dire « ce qu'une
+fusion suppose en place » configure donc l'ancien. C'est écrit ici parce que
+c'est exactement le genre d'écart qu'aucune relecture ne trouve et qu'une seule
+répétition réelle fait tomber.
+
+### Ce qui reste un geste humain, et pourquoi ce n'est pas un manque
+
+- **La fusion dans `main`.** Elle *est* la mise en production, et c'est une
+  décision (§10).
+- **Les valeurs des secrets.** Elles vivent dans Secret Manager (§7) et se
+  posent à la frappe : ni un fichier, ni `argv`, ni l'état d'un outil ne les
+  voit passer — `tools/deploy-setup` en tient le détail. Un mécanisme capable de
+  les reconstituer seul serait un mécanisme qui les détient.
+- **Le login DynHost.** Il existe, son couple vit dans Secret Manager, et
+  l'adopter demanderait de le détruire et de le recréer — donc d'en changer le
+  mot de passe, et de faire perdre sa mise à jour DNS à la session en cours.
+- **Le premier administrateur.** Son `uid` Google n'existe pas avant qu'il se
+  soit connecté contre ce projet, donc rien d'antérieur ne peut le nommer (§5).
+
+### Ce que ce paragraphe n'ajoute pas
+
+**Aucun terme n'entre au glossaire du §4.** Rien de ce qui précède n'est visible
+dans l'interface, et rien n'appartient au contexte `session` : ce sont les
+conditions d'existence du système, pas son modèle. Le glossaire reste ce que le
+§4 en dit.
+
+**Aucun port n'est créé, et `SaveStore` n'en gagne aucun verbe.** Un outil de
+mise en place n'atteint pas le domaine ; il pose ce sur quoi le domaine tournera
+ensuite.

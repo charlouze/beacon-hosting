@@ -1676,6 +1676,13 @@ OpenTofu.** Terraform est sous BSL depuis la 1.6, et les trois providers dont ce
 projet dépend sont publiés sur les deux registres. Le choix n'engage rien
 techniquement, et se fait donc sur autre chose que la technique.
 
+**Tranché le 2026-09-15 : ni l'un ni l'autre.** La question supposait qu'un
+outil à état soit le mécanisme, et c'est cette prémisse qui est tombée — le
+dépôt en portait déjà un, sans état, en TypeScript. Le §14 du spec dit la
+frontière retenue, la section 6 du lotissement dit l'arbitrage. Rien de mesuré
+ci-dessus n'est invalidé : les imports, les trois pièges et le périmètre réduit
+restent vrais, et c'est ce qu'ils coûtent qui a décidé.
+
 ### La CLI Firebase ne peut pas partir
 
 Question posée après coup, le 2026-09-08 : tout faire passer par Terraform, y

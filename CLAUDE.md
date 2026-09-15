@@ -35,6 +35,7 @@ les redécouvrir, ne pas les contredire en silence.
 | dessiner un écran, écrire du CSS, choisir une couleur ou un mot visible | `.impeccable/DIRECTION.md`, puis `.impeccable/mocks/decision/README.md` — il porte les cinq contraintes fermes d'interface |
 | écrire une règle Firestore, une Function, ou toucher à `libs/*` | §2 et §4 du spec — décisions actées, modèle de domaine, ports, et où chaque invariant tient réellement |
 | écrire le plan d'une tranche, ou en changer l'ordre | `docs/superpowers/plans/` — deux gates fermes y conditionnent l'exposition du système et la migration d'un monde |
+| créer une ressource chez un fournisseur, ou décider qui l'instancie | §14 du spec — la frontière entre ce qui meurt avec une session et ce qui est le compte, et pourquoi aucun outil d'ici ne peut détruire |
 | trancher sur le produit, les utilisateurs, le périmètre | `PRODUCT.md` |
 | toucher à la stack, aux conteneurs, aux identifiants | `STACK.md` |
 
