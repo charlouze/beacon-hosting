@@ -4,6 +4,7 @@ import type { Game } from './game.js';
 import type { Clock } from './ports.js';
 import type { SessionId, SessionState } from './session.js';
 import type { InstanceSize, SessionSettings } from './settings.js';
+import type { World, WorldId } from './world.js';
 
 /** Who acts. The name travels because a journal of uids does not read (§5). */
 export interface Actor {
@@ -23,6 +24,7 @@ export interface Actor {
 export interface SessionFields {
   readonly state: SessionState;
   readonly sessionId: SessionId;
+  readonly worldId: WorldId;
   readonly game: Game;
   readonly startedBy: string;
   readonly startedAt: Date;
@@ -46,7 +48,7 @@ export interface SessionDecision {
 
 export interface OpeningRequest {
   readonly sessionId: SessionId;
-  readonly game: Game;
+  readonly world: World;
   readonly actor: Actor;
   /** Admin only; the function applies the default when it is absent (§5). */
   readonly instanceSize?: InstanceSize;
@@ -78,10 +80,14 @@ export class Session {
     clock: Clock,
     settings: SessionSettings,
   ): SessionDecision {
+    if (!request.world.hasPlayer(request.actor.uid)) {
+      throw new Error(`${request.actor.uid} is not a player of ${request.world.worldId}`);
+    }
     const session = new Session({
       state: 'PROVISIONING',
       sessionId: request.sessionId,
-      game: request.game,
+      worldId: request.world.worldId,
+      game: request.world.game,
       startedBy: request.actor.uid,
       startedAt: clock.now(),
       deadline: Deadline.opening(clock, settings),
@@ -96,7 +102,7 @@ export class Session {
         {
           type: 'SessionStarted',
           sessionId: request.sessionId,
-          detail: `${request.actor.name} opened ${request.game}`,
+          detail: `${request.actor.name} opened ${request.world.name}`,
         },
       ],
     };
@@ -108,6 +114,10 @@ export class Session {
 
   get sessionId(): SessionId | null {
     return this.fields?.sessionId ?? null;
+  }
+
+  get worldId(): WorldId | null {
+    return this.fields?.worldId ?? null;
   }
 
   get game(): Game | null {

@@ -2,10 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { Deadline } from './deadline.js';
 import { Session } from './session-aggregate.js';
 import { DEFAULT_SETTINGS } from './settings.js';
+import { World } from './world.js';
 
 const at = (iso: string) => ({ now: () => new Date(iso) });
 const S = DEFAULT_SETTINGS;
 const ACTOR = { uid: 'u1', name: 'Alice' };
+
+const WORLD = World.from({
+  worldId: 'les-copains',
+  game: 'sunkenland',
+  name: 'Les copains',
+  inviteCode: 'c0de',
+  players: ['u1'],
+});
+
+const ENSHROUDED_WORLD = World.from({
+  worldId: 'enshrouded-world',
+  game: 'enshrouded',
+  name: 'Enshrouded',
+  inviteCode: 'c0de',
+  players: ['u1'],
+});
 
 const running = (deadlineIso: string) =>
   Session.from({
@@ -22,14 +39,14 @@ const running = (deadlineIso: string) =>
 describe('Session', () => {
   it('opens from nothing with a deadline one session duration ahead', () => {
     const opened = Session.opening(
-      { sessionId: 's1', game: 'enshrouded', actor: ACTOR },
+      { sessionId: 's1', world: ENSHROUDED_WORLD, actor: ACTOR },
       at('2026-09-06T20:00:00Z'),
       S,
     );
     expect(opened.session.state).toBe('PROVISIONING');
     expect(opened.session.deadline.at).toEqual(new Date('2026-09-07T00:00:00Z'));
     expect(opened.events).toEqual([
-      { type: 'SessionStarted', sessionId: 's1', detail: 'Alice opened enshrouded' },
+      { type: 'SessionStarted', sessionId: 's1', detail: 'Alice opened Enshrouded' },
     ]);
   });
 
@@ -38,7 +55,7 @@ describe('Session', () => {
   // rules would refuse the write outright.
   it('records no size when nobody chose one', () => {
     const opened = Session.opening(
-      { sessionId: 's1', game: 'enshrouded', actor: ACTOR },
+      { sessionId: 's1', world: ENSHROUDED_WORLD, actor: ACTOR },
       at('2026-09-06T20:00:00Z'),
       S,
     );
@@ -137,5 +154,32 @@ describe('Session', () => {
   // a session at all.
   it('says nothing about an hour no session has', () => {
     expect(Session.idle().startedAt).toBeNull();
+  });
+});
+
+describe('Session.opening on a world', () => {
+  it('takes the game and the id from the world', () => {
+    const { session, events } = Session.opening(
+      { sessionId: 's1', world: WORLD, actor: { uid: 'u1', name: 'Alice' } },
+      at('2026-09-06T20:00:00Z'),
+      DEFAULT_SETTINGS,
+    );
+    expect(session.worldId).toBe('les-copains');
+    expect(session.game).toBe('sunkenland');
+    expect(events[0]).toEqual({ type: 'SessionStarted', sessionId: 's1', detail: 'Alice opened Les copains' });
+  });
+
+  it('refuses an actor who does not play in that world', () => {
+    expect(() =>
+      Session.opening(
+        { sessionId: 's1', world: WORLD, actor: { uid: 'u9', name: 'Mallory' } },
+        at('2026-09-06T20:00:00Z'),
+        DEFAULT_SETTINGS,
+      ),
+    ).toThrow(/not a player/);
+  });
+
+  it('has no world when it has no session', () => {
+    expect(Session.idle().worldId).toBeNull();
   });
 });

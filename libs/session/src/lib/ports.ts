@@ -2,6 +2,7 @@ import type { Game } from './game.js';
 import type { SessionId } from './session.js';
 import type { InstanceSize } from './settings.js';
 import type { Save, SaveOrigin } from './saves/save.js';
+import type { World } from './world.js';
 
 export interface Clock {
   now(): Date;
@@ -38,7 +39,7 @@ export interface UnclaimedSweep {
 
 export interface OpenServerRequest {
   readonly sessionId: SessionId;
-  readonly game: Game;
+  readonly world: World;
   readonly size: InstanceSize;
   /**
    * What the machine runs at first boot, rendered by the game catalogue. An
