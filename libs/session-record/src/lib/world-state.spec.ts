@@ -48,7 +48,7 @@ describe('worldStateStores', () => {
   it('finds every world that has a server document', async () => {
     await adminWorldRecord(db).create(WORLD, NOW);
     await adminWorldRecord(db).create(aWorld('les-autres'), NOW);
-    expect((await worldStateStores(db).all()).sort()).toEqual(['les-autres', 'les-copains']);
+    expect([...(await worldStateStores(db).all())].sort()).toEqual(['les-autres', 'les-copains']);
   });
 
   it('stamps the world on every event it files', async () => {
