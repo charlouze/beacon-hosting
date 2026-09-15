@@ -38,6 +38,12 @@
   --display-countdown: 172px;
   --display-window: 112px;
 
+  /* The name of a world on the index, which FIRST VIEWPORT of the list fixes
+     at 72 px and 34 px. A third scale and not a reuse of the countdown's: the
+     list sets several names against each other, not one figure against a
+     page. */
+  --display-index: 72px;
+
   --font-ui: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-display: var(--font-ui);
   --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
@@ -83,6 +89,14 @@ body {
 
 input {
   caret-color: var(--red);
+}
+
+/* A link wears the ink. The quay blue marks the address and nothing else in
+   this system, and the user agent's own blue would put it on every world name
+   of the index. */
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 /* ---- the three rules, as bands across the full width ---- */
@@ -223,6 +237,39 @@ input {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+/* The foot of the board: what belongs to the person and not to what the board
+   announces. Quiet on purpose — the state is what a board is for, and nothing
+   here competes with it. Two screens wear it since the list arrived, which is
+   what brings it out of the session's own sheet. */
+.quiet {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+.quiet a,
+.quiet button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: 600 11px/1 var(--font-ui);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.12s ease-out;
+}
+
+.quiet a:hover,
+.quiet button:hover {
+  color: var(--ink);
 }
 
 /* ---- the board's furniture ----
@@ -447,6 +494,75 @@ input {
   margin-top: 0;
 }
 
+/* ---- the index of names, which is the list of my worlds ----
+   A band is the space between two thin rules, and never a frame: the whole
+   band is the link to its board, so there is no button to draw and no card to
+   contain. Here rather than in the page's own sheet because a band is the
+   world's furniture, like the hero and the join band above it. */
+.index-worlds {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.index-worlds > a {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 60px;
+  padding: 30px 0 34px;
+  border-top: var(--rule-thin) solid var(--rule);
+}
+
+/* The 4 px rule above already separates the first band from the wordmark. */
+.index-worlds > a:first-child {
+  border-top: 0;
+}
+
+.index-worlds .big {
+  font-size: var(--display-index);
+  max-width: none;
+}
+
+.index-worlds .under {
+  margin-top: 12px;
+  font-size: 15px;
+  color: var(--mute);
+}
+
+.index-worlds .under .status {
+  display: inline-flex;
+  margin-right: 18px;
+  vertical-align: middle;
+}
+
+.index-worlds .right {
+  display: flex;
+  gap: 48px;
+  flex: none;
+  text-align: right;
+}
+
+.index-worlds .right .v {
+  font:
+    700 34px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+
+.index-worlds .right .v .sec {
+  color: var(--red);
+}
+
+/* A sentence, not a figure: what opening a sleeping world would give is the
+   one thing on the right that has no hour to line up with. */
+.index-worlds .right .v.mute {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--mute);
+}
+
 /* ---- the join band, which FIRST VIEWPORT names ----
    Three columns separated by vertical rules, on wide. Here rather than in a
    component sheet because both shapes of join point wear it, and the day a
@@ -525,6 +641,34 @@ input {
   :root {
     --display-countdown: 84px;
     --display-window: 52px;
+    --display-index: 34px;
+  }
+
+  /* The band stacks: a name at the display scale and two hours do not share
+     342 px side by side, and the measure belongs under the name it measures. */
+  .index-worlds > a {
+    display: block;
+    padding: 20px 0 22px;
+  }
+
+  .index-worlds .under {
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .index-worlds .right {
+    gap: 26px;
+    margin-top: 12px;
+    text-align: left;
+  }
+
+  .index-worlds .right .v {
+    font-size: 22px;
+    margin-top: 6px;
+  }
+
+  .index-worlds .right .v.mute {
+    font-size: 16px;
   }
 
   /* The phone's primary action is anchored full width at the bottom, which is

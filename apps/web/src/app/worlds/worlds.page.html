@@ -1,0 +1,75 @@
+<div class="board">
+  <div class="lede">
+    <div class="wordmark" data-field="wordmark">
+      Beacon<span class="sep"> · </span><span>Your worlds</span>
+    </div>
+    <div class="status" data-field="overview" [attr.data-tone]="lot().tone">
+      <span class="dot"></span>
+      <span>{{ lot().label }}</span>
+    </div>
+  </div>
+  <div class="rule"></div>
+
+  @if (rows().length === 0) {
+    <div class="mid">
+      <div class="empty solo" data-field="empty">
+        <div class="big">You’re not on any board yet.</div>
+        <div class="sub">
+          Ask whoever you play with for their invite link. Opening it while you’re signed in puts
+          you on their world — nothing to fill in.
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="index-worlds">
+      @for (row of rows(); track row.worldId) {
+        <a
+          data-field="world"
+          [attr.data-world-id]="row.worldId"
+          [routerLink]="['/worlds', row.worldId]"
+        >
+          <div>
+            <div class="big" data-field="world-name">{{ row.name }}</div>
+            <div class="under">
+              <span class="status" data-field="world-state" [attr.data-tone]="row.state.tone"
+                ><span class="dot"></span>{{ row.state.label }}</span
+              >{{ row.game }} · {{ row.players }}
+            </div>
+          </div>
+          <div class="right">
+            @if (row.timeLeft; as left) {
+              <div>
+                <span class="k">Time left</span>
+                <div class="v tabular" data-field="time-left"><span>{{ left.hoursMinutes }}</span
+                  ><span class="sec">{{ left.seconds }}</span></div>
+              </div>
+            }
+            @if (row.window; as window) {
+              <div>
+                <span class="k">Ready between</span>
+                <div class="v tabular" data-field="ready-window">{{ window.from }} – {{ window.to }}</div>
+              </div>
+            }
+            @if (row.closesAt; as closesAt) {
+              <div>
+                <span class="k">Closes at</span>
+                <div class="v tabular" data-field="closes-at">{{ closesAt }}</div>
+              </div>
+            }
+            @if (row.nextSession; as nextSession) {
+              <div>
+                <span class="k">Next session</span>
+                <div class="v mute" data-field="next-session">{{ nextSession }}</div>
+              </div>
+            }
+          </div>
+        </a>
+      }
+    </div>
+  }
+
+  <div class="quiet">
+    <span></span>
+    <button type="button" data-action="sign-out" (click)="signedOut.emit()">Sign out</button>
+  </div>
+</div>
