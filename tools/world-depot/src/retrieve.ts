@@ -1,4 +1,4 @@
-import { isGame, type Game } from '@beacon/session';
+import { isWorldId, type WorldId } from '@beacon/session';
 import { adminSaveStore } from './lib/admin-store.js';
 import { argValue, hasFlag } from './lib/args.js';
 import { chooseSave } from './lib/choose.js';
@@ -8,11 +8,11 @@ import { worldIdentity } from './lib/world-identity.js';
  * An empty history is a legitimate answer — a world's first evening, the same
  * thought `newestSave` already carries by returning `undefined` rather than
  * refusing. But `--list` printing nothing at all reads as a breakage: the
- * administrator cannot tell "no save for this game" from "the command died
+ * administrator cannot tell "no save for this world" from "the command died
  * quietly". Said in the voice `adopt` already uses for the same situation.
  */
-export const emptyHistoryMessage = (game: Game, bucket: string): string =>
-  `${game} has no save yet in ${bucket}: nothing to list`;
+export const emptyHistoryMessage = (worldId: WorldId, bucket: string): string =>
+  `${worldId} has no save yet in ${bucket}: nothing to list`;
 
 /**
  * Hands the administrator back the world that lives in the bucket — never
@@ -20,16 +20,16 @@ export const emptyHistoryMessage = (game: Game, bucket: string): string =>
  * keeps this a tool and not a script holding an administration key.
  */
 try {
-  const game = argValue(process.argv, 'game');
-  if (!isGame(game)) throw new Error(`--game must name a game, got "${game}"`);
+  const worldId = argValue(process.argv, 'world');
+  if (!isWorldId(worldId)) throw new Error(`--world must name a world, got "${worldId}"`);
 
   const { store, bucket } = adminSaveStore();
   console.log(`reading ${bucket}`);
-  const history = await store.list(game);
+  const history = await store.list(worldId);
 
   if (hasFlag(process.argv, 'list')) {
     if (history.length === 0) {
-      console.log(emptyHistoryMessage(game, bucket));
+      console.log(emptyHistoryMessage(worldId, bucket));
     }
     for (const save of history) {
       console.log(`${save.objectKey}  ${save.sizeBytes} bytes  ${save.createdAt.toISOString()}`);
@@ -41,7 +41,7 @@ try {
   const save = chooseSave(history, wanted);
   if (save === undefined) {
     throw new Error(
-      wanted === undefined ? `no save found for ${game}` : `no save named ${wanted} in ${game}'s history`,
+      wanted === undefined ? `no save found for ${worldId}` : `no save named ${wanted} in ${worldId}'s history`,
     );
   }
 
