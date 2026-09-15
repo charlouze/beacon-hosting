@@ -97,4 +97,12 @@ export type DomainEvent =
        * says about money.
        */
       costEuros: number;
-    };
+    }
+  /**
+   * A member's gesture on a world, outside any session: `sessionId` is always
+   * null, and `detail` names the person, since these are the only gestures one
+   * member makes on what another sees beyond the session (§4).
+   */
+  | { type: 'PlayerJoined'; sessionId: null; detail: string }
+  | { type: 'PlayerLeft'; sessionId: null; detail: string }
+  | { type: 'WorldRenamed'; sessionId: null; detail: string };
