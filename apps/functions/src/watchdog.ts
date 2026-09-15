@@ -14,12 +14,7 @@ import {
   type WorldId,
   type WorldView,
 } from '@beacon/session';
-import type {
-  AdminWorldRecord,
-  SettingsStore,
-  SystemEvents,
-  WorldStateStores,
-} from '@beacon/session-record';
+import type { SettingsStore, SystemEvents, WorldStateStores } from '@beacon/session-record';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import type { WatchdogHealth } from './watchdog-health.js';
 
@@ -27,7 +22,6 @@ export interface WatchdogDeps {
   readonly clock: Clock;
   readonly host: ServerHost;
   readonly states: WorldStateStores;
-  readonly worlds: AdminWorldRecord;
   readonly events: SystemEvents;
   readonly ledger: ProvisioningLedger;
   readonly health: WatchdogHealth;
