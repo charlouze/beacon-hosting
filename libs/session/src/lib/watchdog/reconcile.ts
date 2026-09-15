@@ -133,6 +133,21 @@ export function sweepEvents(
  * expired can, in the same pass, also be a machine the provider already holds
  * nothing for — and only one function may decide what such a session becomes,
  * or the two can disagree about it in the same breath.
+ *
+ * `outcomes` must already be this world's own: every entry the loop below
+ * walks becomes a `CleanupFailed` or a `CLOSED[...]` event, with no filter by
+ * session or world, so an outcome that belongs elsewhere is filed here too,
+ * not merely ignored the way "ignores an outcome that belongs to another
+ * session" (reconcile.spec.ts) might suggest — that test only shows the
+ * *state* transition is skipped for a foreign session, not the event. The
+ * caller (the watchdog's full pass, task 12) is the one place that knows
+ * which sessions are this world's, and must filter `outcomes` down to those
+ * before calling — typically by `sessionId` — for every one of its per-world
+ * calls; otherwise the same destruction is filed once per world it is passed
+ * to. `reclamations()` returns one `destroy` list for the whole pass,
+ * including the world-less `no-open-session` outcomes for unexplained
+ * machines: those belong to no world and `reconcileWorld` must never receive
+ * them — the caller files them once, for the pass, not per world.
  */
 export function reconcileWorld(
   view: WatchdogView,
