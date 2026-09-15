@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, InjectionToken, inject } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 import type { FirebaseApp } from 'firebase/app';
-import { DEFAULT_SETTINGS } from '@beacon/session';
 import { SignedOutComponent } from './access/signed-out.component';
 import { VisitorComponent } from './access/visitor.component';
 import { Records } from './records';
-import { SessionPage } from './session/session.page';
 
 export interface FirebaseConnection {
   readonly app: FirebaseApp;
@@ -34,23 +33,18 @@ export const RELOAD = new InjectionToken<() => void>('beacon.reload', {
  * and the error band. `Records` holds every connection and every
  * subscription; the shell only reads its signals and forwards a gesture.
  *
- * The member branch still renders `<beacon-session-page>` with no view: the
- * router outlet that replaces it is the next task's, not this one's.
+ * The router outlet exists only in the member branch: neither a door nor a
+ * guard, so a signed-out visitor opening a `/join/…` link sees the door, and
+ * after signing in the address hasn't moved.
  */
 @Component({
   selector: 'beacon-root',
   standalone: true,
-  imports: [SessionPage, SignedOutComponent, VisitorComponent],
+  imports: [RouterOutlet, SignedOutComponent, VisitorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (records.member(); as member) {
-      <beacon-session-page
-        [view]="null"
-        [settings]="settings"
-        [member]="member"
-        (declared)="records.declareSteamId($event)"
-        (signedOut)="records.signOut()"
-      />
+      <router-outlet />
     } @else if (records.visitor(); as name) {
       <beacon-visitor [name]="name" (signOut)="records.signOut()" />
     } @else {
@@ -78,7 +72,4 @@ export const RELOAD = new InjectionToken<() => void>('beacon.reload', {
 })
 export class App {
   protected readonly records = inject(Records);
-  // The placeholder session page ignores it while `view` is null; the task
-  // that gives this branch a router outlet drops the binding altogether.
-  protected readonly settings = DEFAULT_SETTINGS;
 }
