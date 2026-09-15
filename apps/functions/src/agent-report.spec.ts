@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Deadline, DEFAULT_SETTINGS, Session, type Game, type WorldId } from '@beacon/session';
-import { runAgentReport, type AgentReportDeps } from './agent-report.js';
+import { runAgentReport } from './agent-report.js';
 
 /**
  * The catalogue is imported and not injected: game knowledge lives there and
@@ -77,13 +77,13 @@ interface FakeDepsOptions {
 }
 
 /**
- * One fake `AgentReportDeps`, built afresh for each test. `states.for` answers
- * the same store whatever world it is asked for — every test here opens on
- * one world at a time — which is what lets a test reach it back through
- * `deps.states.for(WORLD)` after the call, the same way `provisioning.spec.ts`
- * does.
+ * One fake `AgentReportDeps`, built afresh for each test, plus the `store` it
+ * hands back so a test can inspect it without going through `states.for`
+ * again — a second call from test code would sit in the same mock history as
+ * the call the code under test made, and mask a wrong world argument behind
+ * a right one (review finding, task 11 correctif).
  */
-const fakeDeps = (options: FakeDepsOptions = {}): AgentReportDeps => {
+const fakeDeps = (options: FakeDepsOptions = {}) => {
   const store = {
     readSession: vi.fn(async () => options.session ?? null),
     publish: vi.fn(async () => undefined),
@@ -120,16 +120,17 @@ const fakeDeps = (options: FakeDepsOptions = {}): AgentReportDeps => {
       list: vi.fn(async () => []),
       sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
     },
+    store,
   };
 };
 
 /** Every event any pass of this call filed, across every `apply`. */
-const filed = (deps: AgentReportDeps) =>
-  (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock.calls.flatMap(
+const filed = (deps: ReturnType<typeof fakeDeps>) =>
+  (deps.store.apply as ReturnType<typeof vi.fn>).mock.calls.flatMap(
     (call: any[]) => call[0].events,
   );
 
-let deps: AgentReportDeps;
+let deps: ReturnType<typeof fakeDeps>;
 
 beforeEach(() => {
   deps = fakeDeps({ session: provisioningSession('s1') });
@@ -144,24 +145,34 @@ describe('agentReport', () => {
       phase: 'ready',
     });
     expect(answer).toBeNull();
-    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
+    expect(deps.store.publish).not.toHaveBeenCalled();
   });
 
   // §7: the machine is the least reliable element of the system, so the world
   // is never taken from anything it reports — only from the registry the
   // function itself wrote when it opened the session.
+  // A session the registry does not know is answered without ever reaching a
+  // store — `runningSession` makes that the only thing distinguishing this
+  // test from a plain heartbeat: drop the `worldId === null` guard and this
+  // report would read a live RUNNING session and answer accordingly instead
+  // of standing down.
   it('stands down a session the ledger knows no world for', async () => {
-    const deps = fakeDeps({ worldOf: async () => null });
+    const deps = fakeDeps({ worldOf: async () => null, session: runningSession('s1') });
     expect(await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive' })).toEqual({
       state: 'IDLE',
       deadlineIso: null,
     });
+    expect(deps.store.readSession).not.toHaveBeenCalled();
   });
 
   // §6 étape 7: the join point is published, and *this* is what RUNNING means.
   it('publishes the join point from what the ledger reserved', async () => {
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
-    expect(deps.states.for(WORLD).publish).toHaveBeenCalledWith(
+    // The world the store is resolved on is the one the registry names for
+    // this session — not a constant, not the catalogue's, not the report's.
+    expect(deps.ledger.worldOf).toHaveBeenCalledWith('s1');
+    expect(deps.states.for).toHaveBeenCalledWith(WORLD);
+    expect(deps.store.publish).toHaveBeenCalledWith(
       {
         ip: '51.15.42.7',
         joinInfo: {
@@ -180,7 +191,7 @@ describe('agentReport', () => {
   it('points the dns record before it publishes', async () => {
     const order: string[] = [];
     deps.dns.point = vi.fn(async () => void order.push('dns'));
-    deps.states.for(WORLD).publish = vi.fn(async () => void order.push('publish'));
+    deps.store.publish = vi.fn(async () => void order.push('publish'));
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
     expect(order).toEqual(['dns', 'publish']);
   });
@@ -192,7 +203,7 @@ describe('agentReport', () => {
       throw new Error('http 404');
     });
     await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
-    expect(deps.states.for(WORLD).publish).toHaveBeenCalled();
+    expect(deps.store.publish).toHaveBeenCalled();
     const events = filed(deps);
     expect(events[0].type).toBe('DnsUpdateFailed');
   });
@@ -221,12 +232,12 @@ describe('agentReport', () => {
       phase: 'ready',
       serverId: 'forged',
     });
-    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
+    expect(deps.store.publish).not.toHaveBeenCalled();
     const events = filed(deps);
     expect(events[0].type).toBe('AgentContradicted');
     // The audit line, and nothing else: `stateSince` stays where it is, so the
     // provisioning delay keeps counting from the boot and not from this report.
-    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBeNull();
   });
@@ -262,7 +273,7 @@ describe('agentReport', () => {
       phase: 'ready',
       ip: '51.15.42.7',
     });
-    expect(deps.states.for(WORLD).publish).toHaveBeenCalled();
+    expect(deps.store.publish).toHaveBeenCalled();
   });
 
   // A ready that arrives after the world moved on. Publishing here would put a
@@ -273,7 +284,7 @@ describe('agentReport', () => {
       sessionId: 's1',
       phase: 'ready',
     });
-    expect(deps.states.for(WORLD).publish).not.toHaveBeenCalled();
+    expect(deps.store.publish).not.toHaveBeenCalled();
     // And it is told to stop, rather than being left to run: a machine whose
     // session is over has nothing left to do.
     expect(answer).toEqual({ state: 'IDLE', deadlineIso: null });
@@ -463,7 +474,7 @@ describe('agentReport', () => {
     });
     expect(order).toEqual(['record', 'destroy']);
     expect(deps.host.close).toHaveBeenCalledWith('s1');
-    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
@@ -480,7 +491,7 @@ describe('agentReport', () => {
   // has nothing left to record.
   it('destroys the machine but records nothing when the stopping-timeout net already moved the session on', async () => {
     deps = fakeDeps({ session: stoppingSession('s1') });
-    deps.states.for(WORLD).readSession = vi
+    deps.store.readSession = vi
       .fn()
       .mockResolvedValueOnce(stoppingSession('s1'))
       .mockResolvedValueOnce(Session.idle());
@@ -494,7 +505,7 @@ describe('agentReport', () => {
       },
     });
     expect(deps.host.close).toHaveBeenCalledWith('s1');
-    expect(deps.states.for(WORLD).apply).not.toHaveBeenCalled();
+    expect(deps.store.apply).not.toHaveBeenCalled();
     expect(deps.ledger.close).not.toHaveBeenCalled();
   });
 
@@ -556,7 +567,7 @@ describe('agentReport', () => {
         origin: 'pre-shutdown',
       },
     });
-    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBe('FAILED');
     expect(correction.lastError).not.toContain(secret);
@@ -597,7 +608,7 @@ describe('agentReport', () => {
     // Not FAILED, and not IDLE. §5 keeps FAILED for a cleanup that could not be
     // guaranteed; here nothing has been destroyed and nothing has been tried.
     // The provisioning delay of §6 is what ends this session, and it destroys.
-    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBeNull();
   });
@@ -617,7 +628,7 @@ describe('agentReport', () => {
       sessionId: 's1',
       detail: 'the game process crashed',
     });
-    const correction = (deps.states.for(WORLD).apply as ReturnType<typeof vi.fn>).mock
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(correction.state).toBeNull();
   });
