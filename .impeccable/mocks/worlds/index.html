@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — maquettes des mondes</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { color-scheme:light; }
+  body {
+    background:#e7e4dc; color:#16181b;
+    font:16px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:48px 26px 80px;
+  }
+  .wrap { max-width:760px; margin:0 auto; }
+  .kk { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#6b6f75; display:block; }
+  h1 { font-size:15px; font-weight:800; letter-spacing:.28em; text-transform:uppercase; margin:10px 0 0; }
+  h1 span { font-weight:500; color:#6b6f75; letter-spacing:.1em; text-transform:none; }
+  h2 { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#16181b; margin:34px 0 12px; }
+  .rule { border-top:4px solid #16181b; margin:20px 0 0; }
+  .intro { padding:24px 0 8px; max-width:62ch; color:#4d4a44; font-size:15px; }
+  .intro + .intro { padding-top:0; }
+  .intro b { color:#16181b; }
+  code { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:13px; color:#16181b; }
+  ul.files { list-style:none; }
+  ul.files li a {
+    display:flex; align-items:baseline; gap:18px; padding:20px 2px;
+    border-bottom:1px solid rgba(22,24,27,.18); text-decoration:none; color:inherit;
+  }
+  ul.files li:first-child a { border-top:1px solid rgba(22,24,27,.18); }
+  ul.files li a:hover { background:rgba(18,69,127,.05); }
+  ul.files li a .n { font:800 22px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; width:36px; flex:none; color:#12457f; }
+  ul.files li a .t { flex:1; }
+  ul.files li a .t b { display:block; font-size:17px; font-weight:700; }
+  ul.files li a .t span { display:block; font-size:14px; color:#6b6f75; margin-top:4px; }
+  ul.files li a .go { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.2em; text-transform:uppercase; color:#d8232a; }
+  ol.ask { max-width:62ch; color:#4d4a44; font-size:15px; padding-left:20px; }
+  ol.ask li + li { margin-top:10px; }
+  ol.ask b { color:#16181b; }
+  .out { margin-top:34px; font-size:14px; color:#6b6f75; }
+</style>
+<div class="wrap">
+  <span class="kk">Beacon · tour des mondes · 2026-09-15</span>
+  <h1>Maquettes <span>— la liste, le monde, l'entrée par un lien</span></h1>
+  <div class="rule"></div>
+
+  <p class="intro">Le monde visuel ne rejoue pas : <b>The Departure Board</b>, contrat dans
+  <code>../../DIRECTION.md</code>, tel que <code>apps/web/src/styles.css</code> le code. Ce tour dessine
+  ce que la révision du spec du 2026-09-15 ajoute au-dessus de la frontière Firestore, et que la
+  tranche 9 bis construira.</p>
+
+  <p class="intro"><b>Une question de composition, et une seule.</b> Trois ou quatre mondes sur un
+  tableau de gare : trois structures sont construites à l'échelle, avec les mêmes trois mondes. Le
+  reste — le monde, ce qu'il possède, l'entrée — hérite de l'écran existant et se relit plutôt qu'il ne
+  se choisit.</p>
+
+  <h2>Les planches</h2>
+  <ul class="files">
+    <li><a href="desktop.html"><span class="n">01</span><span class="t"><b>Écran large — 1440 px</b><span>Les trois structures de liste, la liste vide, le monde dans ses deux états, renommer, les deux confirmations, l'entrée et le lien périmé.</span></span><span class="go">Ouvrir</span></a></li>
+    <li><a href="phone.html"><span class="n">02</span><span class="t"><b>Téléphone — 390 px</b><span>Les mêmes, à la largeur du canapé de 20 h.</span></span><span class="go">Ouvrir</span></a></li>
+  </ul>
+
+  <h2>Tranché le 2026-09-15</h2>
+  <ol class="ask">
+    <li><b>La liste : B, l'index des noms.</b> Le nom à l'échelle d'affichage, une bande par monde, l'état
+    et l'heure à droite. A et C restent sur les planches, à l'échelle, comme trace de ce qui a été écarté.</li>
+    <li><b>La bande du monde</b> — nom, lien, joueurs — sous les actions, dans les trois colonnes du point
+    de jonction, telle quelle.</li>
+    <li><b>Les deux confirmations sur place</b>, pour un nouveau lien et pour quitter, jamais dans une
+    fenêtre, telles quelles.</li>
+  </ol>
+
+  <p class="out">Ce qui a été décidé et écarté est dans <code>README.md</code>, à côté.</p>
+</div>
+</html>
