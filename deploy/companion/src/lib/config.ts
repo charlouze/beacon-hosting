@@ -1,4 +1,4 @@
-import { isGame, type Game } from '@beacon/session';
+import { isGame, type Game, type WorldId } from '@beacon/session';
 
 /**
  * Everything the machine was told at first boot. **The companion knows no
@@ -11,6 +11,13 @@ import { isGame, type Game } from '@beacon/session';
 export interface CompanionConfig {
   readonly sessionId: string;
   readonly game: Game;
+  /**
+   * Which world this machine restores and pushes. §8: a companion that listed
+   * "the world of no world" would restore nothing, let the game generate one,
+   * and push it as that world's newest save — the silent failure this
+   * variable exists to make impossible instead of merely unlikely.
+   */
+  readonly world: WorldId;
   readonly token: string;
   readonly endpoint: string;
   readonly s3: {
@@ -98,6 +105,7 @@ export function readConfig(env: Env): CompanionConfig {
   return {
     sessionId: required(env, 'BEACON_SESSION_ID'),
     game,
+    world: required(env, 'BEACON_WORLD'),
     token: required(env, 'BEACON_TOKEN'),
     endpoint: required(env, 'BEACON_ENDPOINT'),
     s3: {

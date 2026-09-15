@@ -11,7 +11,7 @@ export interface RestoreDeps {
   readonly report: Reporter['send'];
   readonly takeOwnership: (directory: string, owner: string) => Promise<void>;
   readonly log: (message: string) => void;
-  readonly config: Pick<CompanionConfig, 'game' | 'saveDir' | 'saveOwner' | 'workDir'>;
+  readonly config: Pick<CompanionConfig, 'world' | 'saveDir' | 'saveOwner' | 'workDir'>;
   readonly clock: Clock;
   /**
    * Only the game whose files SteamCMD cannot fetch sets this. Undefined,
@@ -58,7 +58,7 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
   let newest: Save | undefined;
   try {
     // A throw propagates. It is the whole point of this function.
-    const saves = await deps.store.list(config.game);
+    const saves = await deps.store.list(config.world);
     newest = newestSave(saves);
   } catch (error) {
     await tell(deps, `restore refused: the bucket did not answer — ${String(error)}`);
@@ -80,7 +80,7 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
       await tell(deps, `restore refused: could not prepare a fresh world — ${String(error)}`);
       throw error;
     }
-    deps.log(`no save for ${config.game} yet: the game will generate a world`);
+    deps.log(`no save for ${config.world} yet: the game will generate a world`);
     return;
   }
 

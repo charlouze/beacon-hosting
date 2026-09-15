@@ -14,6 +14,11 @@ ENV_FILE="./${GAME}.env"
 # `docker compose exec` below, once per game instead of once per call site.
 . "$ENV_FILE"
 
+# The harness's own world, not the catalogue's: `<game>.env` names a game, and
+# a companion now restores and pushes by world (§8). One name for every game
+# this script exercises is enough — nothing here asserts against a second world.
+export BEACON_WORLD=smoke
+
 # Nothing below names a game. Which of the two stacks runs is read out of the
 # env file the catalogue's own values were copied into — `BEACON_READY_PROBE`
 # for how a server becomes ready, `BEACON_GAME_FILES_KEY` for whether its files
@@ -386,8 +391,8 @@ docker compose stop "$GAME"
 # threshold itself. `saved` is therefore already in the log before this
 # point; the origin fake-endpoint.mjs appends to each `saved` line is what
 # pins this one to the pre-shutdown push rather than to a routine one.
-timeout "$PRE_SHUTDOWN_TIMEOUT" bash -c "until docker compose exec -T bucket mc find local/beacon-saves/saves/$GAME/pre-shutdown --name '*.tar.gz' 2>/dev/null | grep -q tar.gz; do sleep 2; done" ||
-  { echo "smoke: no pre-shutdown archive ever appeared under saves/$GAME/pre-shutdown/" >&2; exit 1; }
+timeout "$PRE_SHUTDOWN_TIMEOUT" bash -c "until docker compose exec -T bucket mc find local/beacon-saves/pre-shutdown/$BEACON_WORLD --name '*.tar.gz' 2>/dev/null | grep -q tar.gz; do sleep 2; done" ||
+  { echo "smoke: no pre-shutdown archive ever appeared under pre-shutdown/$BEACON_WORLD/" >&2; exit 1; }
 grep -q '^saved pre-shutdown$' "$PHASES_LOG"
 
 # A cheap post-condition, not proof of the one-verb channel: this script just
