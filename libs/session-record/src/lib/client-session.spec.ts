@@ -176,6 +176,13 @@ describe('a member and their worlds', () => {
     expect(await eventTypes()).toContain('PlayerJoined');
   });
 
+  it('lets a player rejoin their own world, and writes nothing for it', async () => {
+    await seedWorld('les-copains', { players: ['alice'], inviteCode: 'c0de' });
+    await record().join('les-copains', 'c0de', { uid: 'alice', name: 'Alice' });
+    await record().join('les-copains', 'stale', { uid: 'alice', name: 'Alice' });
+    expect(await eventTypes()).toEqual([]);
+  });
+
   // Moved to `authorised-writes.spec.ts` (T9): the code is now refused by the
   // rule itself, comparing `request.resource.data.code` to the world's own
   // via a `get()` — and the `'owner'` token this file connects with bypasses

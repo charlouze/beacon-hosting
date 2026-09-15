@@ -113,6 +113,11 @@ export interface ClientSessionRecord {
    * player, and so unable to read the world at all — never has to read it
    * first. A refusal surfaces as a domain error naming the invite code, not
    * as Firestore's own `permission-denied`.
+   *
+   * A player already in the world is a no-op (T10): the world is read before
+   * the write, and if it reads and the actor is already a player, nothing is
+   * written and no event is filed. A reopened link cannot then fail on a
+   * stale code for someone already there.
    */
   join(worldId: WorldId, code: string, actor: Actor): Promise<void>;
   leave(worldId: WorldId, actor: Actor): Promise<void>;
@@ -403,6 +408,19 @@ export function clientSessionRecord(
     },
 
     async join(worldId, code, actor) {
+      // Entering a world one already plays in is a no-op (T10): a link
+      // reopened weeks later must not fail on a stale invite code for a
+      // player who is already there. The read that decides this can itself
+      // fail — a first joiner is not yet a player and cannot see the world —
+      // and that failure means "not yet a player", so it falls through to the
+      // write below exactly as it did before this existed.
+      try {
+        const world = await readWorld(worldId);
+        if (world.hasPlayer(actor.uid)) return;
+      } catch {
+        // Unreadable: proceed to the write below, as before T10.
+      }
+
       // T9 moved the code check into the rule itself — a `get()` on the world,
       // compared against `request.resource.data.code` — precisely so a first
       // joiner, who by definition is not yet a player, never has to read a
