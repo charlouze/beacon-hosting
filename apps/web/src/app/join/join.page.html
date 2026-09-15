@@ -1,0 +1,48 @@
+<div class="board">
+  <div class="lede">
+    <div class="wordmark">Beacon</div>
+    @if (outcome() === 'joining') {
+      <div class="status" data-field="join-outcome" data-tone="off">
+        <span class="dot"></span>
+        <span>Joining</span>
+      </div>
+    } @else {
+      <div class="status" data-field="join-outcome" data-tone="warn">
+        <span class="dot"></span>
+        <span>Link not valid</span>
+      </div>
+    }
+  </div>
+  <div class="rule"></div>
+
+  @if (outcome() === 'joining') {
+    <div class="mid">
+      <div class="empty solo">
+        <div class="big sm">Taking you in.</div>
+        <div class="sub">
+          This link puts you among the players of a world. You’ll be on its board in a moment, and
+          you can leave it from there whenever you like.
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="mid">
+      <div class="empty solo">
+        <div class="big sm">This link doesn’t open anything any more.</div>
+        <div class="sub">
+          It was replaced by a newer one, or it never was right. Ask whoever plays there for the
+          link they have now — each new link puts the old one out of use.
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="money"></div>
+      <div class="btncol">
+        <div class="acts">
+          <a class="btn ghost" data-action="home" routerLink="/">Your worlds</a>
+        </div>
+      </div>
+    </div>
+  }
+</div>
