@@ -265,13 +265,17 @@ service cloud.firestore {
       }
 
       match /server/current {
-        allow read: if isPlayerOf(worldId);
+        // Same opening as the world and its roster just above: an admin sees
+        // and acts on everything, joined or not. `instanceSize` is the field
+        // this buys — reserved to the admin inside `ownsEveryTouchedField`,
+        // it was otherwise unreachable for one who had not also joined.
+        allow read: if isPlayerOf(worldId) || isAdmin();
 
         // Neither created nor deleted by a client: `resource` is null on a
         // create, so a document a client could create would be born past
         // every field-by-field check at once — `RUNNING`, with an ip of its
         // own choosing. §5 seeds it when the world is adopted, and it stays.
-        allow update: if isPlayerOf(worldId) && isValidServerUpdate();
+        allow update: if (isPlayerOf(worldId) || isAdmin()) && isValidServerUpdate();
       }
     }
 

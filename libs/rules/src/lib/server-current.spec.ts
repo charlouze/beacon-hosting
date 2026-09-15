@@ -181,16 +181,24 @@ describe('server/current', () => {
   });
 
   // §5: the template is an admin's. A member who does not write it inherits
-  // the default the function applies. `ROOT` joins `w1` first: `isPlayerOf`
-  // gates the document itself, and admin status only ever gates the field.
+  // the default the function applies. Reserved to the field itself —
+  // `ownsEveryTouchedField` — regardless of whether the admin has also joined.
   it('reserves the instance size to an admin', async () => {
     await assertFails(
       updateDoc(server(ALICE), { instanceSize: 'PRO2-M' }),
     );
-    await rootJoinsW1();
     await assertSucceeds(
       updateDoc(server(ROOT), { instanceSize: 'PRO2-M' }),
     );
+  });
+
+  // The document-level gate: an admin who never joined the world still reads
+  // and writes `server/current`, the same way it already reads and writes the
+  // world and its roster — `instanceSize` would otherwise be unreachable to
+  // an admin who has not also become a player.
+  it('is read and its instance size written by an admin who never joined', async () => {
+    await assertSucceeds(getDoc(server(ROOT)));
+    await assertSucceeds(updateDoc(server(ROOT), { instanceSize: 'PRO2-M' }));
   });
 
   // The extension, and the reason `stateSince == request.time` is conditional.
