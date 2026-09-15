@@ -5,8 +5,8 @@ import { newestSave } from './newest.js';
 const save = (iso: string, origin: 'auto' | 'manual' | 'pre-shutdown' = 'auto'): Save =>
   Save.of({
     createdAt: new Date(iso),
-    game: 'enshrouded',
-    objectKey: `saves/enshrouded/${origin}/s1/${iso}.tar.gz`,
+    worldId: 'les-copains',
+    objectKey: `saves/les-copains/${origin}/s1/${iso}.tar.gz`,
     sizeBytes: 50_000,
     origin,
   });

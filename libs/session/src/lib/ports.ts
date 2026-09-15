@@ -1,8 +1,7 @@
-import type { Game } from './game.js';
 import type { SessionId } from './session.js';
 import type { InstanceSize } from './settings.js';
 import type { Save, SaveOrigin } from './saves/save.js';
-import type { World } from './world.js';
+import type { World, WorldId } from './world.js';
 
 export interface Clock {
   now(): Date;
@@ -132,10 +131,14 @@ export interface ServerHost {
  */
 export type LocalPath = string;
 
-/** What a deposit asks for. The key is the adapter's to build, never the caller's. */
+/**
+ * What a deposit asks for. The key is the adapter's to build, never the
+ * caller's. `sessionId` is nullable: an adoption deposits a save with no
+ * session behind it, and does not invent one to fill the field (§5).
+ */
 export interface SaveDraft {
-  readonly game: Game;
-  readonly sessionId: SessionId;
+  readonly worldId: WorldId;
+  readonly sessionId: SessionId | null;
   readonly origin: SaveOrigin;
   readonly createdAt: Date;
 }
@@ -152,8 +155,8 @@ export interface SaveDraft {
  * bucket (§8).
  */
 export interface SaveStore {
-  /** Every save deposited for this game, newest first. */
-  list(game: Game): Promise<Save[]>;
+  /** Every save deposited for this world, newest first. */
+  list(worldId: WorldId): Promise<Save[]>;
   /**
    * Bring one down to a local file. Throws rather than half-writing: a caller
    * that cannot tell a partial restore from a whole one would start a game
