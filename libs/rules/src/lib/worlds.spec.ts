@@ -30,6 +30,8 @@ describe('worlds/{worldId}', () => {
     await assertFails(updateDoc(world(ALICE), { game: 'sunkenland' }));
     await assertFails(updateDoc(world(ALICE), { createdAt: serverTimestamp() }));
     await assertFails(updateDoc(world(ALICE), { name: 'x'.repeat(1025) }));
+    await assertFails(updateDoc(world(ALICE), { name: 'x'.repeat(65) }));
+    await assertFails(updateDoc(world(ALICE), { name: '' }));
   });
 
   it('refuses a member who is not a player, even a harmless rename', async () => {
@@ -39,6 +41,8 @@ describe('worlds/{worldId}', () => {
   it('lets an admin touch everything but the game', async () => {
     await assertSucceeds(updateDoc(world(ROOT), { name: 'Renamed by root' }));
     await assertFails(updateDoc(world(ROOT), { game: 'sunkenland' }));
+    await assertFails(updateDoc(world(ROOT), { name: 'x'.repeat(65) }));
+    await assertFails(updateDoc(world(ROOT), { name: '' }));
   });
 });
 

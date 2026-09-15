@@ -9,6 +9,14 @@ service cloud.firestore {
       return value is string && value.size() <= 1024;
     }
 
+    // A world's name feeds a file `docker compose` reads (`libs/session`'s
+    // `world.ts`) — `bounded()`'s 1024-byte ceiling lets through a name that
+    // domain rejects, and a document the domain can't parse back locks every
+    // player out of it. Mirrors `MAX_WORLD_NAME` there: keep the two in sync.
+    function boundedName(value) {
+      return value is string && value.size() > 0 && value.size() <= 64;
+    }
+
     function isMember() {
       return request.auth != null
         && exists(/databases/$(database)/documents/members/$(request.auth.uid));
@@ -217,7 +225,7 @@ service cloud.firestore {
       let affected = affectedWorldFields();
       return isPlayerOf(worldId)
         && affected.hasOnly(['name', 'inviteCode'])
-        && (!affected.hasAny(['name']) || bounded(request.resource.data.name))
+        && (!affected.hasAny(['name']) || boundedName(request.resource.data.name))
         && (!affected.hasAny(['inviteCode']) || bounded(request.resource.data.inviteCode));
     }
 
@@ -225,7 +233,9 @@ service cloud.firestore {
     // under a running or past session would file its save under another
     // world's prefix (§5's reasoning for `server/current`, one layer up).
     function adminUpdatesWorld() {
-      return isAdmin() && !affectedWorldFields().hasAny(['game']);
+      let affected = affectedWorldFields();
+      return isAdmin() && !affected.hasAny(['game'])
+        && (!affected.hasAny(['name']) || boundedName(request.resource.data.name));
     }
 
     match /worlds/{worldId} {
