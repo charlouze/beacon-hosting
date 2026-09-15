@@ -10,6 +10,7 @@ import { NotClearedComponent } from './not-cleared.component';
 import { OutOfServiceComponent } from './out-of-service.component';
 import { PreparingComponent } from './preparing.component';
 import { SteamDeclarationComponent } from './steam-declaration.component';
+import { WorldBandComponent } from './world-band.component';
 
 /**
  * The board every state is announced on: the name, the state and its pip, the
@@ -34,6 +35,7 @@ import { SteamDeclarationComponent } from './steam-declaration.component';
     PreparingComponent,
     RouterLink,
     SteamDeclarationComponent,
+    WorldBandComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './session.page.html',
@@ -51,7 +53,7 @@ export class SessionPage {
   readonly declared = output<string>();
   readonly signedOut = output<void>();
 
-  /** Declared for `world-band` (T8), which alone renders them. */
+  /** Relayed from the band of the world, which alone renders them. */
   readonly renamed = output<string>();
   readonly reinvited = output<void>();
   readonly left = output<void>();

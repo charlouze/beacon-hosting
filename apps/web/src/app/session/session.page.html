@@ -64,6 +64,16 @@
     }
   }
 
+  <!-- Under everything the evening needs: what the world owns apart from any
+       session does not move from one state to the next, and nobody renames a
+       world in the alt-tab of half past eleven. -->
+  <beacon-world-band
+    [world]="world()"
+    (renamed)="renamed.emit($event)"
+    (reinvited)="reinvited.emit()"
+    (left)="left.emit()"
+  />
+
   <div class="quiet">
     @if (member().steamId; as steamId) {
       <beacon-steam-declaration [steamId]="steamId" (declared)="declared.emit($event)" />

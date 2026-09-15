@@ -8,40 +8,25 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
  *
  * The label turns to `Copied` and comes back. That is a state changing, not an
  * animation: the page's one moving thing is the falling second.
+ *
+ * It wears `.small`, the world's own bordered control, rather than a sheet of
+ * its own: the band of the world sets Rename and Leave this world beside this
+ * button, and two definitions of the same control is how they drift apart.
  */
 @Component({
   selector: 'beacon-copy-button',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <button type="button" [attr.data-copy]="value()" [attr.data-done]="done() ? '' : null" (click)="copy()">
+    <button
+      class="small"
+      type="button"
+      [attr.data-copy]="value()"
+      [attr.data-done]="done() ? '' : null"
+      (click)="copy()"
+    >
       {{ done() ? 'Copied' : 'Copy' }}
     </button>
-  `,
-  styles: `
-    button {
-      font: 600 10px/1 var(--font-ui);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--mute);
-      border: 1px solid var(--rule);
-      padding: 6px 8px;
-      background: transparent;
-      cursor: pointer;
-      transition:
-        color 0.12s ease-out,
-        border-color 0.12s ease-out;
-    }
-
-    button:hover {
-      color: var(--ink);
-      border-color: var(--ink);
-    }
-
-    button[data-done] {
-      color: var(--red);
-      border-color: var(--red);
-    }
   `,
 })
 export class CopyButtonComponent {

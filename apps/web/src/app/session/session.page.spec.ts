@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { DEFAULT_SETTINGS, Deadline, Session, World } from '@beacon/session';
 import { CLOCK } from '../clock';
+import { ORIGIN } from '../records';
 import { SessionPage } from './session.page';
 
 const WORLD = World.from({
@@ -44,7 +45,11 @@ describe('SessionPage', () => {
   const render = async (session: Session, facts = NO_FACTS) => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: CLOCK, useValue: FIXED_CLOCK }],
+      providers: [
+        provideRouter([]),
+        { provide: CLOCK, useValue: FIXED_CLOCK },
+        { provide: ORIGIN, useValue: 'https://beacon.charlouze.com' },
+      ],
     });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', { session, facts, stateSince: STARTED_AT });
@@ -107,7 +112,11 @@ describe('SessionPage', () => {
   it('says so plainly when the record cannot be read, rather than showing an empty board', async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: CLOCK, useValue: FIXED_CLOCK }],
+      providers: [
+        provideRouter([]),
+        { provide: CLOCK, useValue: FIXED_CLOCK },
+        { provide: ORIGIN, useValue: 'https://beacon.charlouze.com' },
+      ],
     });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', null);
@@ -116,6 +125,13 @@ describe('SessionPage', () => {
     fixture.componentRef.setInput('member', MEMBER);
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('cannot be read');
+  });
+
+  it('carries the band of the world under the actions, in every state', async () => {
+    for (const session of [Session.idle(), sessionIn('RUNNING'), sessionIn('FAILED')]) {
+      const fixture = await render(session);
+      expect(fixture.nativeElement.querySelector('beacon-world-band')).not.toBeNull();
+    }
   });
 
   /** Constraint no. 2: never a cloud console. These words are barred from the surface. */

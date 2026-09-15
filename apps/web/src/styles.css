@@ -607,6 +607,60 @@ a {
   font-weight: 600;
 }
 
+/* ---- the small bordered control ----
+   The quiet gesture beside a value: copy, rename, leave, and the two halves of
+   a confirmation. 11 px and not the 10 px the copy button shipped with — the
+   detector put that under the legibility floor of functional text, and Rename
+   and Leave this world are functional text. A class in the world's own sheet
+   because four screens wear it, and four copies is how a world drifts apart. */
+.small {
+  font:
+    600 11px/1 var(--font-ui);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  border: 1px solid var(--rule);
+  padding: 6px 8px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.12s ease-out,
+    border-color 0.12s ease-out;
+}
+
+.small:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.small[data-done] {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* The half of a confirmation that carries it through, in full ink. Declared
+   after the hover so that the filled control keeps its ink under the pointer. */
+.small.fill {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* The one red control of the product, and only for leaving a world. */
+.small.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* Shut, in the greys of the shut primary action: a control whose reason is
+   written beside it and never in a `title`. */
+.small:disabled {
+  color: var(--off-ink);
+  border-color: var(--off-edge);
+  background: transparent;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   /* One column, the key above its value: a 55-character identifier and a
      two-column row do not share 390 px. */
