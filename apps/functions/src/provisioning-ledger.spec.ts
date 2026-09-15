@@ -27,6 +27,7 @@ beforeEach(async () => {
 
 const intend = (sessionId: string, closedAt: Date | null = null) =>
   db.doc(`provisioning/${sessionId}`).set({
+    worldId: 'les-copains',
     tag: `session:${sessionId}`,
     intendedAt: NOW,
     instanceSize: 'DEV1-L',
@@ -74,14 +75,14 @@ describe('provisioningLedger', () => {
   });
 
   it('refuses to open an intent for a session id already seen', async () => {
-    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
     await expect(
-      ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW),
+      ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW),
     ).rejects.toThrow();
   });
 
   it('opens an intent the watchdog reads as open', async () => {
-    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
     expect(await ledger.openSessions()).toEqual(['s1']);
   });
 
@@ -92,12 +93,12 @@ describe('provisioningLedger', () => {
   // §6 étape 7: a crash between the call and recording the instance id must
   // not read back as a machine that exists.
   it('reads nothing for an intent opened but not yet recorded', async () => {
-    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
     expect(await ledger.read('s1')).toBeNull();
   });
 
   it('reads the four facts once the provider answered', async () => {
-    await ledger.open('s1', { tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    await ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
     await ledger.record('s1', { instanceId: 'srv-1', ipId: 'ip-1', ip: '51.15.42.7' });
     expect(await ledger.read('s1')).toEqual({
       instanceId: 'srv-1',
@@ -105,5 +106,11 @@ describe('provisioningLedger', () => {
       ip: '51.15.42.7',
       instanceSize: 'DEV1-L',
     });
+  });
+
+  it('answers the world of a session it recorded, and null for one it never saw', async () => {
+    await ledger.open('s1', { worldId: 'les-copains', tag: 'session:s1', instanceSize: 'DEV1-L' }, NOW);
+    expect(await ledger.worldOf('s1')).toBe('les-copains');
+    expect(await ledger.worldOf('s9')).toBeNull();
   });
 });
