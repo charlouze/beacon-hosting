@@ -206,6 +206,11 @@ describe('agentReport', () => {
     expect(deps.store.publish).toHaveBeenCalled();
     const events = filed(deps);
     expect(events[0].type).toBe('DnsUpdateFailed');
+    // `stateSince` stays where it is: the watchdog measures every delay from
+    // it, and a report filing an event is not a change of state.
+    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(correction.state).toBeNull();
   });
 
   // §6, §7: the machine is the least trusted element of the system. Its address
