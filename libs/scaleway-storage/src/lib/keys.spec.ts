@@ -2,53 +2,52 @@ import { describe, expect, it } from 'vitest';
 import { objectKeyFor, parseObjectKey } from './keys.js';
 
 const DRAFT = {
-  game: 'enshrouded' as const,
+  worldId: 'les-copains',
   sessionId: 'b19af9ed-c4de-49d0-bd7c-1eacd1624c55',
   origin: 'pre-shutdown' as const,
   createdAt: new Date('2026-09-07T20:04:26Z'),
 };
 
 describe('the object key', () => {
-  // §5: game, then origin, then session, then instant. The order is what the
-  // bucket's lifecycle rules prune on — they match a prefix, and origin has to
-  // come before anything that varies per session or they could not.
-  it('carries game, origin, session and instant, in that order', () => {
+  // §5 : l'origine d'abord, parce que la règle d'élagage du seau filtre un
+  // préfixe littéral et qu'il n'y en a qu'une, `auto/`, pour tous les mondes.
+  it('carries origin, world, instant and session, in that order', () => {
     expect(objectKeyFor(DRAFT)).toBe(
-      'saves/enshrouded/pre-shutdown/b19af9ed-c4de-49d0-bd7c-1eacd1624c55/2026-09-07T20-04-26Z.tar.gz',
+      'pre-shutdown/les-copains/2026-09-07T20-04-26Z-b19af9ed-c4de-49d0-bd7c-1eacd1624c55.tar.gz',
     );
   });
 
-  // A colon is legal in an s3 key and unusable everywhere else — a shell, a
-  // path on the machine that downloads it, a url. Replaced once, here.
+  it('carries no session for an adoption', () => {
+    expect(objectKeyFor({ ...DRAFT, sessionId: null, origin: 'manual' })).toBe(
+      'manual/les-copains/2026-09-07T20-04-26Z.tar.gz',
+    );
+  });
+
   it('spells the instant without a colon', () => {
     expect(objectKeyFor(DRAFT)).not.toContain(':');
   });
 
-  // Two deposits inside the same second would collide, and a collision is the
-  // one thing immutable keys exist to prevent (§5). Nothing here guards it —
-  // what protects is structural: the origin sits above the instant, so an
-  // `auto` and a `pre-shutdown` deposit of the same second never share a
-  // prefix, and two `auto` pushes are already a push interval apart. This
-  // test only pins that two different instants of the same origin never
-  // collide.
-  it('gives two instants two keys', () => {
-    const later = { ...DRAFT, createdAt: new Date('2026-09-07T20:04:27Z') };
-    expect(objectKeyFor(later)).not.toBe(objectKeyFor(DRAFT));
-  });
-
-  it('reads back the game, the origin and the instant it wrote', () => {
+  it('reads back what it wrote, session included or not', () => {
     expect(parseObjectKey(objectKeyFor(DRAFT))).toEqual({
-      game: 'enshrouded',
+      worldId: 'les-copains',
       origin: 'pre-shutdown',
       createdAt: new Date('2026-09-07T20:04:26Z'),
+      sessionId: 'b19af9ed-c4de-49d0-bd7c-1eacd1624c55',
+    });
+    expect(parseObjectKey('manual/les-copains/2026-09-07T20-04-26Z.tar.gz')).toEqual({
+      worldId: 'les-copains',
+      origin: 'manual',
+      createdAt: new Date('2026-09-07T20:04:26Z'),
+      sessionId: null,
     });
   });
 
-  // An object deposited by hand, or left by a version of this code that no
-  // longer exists. Null and not a throw: `list()` skips what it cannot read
-  // rather than making one stray object break every restoration.
-  it('yields nothing for a key it did not write', () => {
+  // L'ancien format, et tout ce que ce module n'a pas écrit. Null et non un
+  // throw : `list()` saute ce qu'il ne sait pas lire.
+  it('yields nothing for a key of the previous format, or a foreign one', () => {
+    expect(parseObjectKey('saves/enshrouded/pre-shutdown/s1/2026-09-07T20-04-26Z.tar.gz')).toBeNull();
     expect(parseObjectKey('games/sunkenland/Sunkenland_Data/level0')).toBeNull();
-    expect(parseObjectKey('saves/enshrouded/whatever/s1/2026.tar.gz')).toBeNull();
+    expect(parseObjectKey('whatever/les-copains/2026-09-07T20-04-26Z.tar.gz')).toBeNull();
+    expect(parseObjectKey('auto/Les Copains/2026-09-07T20-04-26Z.tar.gz')).toBeNull();
   });
 });
