@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, Session } from '@beacon/session';
+import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
 import { DEPLOYED_FIELDS, openingFields, RESERVED_FACTS } from './fields.js';
 
 // An ordinary member's opening, which is the one that must go through every
@@ -9,7 +9,13 @@ import { DEPLOYED_FIELDS, openingFields, RESERVED_FACTS } from './fields.js';
 const SESSION_OPENED_BY_ALICE = Session.opening(
   {
     sessionId: 's1',
-    game: 'enshrouded',
+    world: World.from({
+      worldId: 'les-copains',
+      game: 'enshrouded',
+      name: 'Les copains',
+      inviteCode: 'c0de',
+      players: ['alice'],
+    }),
     actor: { uid: 'alice', name: 'Alice' },
   },
   { now: () => new Date('2026-09-06T20:00:00Z') },
