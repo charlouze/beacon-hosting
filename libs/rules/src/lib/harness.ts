@@ -70,8 +70,11 @@ export const remove = (
   );
 
 /**
- * The two documents §5 says are seeded at deployment and never created by a
- * client, plus the three members the suites act as.
+ * The documents §5 says are seeded at deployment and never created by a
+ * client, plus the three members the suites act as and the one world they
+ * share: `ALICE` a player of it, `BOB` a member of no world, `ROOT` an admin
+ * of no world — its own privilege comes from `members`, never from a world's
+ * roster — and `MALLORY`, absent from `members` entirely, the visitor.
  *
  * Their fields are present and null rather than filled: §9 forbids a date or a
  * duration in a rules test, and the rules never read a value here — they are
@@ -91,14 +94,24 @@ const seed = async (): Promise<void> => {
     role: 'player',
     email: 'bob@example.com',
   });
-  await given(env, 'server/current', {
+  await given(env, 'worlds/w1', {
+    game: 'enshrouded',
+    name: 'w1',
+    inviteCode: 'c0de',
+    createdAt: null,
+  });
+  await given(env, `worlds/w1/players/${ALICE}`, {
+    uid: ALICE,
+    joinedAt: null,
+    code: null,
+  });
+  await given(env, 'worlds/w1/server/current', {
     state: 'IDLE',
     stateSince: null,
     sessionId: null,
     startedBy: null,
     startedAt: null,
     deadline: null,
-    game: null,
     instanceId: null,
     ipId: null,
     ip: null,

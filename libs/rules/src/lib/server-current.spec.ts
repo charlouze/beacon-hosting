@@ -25,15 +25,25 @@ const RESERVED = ['instanceId', 'ipId', 'ip', 'joinInfo', 'provisionClaimedAt', 
 
 useRulesEnvironment();
 
+const server = (uid: string | null) => doc(as(env, uid), 'worlds', 'w1', 'server', 'current');
+
+/**
+ * `ROOT` is an admin of no world (harness.ts): every write below signed by
+ * `ROOT` needs it to also be a player of `w1` first, the same way any admin
+ * would have to join a world before touching its session — `isPlayerOf` gates
+ * the document, `isAdmin` only ever gates one field of it.
+ */
+const rootJoinsW1 = (): Promise<void> =>
+  given(env, 'worlds/w1/players/root', { uid: ROOT, joinedAt: null, code: null });
+
 /** A whole opening, as `openingFields` writes it, with a field or two changed. */
 const opening = (uid: string, overrides: Record<string, unknown> = {}) =>
-  updateDoc(doc(as(env, uid), 'server', 'current'), {
+  updateDoc(server(uid), {
     state: 'PROVISIONING',
     stateSince: serverTimestamp(),
     startedAt: serverTimestamp(),
     startedBy: uid,
     sessionId: 's1',
-    game: 'enshrouded',
     deadline: Timestamp.fromMillis(1_800_000_000_000),
     ...overrides,
   });
@@ -44,21 +54,20 @@ const opening = (uid: string, overrides: Record<string, unknown> = {}) =>
  * the player who opened it — which is the state the two tests below attack.
  */
 const idleAfterASessionOfAlice = (): Promise<void> =>
-  given(env, 'server/current', {
+  given(env, 'worlds/w1/server/current', {
     state: 'IDLE',
     stateSince: null,
     sessionId: 's1',
-    game: 'enshrouded',
     startedBy: ALICE,
     startedAt: null,
     deadline: null,
   });
 
 describe('server/current', () => {
-  it('is read by every member and by nobody else', async () => {
-    await assertSucceeds(getDoc(doc(as(env, ALICE), 'server', 'current')));
-    await assertFails(getDoc(doc(as(env, MALLORY), 'server', 'current')));
-    await assertFails(getDoc(doc(as(env, null), 'server', 'current')));
+  it('is read by every player and by nobody else', async () => {
+    await assertSucceeds(getDoc(server(ALICE)));
+    await assertFails(getDoc(server(MALLORY)));
+    await assertFails(getDoc(server(null)));
   });
 
   // §5, and it is the trap that motivates the seed: `resource` is null on a
@@ -71,29 +80,28 @@ describe('server/current', () => {
   // right result for the wrong reason, which is the failure mode a refusal
   // suite is worst at noticing.
   it('is never created by a client, member or admin', async () => {
-    await remove(env, 'server/current');
+    await remove(env, 'worlds/w1/server/current');
     await assertFails(
-      setDoc(doc(as(env, ALICE), 'server', 'current'), { state: 'RUNNING', ip: '1.2.3.4' }),
+      setDoc(server(ALICE), { state: 'RUNNING', ip: '1.2.3.4' }),
     );
     await assertFails(
-      setDoc(doc(as(env, ROOT), 'server', 'current'), { state: 'RUNNING', ip: '1.2.3.4' }),
+      setDoc(server(ROOT), { state: 'RUNNING', ip: '1.2.3.4' }),
     );
   });
 
   it('is never deleted by a client', async () => {
-    await assertFails(deleteDoc(doc(as(env, ROOT), 'server', 'current')));
+    await assertFails(deleteDoc(server(ROOT)));
   });
 
   // What an opening writes (§6 étape 1), through the record's own field list.
   it('accepts an opening a member signs with its own uid', async () => {
     await assertSucceeds(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'PROVISIONING',
         stateSince: serverTimestamp(),
         startedAt: serverTimestamp(),
         startedBy: ALICE,
         sessionId: 's1',
-        game: 'enshrouded',
         deadline: Timestamp.fromMillis(1_800_000_000_000),
       }),
     );
@@ -104,13 +112,12 @@ describe('server/current', () => {
   // someone else's name.
   it('refuses an opening signed with somebody else', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'PROVISIONING',
         stateSince: serverTimestamp(),
         startedAt: serverTimestamp(),
         startedBy: BOB,
         sessionId: 's1',
-        game: 'enshrouded',
         deadline: Timestamp.fromMillis(1_800_000_000_000),
       }),
     );
@@ -120,7 +127,7 @@ describe('server/current', () => {
   // A literal instant is not `request.time`, whatever its value.
   it('refuses an instant the client chose itself', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'STOPPING',
         stateSince: Timestamp.fromMillis(1_700_000_000_000),
       }),
@@ -129,7 +136,7 @@ describe('server/current', () => {
 
   it('accepts the two states that are intentions', async () => {
     await assertSucceeds(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'STOPPING',
         stateSince: serverTimestamp(),
       }),
@@ -139,7 +146,7 @@ describe('server/current', () => {
   it('refuses the three states that are findings', async () => {
     for (const state of ['RUNNING', 'IDLE', 'FAILED']) {
       await assertFails(
-        updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+        updateDoc(server(ALICE), {
           state,
           stateSince: serverTimestamp(),
         }),
@@ -150,7 +157,7 @@ describe('server/current', () => {
   it('refuses every reserved field, one by one', async () => {
     for (const field of RESERVED) {
       await assertFails(
-        updateDoc(doc(as(env, ALICE), 'server', 'current'), { [field]: 'anything' }),
+        updateDoc(server(ALICE), { [field]: 'anything' }),
       );
     }
   });
@@ -159,7 +166,7 @@ describe('server/current', () => {
   // is not "the legitimate part goes through".
   it('sinks a legitimate write that smuggles a reserved field', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'STOPPING',
         stateSince: serverTimestamp(),
         ip: '51.15.42.7',
@@ -169,18 +176,20 @@ describe('server/current', () => {
 
   it('refuses a field nobody declared', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { nonsense: true }),
+      updateDoc(server(ALICE), { nonsense: true }),
     );
   });
 
   // §5: the template is an admin's. A member who does not write it inherits
-  // the default the function applies.
+  // the default the function applies. `ROOT` joins `w1` first: `isPlayerOf`
+  // gates the document itself, and admin status only ever gates the field.
   it('reserves the instance size to an admin', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { instanceSize: 'PRO2-M' }),
+      updateDoc(server(ALICE), { instanceSize: 'PRO2-M' }),
     );
+    await rootJoinsW1();
     await assertSucceeds(
-      updateDoc(doc(as(env, ROOT), 'server', 'current'), { instanceSize: 'PRO2-M' }),
+      updateDoc(server(ROOT), { instanceSize: 'PRO2-M' }),
     );
   });
 
@@ -188,7 +197,7 @@ describe('server/current', () => {
   // Written unconditionally, this rule refuses every extension the product has.
   it('accepts an extension that writes the deadline alone', async () => {
     await assertSucceeds(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         deadline: Timestamp.fromMillis(1_800_003_600_000),
       }),
     );
@@ -196,7 +205,7 @@ describe('server/current', () => {
 
   it('refuses a visitor everything', async () => {
     await assertFails(
-      updateDoc(doc(as(env, MALLORY), 'server', 'current'), {
+      updateDoc(server(MALLORY), {
         state: 'STOPPING',
         stateSince: serverTimestamp(),
       }),
@@ -205,7 +214,7 @@ describe('server/current', () => {
 
   it('refuses a string past the bound', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { sessionId: 'x'.repeat(1025) }),
+      updateDoc(server(ALICE), { sessionId: 'x'.repeat(1025) }),
     );
   });
 
@@ -217,12 +226,11 @@ describe('server/current', () => {
   it('refuses an opening that inherits the previous player as its author', async () => {
     await idleAfterASessionOfAlice();
     await assertFails(
-      updateDoc(doc(as(env, BOB), 'server', 'current'), {
+      updateDoc(server(BOB), {
         state: 'PROVISIONING',
         stateSince: serverTimestamp(),
         startedAt: serverTimestamp(),
         sessionId: 's2',
-        game: 'sunkenland',
         deadline: Timestamp.fromMillis(1_800_000_000_000),
       }),
     );
@@ -235,12 +243,11 @@ describe('server/current', () => {
   it('accepts an opening whose author was already the same player', async () => {
     await idleAfterASessionOfAlice();
     await assertSucceeds(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), {
+      updateDoc(server(ALICE), {
         state: 'PROVISIONING',
         stateSince: serverTimestamp(),
         startedAt: serverTimestamp(),
         sessionId: 's2',
-        game: 'sunkenland',
         deadline: Timestamp.fromMillis(1_800_000_000_000),
       }),
     );
@@ -250,20 +257,20 @@ describe('server/current', () => {
   // `instanceSize` when a template was chosen, so this write has to clear the
   // opening check and the one that reserves the field, in the same pass.
   it('accepts an admin opening that chooses a template', async () => {
+    await rootJoinsW1();
     await assertSucceeds(opening(ROOT, { instanceSize: 'PRO2-M' }));
   });
 
-  // §5: the save's `objectKey` carries the game, so a `game` rewritten while a
-  // session runs files the pre-shutdown save under another world's prefix.
-  // That is a world lost, not a label misread.
+  // §5: `startedBy`, `startedAt` and `sessionId` name which session is open;
+  // rewriting one outside an opening is refused the same as before, `game`
+  // simply no longer among them — it moved to the world (§9).
   it('refuses a session identity rewritten outside an opening', async () => {
     for (const write of [
-      { game: 'sunkenland' },
       { sessionId: 's2' },
       { startedAt: serverTimestamp() },
       { startedBy: ALICE },
     ]) {
-      await assertFails(updateDoc(doc(as(env, ALICE), 'server', 'current'), write));
+      await assertFails(updateDoc(server(ALICE), write));
     }
   });
 
@@ -279,13 +286,13 @@ describe('server/current', () => {
   // by a later hand, this suite stays green and the first of them works again.
   it('refuses an instant of state without the state it dates', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { stateSince: serverTimestamp() }),
+      updateDoc(server(ALICE), { stateSince: serverTimestamp() }),
     );
   });
 
   it('refuses a state without the instant it began', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { state: 'STOPPING' }),
+      updateDoc(server(ALICE), { state: 'STOPPING' }),
     );
   });
 
@@ -293,10 +300,10 @@ describe('server/current', () => {
   // `bounded` never reaches it. Untyped, it takes anything, at any size.
   it('refuses a deadline that is not an instant', async () => {
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { deadline: 'whenever' }),
+      updateDoc(server(ALICE), { deadline: 'whenever' }),
     );
     await assertFails(
-      updateDoc(doc(as(env, ALICE), 'server', 'current'), { deadline: 'x'.repeat(100_000) }),
+      updateDoc(server(ALICE), { deadline: 'x'.repeat(100_000) }),
     );
   });
 

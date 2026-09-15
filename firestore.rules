@@ -14,6 +14,15 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
 
+    // A member who has joined this particular world (§9: only `exists()` on
+    // `players`, never a `get()` — the roster's shape past that one bit is
+    // nobody's business here). Replaces `isMember()` everywhere a document
+    // belongs to one world: the world itself, its players, and its server.
+    function isPlayerOf(worldId) {
+      return isMember()
+        && exists(/databases/$(database)/documents/worlds/$(worldId)/players/$(request.auth.uid));
+    }
+
     // The existence test is not redundant with the get(). `get()` on an absent
     // document yields null, and reading `.data` off null fails the evaluation
     // rather than returning false — so without it a visitor would be refused by
@@ -113,7 +122,7 @@ service cloud.firestore {
     // every evening, or a reserved fact goes through.
     function demandedFields() {
       return ['state', 'stateSince', 'sessionId', 'startedBy', 'startedAt',
-        'deadline', 'game', 'instanceSize'];
+        'deadline', 'instanceSize'];
     }
 
     // `instanceSize` is demanded but is not everyone's: §5 makes the template an
@@ -130,7 +139,7 @@ service cloud.firestore {
     // §7: the four fields that say *which* session is open, and in whose name.
     // They move together, with an opening, or they do not move at all.
     function sessionIdentityFields() {
-      return ['sessionId', 'game', 'startedBy', 'startedAt'];
+      return ['sessionId', 'startedBy', 'startedAt'];
     }
 
     // Every constraint here is conditional, and `stateSince` is the trap: an
@@ -183,7 +192,6 @@ service cloud.firestore {
                 && data.startedBy == request.auth.uid
                 && data.startedAt == request.time
                 && bounded(data.sessionId)
-                && bounded(data.game)
               : !affected.hasAny(sessionIdentityFields()))
         // A timestamp and not a bounded string, because this field is the only
         // one a client writes that is not one: left untyped it would take a
@@ -197,17 +205,73 @@ service cloud.firestore {
       return ownsEveryTouchedField(affected) && hasValidValues(affected);
     }
 
-    match /server/current {
-      // The document is named, never `server/{id}`: any other document of the
-      // collection falls through to the refusal below.
-      allow read: if isMember();
+    // §9: a world is adopted, never created through the rules — no `create`,
+    // no `delete`, for a player or an admin alike.
+    function affectedWorldFields() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
 
-      // Neither created nor deleted by a client, and that is what holds
-      // everything above: `resource` is null on a create, so a document a client
-      // could create would be born past every field-by-field check at once —
-      // `RUNNING`, with an ip of its own choosing. §5 seeds it at deployment,
-      // and it stays.
-      allow update: if isMember() && isValidServerUpdate();
+    // A player renames and reinvites — the two facts a group of friends
+    // actually manages — and touches nothing else.
+    function playerUpdatesWorld(worldId) {
+      let affected = affectedWorldFields();
+      return isPlayerOf(worldId)
+        && affected.hasOnly(['name', 'inviteCode'])
+        && (!affected.hasAny(['name']) || bounded(request.resource.data.name))
+        && (!affected.hasAny(['inviteCode']) || bounded(request.resource.data.inviteCode));
+    }
+
+    // An admin manages the world entirely except its game: a game rewritten
+    // under a running or past session would file its save under another
+    // world's prefix (§5's reasoning for `server/current`, one layer up).
+    function adminUpdatesWorld() {
+      return isAdmin() && !affectedWorldFields().hasAny(['game']);
+    }
+
+    match /worlds/{worldId} {
+      allow read: if isPlayerOf(worldId) || isAdmin();
+      allow update: if playerUpdatesWorld(worldId) || adminUpdatesWorld();
+
+      match /players/{uid} {
+        allow read: if isPlayerOf(worldId) || isAdmin();
+
+        // The subject alone, and only a member of the project at large: a
+        // visitor holding a leaked invite code is not a friend of this group.
+        // The code is checked against the world's own, read once by `get()`
+        // — the client no longer needs to read the world first to validate it
+        // (T9's whole point), and the three keys, exactly, keep the document
+        // from carrying anything this world's roster does not mean.
+        allow create: if isMember()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'joinedAt', 'code'])
+          && request.resource.data.uid == uid
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.code
+            == get(/databases/$(database)/documents/worlds/$(worldId)).data.inviteCode;
+
+        // Never updated: a player who wants a fresh join date leaves and
+        // rejoins, which is the same write this document has ever had.
+        allow delete: if (request.auth != null && request.auth.uid == uid) || isAdmin();
+      }
+
+      match /server/current {
+        allow read: if isPlayerOf(worldId);
+
+        // Neither created nor deleted by a client: `resource` is null on a
+        // create, so a document a client could create would be born past
+        // every field-by-field check at once — `RUNNING`, with an ip of its
+        // own choosing. §5 seeds it when the world is adopted, and it stays.
+        allow update: if isPlayerOf(worldId) && isValidServerUpdate();
+      }
+    }
+
+    // §8: the one collection-group query the system runs — "my worlds". A
+    // read proven by the document's own `uid` field, with no `get()` and no
+    // dependence on which world it sits under, is the only shape Firestore
+    // can validate against a query it has not read yet. The specific match
+    // above still governs everything else this document can be asked to do.
+    match /{path=**}/players/{uid} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // §4: the two fields of `config/settings` the deployment stamps at every
