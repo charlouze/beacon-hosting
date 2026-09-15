@@ -9,7 +9,7 @@ import type { BootRequest } from './catalog.js';
  * would render nothing and prove nothing but the refusal.
  */
 export const REQUEST: BootRequest = {
-  serverName: 'Beacon',
+  world: { worldId: 'beacon', name: 'Beacon' },
   serverPassword: 'hunter2',
   slotCount: 4,
   // The account of the 2026-09-05 measurement, so a suite that does not care
@@ -27,6 +27,11 @@ export const REQUEST: BootRequest = {
     secretKey: 'a-secret-with-no-dollar-in-it',
   },
 };
+
+/** `REQUEST`, with the given fields overridden — `world` included, wholesale. */
+export function request(overrides: Partial<BootRequest> = {}): BootRequest {
+  return { ...REQUEST, ...overrides };
+}
 
 /**
  * One service's own lines, not the whole compose: depth is syntax here exactly
