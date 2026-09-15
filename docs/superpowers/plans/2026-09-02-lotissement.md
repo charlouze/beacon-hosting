@@ -78,6 +78,8 @@ un jeu par tranche.
 | 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **livrée le 2026-09-14** |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
 | 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
+| 9 | Les mondes | Plusieurs mondes par jeu, chacun avec ses joueurs, plusieurs sessions le même soir — sous l'écran | plan écrit le 2026-09-15 |
+| 9 bis | L'écran des mondes | La liste de mes mondes, le monde, l'entrée par un lien | maquettes à venir |
 
 ### 0 · Sonder
 
@@ -498,6 +500,48 @@ maquettes est donc dû pour les surfaces d'administration, pas pour le pied de
 cumuls, qui se relit dans
 [`.impeccable/mocks/decision/desktop.html`](../../../.impeccable/mocks/decision/desktop.html)
 tel qu'il avait été approuvé.
+
+### 9 · Les mondes
+
+**Née le 2026-09-15, d'une phrase du commanditaire** : plusieurs groupes d'amis jouent au même jeu,
+sans partager leur monde, et voudront jouer le même soir. Le spec a été révisé le jour même, avant
+qu'une ligne de plan s'écrive — c'est la règle de la tranche 0, et elle a tenu : le jeu tenait lieu
+de monde partout, et « un seul serveur à la fois » était la seule ligne du §13 qui décrivait une
+limite du modèle plutôt qu'un choix.
+
+**Deux plans, une fusion.** Le premier,
+[`2026-09-15-tranche-9-les-mondes.md`](2026-09-15-tranche-9-les-mondes.md), fait tout ce qui est
+sous l'écran : le monde entre dans le domaine, `server/current` descend sous lui, la clé de
+sauvegarde change, les règles, les Functions, la machine et l'outil suivent. Le second — la 9 bis,
+l'écran des mondes — s'écrit **après** un tour de maquettes sous `impeccable`, parce que l'écran
+gagne des routes et trois surfaces que personne n'a dessinées, et que `PRODUCT.md` se régénère au
+même tour.
+
+**Le gate est ferme, et il est nouveau dans sa forme** : la 9 ne se fusionne pas sans la 9 bis. La
+fusion est la mise en production (§10), et la 9 retire `server/current` de la racine, que l'écran
+d'aujourd'hui lit. Fusionnée seule, elle laisserait un produit déployé dont l'écran ne lit plus
+rien. Les deux plans s'exécutent sur une branche, et partent ensemble.
+
+**Ce que la migration demande, et qui n'est pas dans un plan** : rendre les deux mondes réels avant
+la fusion, les adopter vers leur slug après, effacer l'ancien document, remplacer la règle
+d'élagage, créer un enregistrement DNS par monde Enshrouded. Le plan de la 9 les liste dans
+l'ordre, en fin de document ; ce sont des gestes humains, et le CLAUDE.md dit pourquoi.
+
+**Elle passe devant la 6 et la 8**, pour la raison qui a fait passer la 7 devant la 6 : ce que le
+commanditaire attend pour jouer prime sur ce qui rend le compte reconstructible, et la 8 dessine des
+surfaces d'administration qui se dessinent mieux une fois que l'écran connaît les mondes.
+
+### 9 bis · L'écran des mondes
+
+**Née avec la 9.** La liste de mes mondes, chacun avec son état et son décompte s'il tourne, le
+cumul du mois en pied ; le monde, qui est l'écran d'aujourd'hui sous `/worlds/{worldId}`, plus le
+nom modifiable, le lien d'invitation à copier, et « quitter ce monde » ; et `/join/{worldId}/{code}`,
+qui entre et redirige. Un membre sans monde voit la liste vide, avec la phrase qui dit de demander
+un lien. Le glossaire du §4 porte déjà tous les termes que ces écrans afficheront.
+
+Son plan s'écrit après le tour de maquettes, et il consomme ce que la 9 laisse prêt : la face
+client de `libs/session-record` avec ses neuf opérations, testée contre les règles, et un monde de
+développement dans `mise run dev`.
 
 ## La livraison ne fait pas de tranche
 
