@@ -14,6 +14,7 @@ describe('PreparingComponent', () => {
     const session = Session.from({
       state: 'PROVISIONING',
       sessionId: 'sess1',
+      worldId: 'les-bras-casses',
       game: 'sunkenland',
       startedBy: 'u-9f3c2a',
       startedAt,

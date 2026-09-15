@@ -18,6 +18,7 @@ const sessionIn = (state: 'PROVISIONING' | 'RUNNING' | 'STOPPING' | 'FAILED') =>
   Session.from({
     state,
     sessionId: 'sess1',
+    worldId: 'les-bras-casses',
     game: 'sunkenland',
     startedBy: 'Charlouze',
     startedAt: STARTED_AT,

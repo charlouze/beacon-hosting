@@ -14,6 +14,7 @@ describe('ClosingComponent', () => {
       session: Session.from({
         state: 'STOPPING',
         sessionId: 'sess1',
+        worldId: 'les-bras-casses',
         game: 'sunkenland',
         startedBy: 'u-9f3c2a',
         startedAt: new Date('2026-09-12T20:14:00'),
