@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { World } from '@beacon/session';
 import { FakeInstanceApi, scwIp, scwServer, scwVolume } from './fake-instance-api.js';
 import { ScalewayServerHost } from './scaleway-server-host.js';
 import { OWNERSHIP_TAG, sessionTag } from './tags.js';
@@ -287,7 +288,13 @@ describe('sweepUnclaimed', () => {
 describe('open', () => {
   const REQUEST = {
     sessionId: 's1',
-    game: 'enshrouded' as const,
+    world: World.from({
+      worldId: 'les-copains',
+      game: 'enshrouded' as const,
+      name: 'Les copains',
+      inviteCode: 'c0de',
+      players: [],
+    }),
     size: 'DEV1-L',
     bootstrap: '#cloud-config\n',
   };
