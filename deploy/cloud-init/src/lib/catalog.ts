@@ -86,6 +86,14 @@ export interface JoinFacts {
 export interface GameCatalogEntry {
   readonly game: Game;
   /**
+   * Whether the game itself lays down a fresh world the first time its
+   * server boots on an empty save, or dies without one instead (§2). This is
+   * what tells `world-depot adopt` whether `--from` may be omitted — never an
+   * `if` on the game's name, which would put a second copy of this knowledge
+   * outside the catalogue.
+   */
+  readonly generatesWorlds: boolean;
+  /**
    * The name a dns record points at, derived from the world so that two
    * worlds of the same game never contend for one hostname — or null when
    * nothing does. Null is not a missing value: one of the two games announces

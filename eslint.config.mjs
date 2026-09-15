@@ -44,11 +44,18 @@ export default [
             // §8 wants that judged before anything leaves the machine, and the
             // §4 keeps at the catalogue what each game's world looks like, so
             // re-encoding it here would be the second definition this project
-            // has already paid for once. Still nothing from the record: a
-            // session's shape is no business of a deposit made outside one.
+            // has already paid for once. The record now also carries the
+            // admin operations on a world and its saves (`adminWorldRecord`,
+            // `saveRecords`) — the tool reuses those rather than re-encoding
+            // them a second time.
             {
               sourceTag: 'scope:tool',
-              onlyDependOnLibsWithTags: ['scope:adapter', 'scope:catalog', 'scope:domain'],
+              onlyDependOnLibsWithTags: [
+                'scope:adapter',
+                'scope:catalog',
+                'scope:domain',
+                'scope:record',
+              ],
             },
             // The wire format between the machine and the control plane. It
             // needs the domain to name a session and a state, and nothing else

@@ -466,6 +466,11 @@ runcmd:
 export const sunkenland: GameCatalogEntry = {
   game: GAME,
 
+  // Measured: the entry point above refuses to boot without exactly one
+  // `<name>~<guid>` folder already on disk (§8) — this game never lays one
+  // down on its own, so `world-depot adopt` cannot skip `--from` for it.
+  generatesWorlds: false,
+
   /**
    * Nothing to point a record at: discovery goes through the game's own
    * lobby and transport through direct UDP that NAT traverses. Measured — a
