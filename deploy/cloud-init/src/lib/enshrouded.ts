@@ -176,6 +176,11 @@ const hostnameFor = (worldId: WorldId): string => `${worldId}.beacon.charlouze.c
 export const enshrouded: GameCatalogEntry = {
   game: 'enshrouded',
 
+  // Measured: this server boots on an empty `server/savegame` by generating a
+  // fresh world rather than refusing — the first session of a world nobody
+  // adopted an archive for is exactly that generation.
+  generatesWorlds: true,
+
   hostname: hostnameFor,
 
   compose: () => COMPOSE,
