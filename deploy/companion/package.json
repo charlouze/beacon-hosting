@@ -10,6 +10,9 @@
     ],
     "implicitDependencies": ["cloud-init"],
     "targets": {
+      "test": {
+        "dependsOn": ["build"]
+      },
       "build": {
         "executor": "@nx/esbuild:esbuild",
         "outputs": ["{options.outputPath}"],
@@ -23,6 +26,7 @@
           "additionalEntryPoints": ["deploy/companion/src/agent.ts"],
           "tsConfig": "deploy/companion/tsconfig.app.json",
           "assets": [],
+          "metafile": true,
           "esbuildOptions": {
             "sourcemap": false,
             "outExtension": { ".js": ".mjs" },
@@ -30,6 +34,13 @@
               "js": "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);"
             }
           }
+        }
+      },
+      "pin": {
+        "dependsOn": ["build"],
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx deploy/companion/src/pin/pin-entry.ts"
         }
       },
       "smoke": {
