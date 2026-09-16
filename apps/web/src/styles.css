@@ -823,6 +823,15 @@ a {
     padding-bottom: 16px;
   }
 
+  /* Out of service and the dead link have no figure to show, and the wide foot
+     still needs the element to hold its half of the `space-between`. The phone
+     comps drop it outright; collapsing it here keeps one markup for both.
+     `:empty` is literal — a single space inside that div silently brings the
+     gap back. */
+  .money:empty {
+    padding-bottom: 0;
+  }
+
   .money .v {
     font-size: 19px;
     line-height: 1.2;
