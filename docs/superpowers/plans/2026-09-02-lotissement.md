@@ -80,6 +80,7 @@ un jeu par tranche.
 | 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
 | 9 | Les mondes | Plusieurs mondes par jeu, chacun avec ses joueurs, plusieurs sessions le même soir — sous l'écran | implémentée, PR #40 (avec la 9 bis) |
 | 9 bis | L'écran des mondes | La liste de mes mondes, le monde, l'entrée par un lien | implémentée, PR #40 (avec la 9) |
+| 10 | Le relevé d'une machine | Les six questions d'un débogage de session, posées par une commande et dans leur ordre | née du débogage du 2026-09-16 |
 
 ### 0 · Sonder
 
@@ -551,6 +552,41 @@ développement dans `mise run dev`.
 
 **Reste, avant la fusion :** la soirée contre l'émulateur, humaine (tâche 12 du plan) — la dernière
 vérification que rien n'y manque qu'un test ne peut pas voir.
+
+### 10 · Le relevé d'une machine
+
+**Née le 2026-09-16, d'un débogage qui a commencé par la mauvaise question.** Une
+session ne s'allumait pas ; la première demi-heure a porté sur l'état de
+l'émulateur local, alors que `BEACON_ENDPOINT` disait que la machine
+interrogeait la production. La réponse tenait dans un `docker inspect`.
+
+Ce que la tranche livre : `session-doctor <adresse>` — une cible Nx, pas un
+script à côté — qui pose d'elle-même les six questions et rend un relevé.
+
+1. **Quel plan de contrôle cette machine interroge-t-elle ?** `BEACON_ENDPOINT`
+   dans `docker inspect beacon-agent`. Une URL Cloud Run, c'est la production ;
+   une URL de tunnel, c'est une soirée d'essai.
+2. **Quel code tourne ?** `origin/main` après un `git fetch`, jamais la branche
+   sous les yeux — elle peut avoir une fusion de retard, ou d'avance.
+3. **Quelle image de compagnon ?** Le digest de la machine contre
+   `COMPANION_IMAGE`. Depuis le garde-fou du 2026-09-16 un écart ne devrait plus
+   exister ; le relever reste le moyen de le savoir.
+4. **L'agent parle-t-il ?** Un `docker logs beacon-agent` vide veut dire qu'il
+   rapporte sans erreur — c'est une information, pas une absence.
+5. **Quel monde a-t-il restauré, et le jeu est-il joignable ?** Le journal de
+   `beacon-restore`, le dossier du monde, le fichier de la sonde.
+6. **Quel filet va la faucher, et quand ?** Les délais du §6. C'est ce qui dit
+   la fenêtre dont on dispose pour enquêter.
+
+**L'ordre est la livraison, pas la liste.** Les commandes se retrouvent ; ce qui
+s'oublie, c'est que rien d'observé en local ne prouve quoi que ce soit tant que
+la question 0 n'a pas de réponse. Le relevé doit donc porter aussi **ce qui ne
+prouve rien** : les ports ouverts sur le poste, l'état de l'émulateur, la
+branche courante.
+
+**Elle ne débloque rien.** Aucun joueur n'en est empêché de jouer, et chaque
+question se pose déjà à la main. Ce qu'elle achète est le temps d'un débogage,
+et qu'il commence par le bon bout.
 
 ## La livraison ne fait pas de tranche
 
