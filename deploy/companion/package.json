@@ -10,6 +10,9 @@
     ],
     "implicitDependencies": ["cloud-init"],
     "targets": {
+      "test": {
+        "dependsOn": ["build"]
+      },
       "build": {
         "executor": "@nx/esbuild:esbuild",
         "outputs": ["{options.outputPath}"],
@@ -23,6 +26,7 @@
           "additionalEntryPoints": ["deploy/companion/src/agent.ts"],
           "tsConfig": "deploy/companion/tsconfig.app.json",
           "assets": [],
+          "metafile": true,
           "esbuildOptions": {
             "sourcemap": false,
             "outExtension": { ".js": ".mjs" },
