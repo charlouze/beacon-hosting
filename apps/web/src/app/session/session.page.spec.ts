@@ -1,7 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import { DEFAULT_SETTINGS, Deadline, Session } from '@beacon/session';
+import { provideRouter } from '@angular/router';
+import { DEFAULT_SETTINGS, Deadline, Session, World } from '@beacon/session';
 import { CLOCK } from '../clock';
+import { ORIGIN } from '../records';
 import { SessionPage } from './session.page';
+
+const WORLD = World.from({
+  worldId: 'les-bras-casses',
+  game: 'sunkenland',
+  name: 'Les bras cassés',
+  inviteCode: '7f3a9c2e',
+  players: ['u1', 'u2', 'u3'],
+});
 
 const NO_FACTS = { ip: null, joinInfo: null, lastError: null };
 
@@ -18,6 +28,7 @@ const sessionIn = (state: 'PROVISIONING' | 'RUNNING' | 'STOPPING' | 'FAILED') =>
   Session.from({
     state,
     sessionId: 'sess1',
+    worldId: 'les-bras-casses',
     game: 'sunkenland',
     startedBy: 'Charlouze',
     startedAt: STARTED_AT,
@@ -33,9 +44,16 @@ describe('SessionPage', () => {
   // already instantiated refuses to be configured again.
   const render = async (session: Session, facts = NO_FACTS) => {
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: FIXED_CLOCK }] });
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: CLOCK, useValue: FIXED_CLOCK },
+        { provide: ORIGIN, useValue: 'https://beacon.charlouze.com' },
+      ],
+    });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', { session, facts, stateSince: STARTED_AT });
+    fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', MEMBER);
     await fixture.whenStable();
@@ -56,19 +74,59 @@ describe('SessionPage', () => {
     );
   });
 
-  it('carries the product name always, and the game only once it is frozen', async () => {
-    const idle = await render(Session.idle());
-    expect(idle.nativeElement.querySelector('[data-field="wordmark"]').textContent).toContain(
-      'Beacon',
+  it('carries the product name as the way back to the list, and the name of the world', async () => {
+    const fixture = await render(Session.idle());
+    const home = fixture.nativeElement.querySelector('[data-action="home"]') as HTMLAnchorElement;
+    expect(home.textContent).toContain('Beacon');
+    expect(home.getAttribute('href')).toBe('/');
+    expect(fixture.nativeElement.querySelector('[data-field="world-name"]').textContent).toContain(
+      'Les bras cassés',
     );
-    expect(idle.nativeElement.querySelector('[data-field="wordmark"]').textContent).not.toContain(
-      'Sunkenland',
-    );
+  });
 
-    const running = await render(sessionIn('RUNNING'));
-    expect(running.nativeElement.querySelector('[data-field="wordmark"]').textContent).toContain(
-      'Sunkenland',
+  it('puts the way back to the list in the quiet foot, before sign out', async () => {
+    const fixture = await render(Session.idle());
+    const foot = fixture.nativeElement.querySelector('.quiet') as HTMLElement;
+    const worlds = foot.querySelector('[data-action="worlds"]') as HTMLAnchorElement;
+    expect(worlds.textContent).toContain('Your worlds');
+    expect(worlds.getAttribute('href')).toBe('/');
+    const order = [...foot.querySelectorAll('[data-action]')].map((el) =>
+      el.getAttribute('data-action'),
     );
+    expect(order.indexOf('worlds')).toBeLessThan(order.indexOf('sign-out'));
+  });
+
+  /**
+   * The foot has two ends. A declared Steam account adds a third child, and
+   * `space-between` would set the one thing here that is a value — a 17-digit
+   * number in ink — at the exact centre between two greys. The rule that sends
+   * it right lives in the sheet; what is testable here is that it has a rule to
+   * match, which a renamed element would silently take away.
+   */
+  it('keeps the declared Steam account on the sign-out side of the foot', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: CLOCK, useValue: FIXED_CLOCK },
+        { provide: ORIGIN, useValue: 'https://beacon.charlouze.com' },
+      ],
+    });
+    const fixture = TestBed.createComponent(SessionPage);
+    fixture.componentRef.setInput('view', { session: Session.idle(), facts: NO_FACTS, stateSince: STARTED_AT });
+    fixture.componentRef.setInput('world', WORLD);
+    fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
+    fixture.componentRef.setInput('member', { ...MEMBER, steamId: '76561197960287930' });
+    await fixture.whenStable();
+    const foot = fixture.nativeElement.querySelector('.quiet') as HTMLElement;
+    const children = [...foot.children].map((el) => el.tagName.toLowerCase());
+    expect(children).toEqual(['a', 'beacon-steam-declaration', 'button']);
+  });
+
+  it('offers no game to choose: the world already has one', async () => {
+    const fixture = await render(Session.idle());
+    expect(fixture.nativeElement.querySelector('[data-game]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[role="group"]')).toBeNull();
   });
 
   /**
@@ -91,13 +149,28 @@ describe('SessionPage', () => {
   });
 
   it('says so plainly when the record cannot be read, rather than showing an empty board', async () => {
-    TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: FIXED_CLOCK }] });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: CLOCK, useValue: FIXED_CLOCK },
+        { provide: ORIGIN, useValue: 'https://beacon.charlouze.com' },
+      ],
+    });
     const fixture = TestBed.createComponent(SessionPage);
     fixture.componentRef.setInput('view', null);
+    fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', MEMBER);
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('cannot be read');
+  });
+
+  it('carries the band of the world under the actions, in every state', async () => {
+    for (const session of [Session.idle(), sessionIn('RUNNING'), sessionIn('FAILED')]) {
+      const fixture = await render(session);
+      expect(fixture.nativeElement.querySelector('beacon-world-band')).not.toBeNull();
+    }
   });
 
   /** Constraint no. 2: never a cloud console. These words are barred from the surface. */

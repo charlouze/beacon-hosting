@@ -1,8 +1,9 @@
 import { DEFAULT_SETTINGS, type Game, type JoinInfo } from '@beacon/session';
+import { serverDocPath } from '@beacon/session-record';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { emulatorsOnly } from './emulator-guard.js';
-import { PERSONAS } from './personas.js';
+import { DEV_WORLD_ID, PERSONAS } from './personas.js';
 
 /**
  * The screens of the board, by the name one asks for them — not by the state
@@ -45,7 +46,8 @@ const JOIN: Readonly<Record<Game, JoinInfo>> = {
 };
 
 /**
- * `server/current` as it would stand if that screen were showing.
+ * `worlds/{worldId}/server/current` as it would stand if that screen were
+ * showing — `game` included, for `screen()` below to strip before writing.
  *
  * Whole documents, never patches, and every screen writes the same keys. A
  * patch would leave a running session's ip under an IDLE state — the very
@@ -142,6 +144,14 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
   }
 }
 
+// `dev-world` is always `enshrouded` (§10, `personas()`) — the hostname a real
+// world would carry, swapped in because `worlds/dev-world` is what the
+// emulator actually holds, never `enshrouded.beacon.charlouze.com`.
+function forDevWorld(joinInfo: JoinInfo | null): JoinInfo | null {
+  if (joinInfo === null || joinInfo.game !== 'enshrouded') return joinInfo;
+  return { ...joinInfo, hostname: `${DEV_WORLD_ID}.beacon.charlouze.com` };
+}
+
 export async function screen(name: string, now: Date): Promise<void> {
   emulatorsOnly('screen');
 
@@ -149,6 +159,15 @@ export async function screen(name: string, now: Date): Promise<void> {
     throw new Error(`no screen named "${name}". There is: ${SCREENS.join(', ')}`);
   }
 
-  await getFirestore(defaultApp()).doc('server/current').set(screenFixture(name, now));
-  console.log(`server/current now shows "${name}" — the open tab follows without a reload`);
+  // No `game`: it moved to `worlds/{worldId}` itself (§5), so the document a
+  // fixture would write for it has nothing left to hold.
+  const { game, ...fixture } = screenFixture(name, now);
+  void game;
+
+  await getFirestore(defaultApp())
+    .doc(serverDocPath(DEV_WORLD_ID))
+    .set({ ...fixture, joinInfo: forDevWorld(fixture['joinInfo'] as JoinInfo | null) });
+  console.log(
+    `${serverDocPath(DEV_WORLD_ID)} now shows "${name}" — the open tab follows without a reload`,
+  );
 }

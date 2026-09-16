@@ -1,5 +1,16 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import { FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { MEMBERS } from './viewer.js';
+
+/** Firestore's `in` operator accepts at most ten values per clause. */
+const BATCH_SIZE = 10;
+
+function batches<T>(values: readonly T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
 
 /**
  * §5: a steam id is a public integer, and the one consequence of a wrong one is
@@ -27,13 +38,21 @@ const isSteamId = (value: unknown): value is string =>
  * one to every member, whatever their role.
  */
 export interface AdminMembershipRecord {
-  declaredSteamIds(): Promise<readonly string[]>;
+  /**
+   * The steam ids of the named members only — those `among` a world's
+   * players (§4 delimits a world to them). Filtered **in the query**, one
+   * `where(documentId(), 'in', …)` per batch of ten Firestore accepts: `members`
+   * is the one collection §5 narrows to protect e-mail addresses, and
+   * rereading the whole register to sort a handful of ids in memory would
+   * defeat that on every provisioning.
+   */
+  declaredSteamIds(among: readonly string[]): Promise<readonly string[]>;
 }
 
 export function adminMembershipRecord(db: Firestore): AdminMembershipRecord {
   return {
     /**
-     * Every member, and no filter on the role: §2 gives the in-game
+     * No filter on the role among the named members: §2 gives the in-game
      * administrator role to all of them, on the same principle as « n'importe
      * qui démarre, prolonge et arrête ». A `where('role', '==', 'admin')` here
      * reads like a precaution and is a narrowing of that decision.
@@ -54,10 +73,19 @@ export function adminMembershipRecord(db: Firestore): AdminMembershipRecord {
      * collection §5 narrows to protect e-mail addresses, and `select` is what
      * keeps them out of this process entirely.
      */
-    async declaredSteamIds(): Promise<readonly string[]> {
-      const snapshot = await db.collection(MEMBERS).select('steamId').get();
-      return snapshot.docs
-        .map((doc) => doc.get('steamId'))
+    async declaredSteamIds(among: readonly string[]): Promise<readonly string[]> {
+      if (among.length === 0) return [];
+      const snapshots = await Promise.all(
+        batches(among, BATCH_SIZE).map((batch) =>
+          db
+            .collection(MEMBERS)
+            .where(FieldPath.documentId(), 'in', batch)
+            .select('steamId')
+            .get(),
+        ),
+      );
+      return snapshots
+        .flatMap((snapshot) => snapshot.docs.map((doc) => doc.get('steamId')))
         .filter(isSteamId)
         .sort();
     },

@@ -1,6 +1,7 @@
 import {
   DEFAULT_LIMITS,
   DEFAULT_SETTINGS,
+  World,
   type HostedServer,
   type OpenedServer,
   type OpenServerRequest,
@@ -14,7 +15,7 @@ import {
   scwServer,
   sessionTag,
 } from '@beacon/scaleway-compute';
-import { serverStateStore, settingsStore } from '@beacon/session-record';
+import { adminWorldRecord, settingsStore, systemEvents, worldStateStores } from '@beacon/session-record';
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,7 @@ process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
 
 const NOW = new Date('2026-09-04T21:00:00Z');
 const minutesAgo = (n: number) => new Date(NOW.getTime() - n * 60_000);
+const minutesAhead = (n: number) => new Date(NOW.getTime() + n * 60_000);
 
 const QUIET: UnclaimedSweep = { destroyed: [], stranded: [], errors: [] };
 
@@ -70,6 +72,7 @@ const hosted = (sessionId: string): HostedServer => ({ sessionId, summary: `held
 let app: ReturnType<typeof initializeApp>;
 let db: Firestore;
 let host: FakeServerHost;
+let ledger: ProvisioningLedger;
 
 beforeAll(() => {
   app = initializeApp({ projectId: 'demo-beacon' }, 'watchdog-spec');
@@ -83,10 +86,33 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.recursiveDelete(db.collection('events'));
   await db.recursiveDelete(db.collection('provisioning'));
-  await db.doc('server/current').delete();
+  await db.recursiveDelete(db.collection('worlds'));
   await db.doc('health/watchdog').delete();
   host = new FakeServerHost();
+  ledger = provisioningLedger(db);
 });
+
+const aWorld = (worldId: string) =>
+  World.from({ worldId, game: 'enshrouded', name: 'World', inviteCode: 'code', players: [] });
+
+/**
+ * `worlds/{worldId}/server/current`, in one call — the world document created
+ * once, on first use, and the server document set to exactly `fields`, the
+ * same discipline the old single-world tests wrote against root
+ * `server/current` before this task moved it under a world.
+ */
+async function seedWorld(worldId: string, fields: Record<string, unknown>): Promise<void> {
+  const worldDoc = await db.doc(`worlds/${worldId}`).get();
+  if (!worldDoc.exists) await adminWorldRecord(db).create(aWorld(worldId), NOW);
+  // `startedAt` defaults to `stateSince` when the caller does not name one:
+  // every fixture that cares about `Session` (RUNNING here) already carries
+  // its own `stateSince`, and a session started when its state began is the
+  // ordinary case, not a guess this helper invents beyond what the caller gave.
+  const defaults = fields['state'] === 'IDLE' || fields['state'] === undefined
+    ? {}
+    : { startedAt: fields['stateSince'], startedBy: 'u1' };
+  await db.doc(`worlds/${worldId}/server/current`).set({ ...defaults, ...fields });
+}
 
 /**
  * Makes the order of the reads a structural fact instead of a race. Watching
@@ -105,13 +131,15 @@ const afterTheInventory = (inner: ProvisioningLedger): ProvisioningLedger => ({
   record: (sessionId, facts) => inner.record(sessionId, facts),
   read: (sessionId) => inner.read(sessionId),
   close: (sessionId, at) => inner.close(sessionId, at),
+  worldOf: (sessionId) => inner.worldOf(sessionId),
 });
 
 const deps = (): WatchdogDeps => ({
   clock: { now: () => NOW },
   host,
-  state: serverStateStore(db),
-  ledger: afterTheInventory(provisioningLedger(db)),
+  states: worldStateStores(db),
+  events: systemEvents(db),
+  ledger: afterTheInventory(ledger),
   health: watchdogHealth(db),
   settings: settingsStore(db),
   limits: DEFAULT_LIMITS,
@@ -135,24 +163,29 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
     close: vi.fn(),
     sweepUnclaimed: vi.fn(async () => QUIET),
   },
-  state: {
-    read: vi.fn(async () => ({
-      state: 'IDLE' as const,
-      sessionId: null,
-      stateSince: null,
-      hasReservedFacts: false,
+  states: {
+    for: vi.fn(() => ({
+      read: vi.fn(async () => ({
+        state: 'IDLE' as const,
+        sessionId: null,
+        stateSince: null,
+        hasReservedFacts: false,
+      })),
+      readSession: vi.fn(async () => null),
+      claimProvisioning: vi.fn(),
+      publish: vi.fn(),
+      apply: vi.fn(),
     })),
-    readSession: vi.fn(async () => null),
-    claimProvisioning: vi.fn(),
-    publish: vi.fn(),
-    apply: vi.fn(),
+    all: vi.fn(async () => ['w1']),
   },
+  events: { file: vi.fn() },
   ledger: {
     openSessions: vi.fn(async () => []),
     open: vi.fn(),
     record: vi.fn(),
     read: vi.fn(async () => null),
     close: vi.fn(),
+    worldOf: vi.fn(async () => null),
   },
   health: {
     previousPass: vi.fn(async () => ({ stranded: ['volume v1'], sweptAt: previous.sweptAt })),
@@ -198,7 +231,7 @@ describe('runWatchdog', () => {
     host.refuse.add('sess1');
     await db.doc('provisioning/sess1').set({ closedAt: null });
     // An open intent alone would spare it; the record says otherwise.
-    await db.doc('server/current').set({
+    await seedWorld('w1', {
       state: 'STOPPING',
       sessionId: 'sess1',
       stateSince: minutesAgo(11),
@@ -208,7 +241,7 @@ describe('runWatchdog', () => {
     await runWatchdog(deps());
 
     expect(await eventTypes()).toEqual(['CleanupFailed']);
-    expect(await provisioningLedger(db).openSessions()).toEqual(['sess1']);
+    expect(await ledger.openSessions()).toEqual(['sess1']);
   });
 
   // The failure the probe produced on 2026-09-03, taken one step further than
@@ -328,7 +361,7 @@ describe('runWatchdog', () => {
   it('destroys and grounds a session stuck in PROVISIONING past the limit', async () => {
     host.hosted = [hosted('sess1')];
     await db.doc('provisioning/sess1').set({ closedAt: null });
-    await db.doc('server/current').set({
+    await seedWorld('w1', {
       state: 'PROVISIONING',
       sessionId: 'sess1',
       stateSince: minutesAgo(26),
@@ -340,7 +373,7 @@ describe('runWatchdog', () => {
     await runWatchdog(deps());
 
     expect(host.closed).toEqual(['sess1']);
-    const after = (await db.doc('server/current').get()).data();
+    const after = (await db.doc('worlds/w1/server/current').get()).data();
     expect(after?.['state']).toBe('IDLE');
     expect(after?.['instanceId']).toBeNull();
     // The two the plan forgot once: without them, the next session shows a dead
@@ -358,10 +391,9 @@ describe('runWatchdog', () => {
   it('writes STOPPING and destroys nothing once a deadline passes the grace', async () => {
     host.hosted = [hosted('sess1')];
     await db.doc('provisioning/sess1').set({ closedAt: null });
-    await db.doc('server/current').set({
+    await seedWorld('w1', {
       state: 'RUNNING',
       sessionId: 'sess1',
-      game: 'enshrouded',
       startedBy: 'u1',
       startedAt: minutesAgo(60),
       deadline: minutesAgo(3),
@@ -374,7 +406,7 @@ describe('runWatchdog', () => {
     await runWatchdog(deps());
 
     expect(host.closed).toEqual([]);
-    const after = (await db.doc('server/current').get()).data();
+    const after = (await db.doc('worlds/w1/server/current').get()).data();
     expect(after?.['state']).toBe('STOPPING');
     expect(after?.['stateSince'].toDate()).toEqual(NOW);
     // Untouched: the machine is still alive, and the clean shutdown of §6
@@ -393,7 +425,7 @@ describe('runWatchdog', () => {
     const api = new FakeInstanceApi([scwServer('s-1', [OWNERSHIP_TAG, sessionTag('sess1')])]);
     api.failOn = 'terminate';
     await db.doc('provisioning/sess1').set({ closedAt: null });
-    await db.doc('server/current').set({
+    await seedWorld('w1', {
       state: 'STOPPING',
       sessionId: 'sess1',
       stateSince: minutesAgo(11),
@@ -403,14 +435,14 @@ describe('runWatchdog', () => {
     await runWatchdog({
       ...deps(),
       host: new ScalewayServerHost(api, { resolve: async () => null }),
-      ledger: provisioningLedger(db),
+      ledger,
     });
 
     const [event] = (await db.collection('events').get()).docs;
     expect(event.data()['type']).toBe('CleanupFailed');
     expect(event.data()['detail']).toContain('s-1');
-    expect((await db.doc('server/current').get()).data()?.['state']).toBe('FAILED');
-    expect(await provisioningLedger(db).openSessions()).toEqual(['sess1']);
+    expect((await db.doc('worlds/w1/server/current').get()).data()?.['state']).toBe('FAILED');
+    expect(await ledger.openSessions()).toEqual(['sess1']);
     expect(api.servers).toHaveLength(1);
   });
 
@@ -418,7 +450,7 @@ describe('runWatchdog', () => {
     host.hosted = [hosted('sess1')];
     host.refuse.add('sess1');
     await db.doc('provisioning/sess1').set({ closedAt: null });
-    await db.doc('server/current').set({
+    await seedWorld('w1', {
       state: 'STOPPING',
       sessionId: 'sess1',
       stateSince: minutesAgo(11),
@@ -427,7 +459,100 @@ describe('runWatchdog', () => {
 
     await runWatchdog(deps());
 
-    expect((await db.doc('server/current').get()).data()?.['state']).toBe('FAILED');
+    expect((await db.doc('worlds/w1/server/current').get()).data()?.['state']).toBe('FAILED');
+  });
+
+  // Task 12: one pass, every world, each getting its own correction from its
+  // own outcomes only — the reconcile.ts contract this task exists to honour.
+  it('handles two worlds in two states in one pass', async () => {
+    await seedWorld('a', {
+      state: 'RUNNING',
+      sessionId: 's-a',
+      deadline: minutesAgo(10),
+      stateSince: minutesAgo(240),
+      instanceId: 'i-a',
+    });
+    await seedWorld('b', {
+      state: 'RUNNING',
+      sessionId: 's-b',
+      deadline: minutesAhead(200),
+      stateSince: minutesAgo(30),
+      instanceId: 'i-b',
+    });
+    await ledger.open('s-a', { worldId: 'a', tag: sessionTag('s-a'), instanceSize: 'DEV1-L' }, minutesAgo(240));
+    await ledger.open('s-b', { worldId: 'b', tag: sessionTag('s-b'), instanceSize: 'DEV1-L' }, minutesAgo(30));
+    host.hosted = [{ sessionId: 's-a', summary: 'a' }, { sessionId: 's-b', summary: 'b' }];
+
+    await runWatchdog(deps());
+
+    expect((await db.doc('worlds/a/server/current').get()).get('state')).toBe('STOPPING');
+    expect((await db.doc('worlds/b/server/current').get()).get('state')).toBe('RUNNING');
+    expect(host.closed).toEqual([]);
+    const events = await db.collection('events').get();
+    expect(events.docs.map((d) => [d.get('type'), d.get('worldId')])).toEqual([['SessionExpired', 'a']]);
+  });
+
+  // The unexplained belong to the pass, never to a world (reconcile.ts):
+  // filed once, through `SystemEvents`, whatever worlds happen to be open.
+  it('files what the sweep found once, with no world', async () => {
+    await seedWorld('a', { state: 'IDLE' });
+    await seedWorld('b', { state: 'IDLE' });
+    host.sweep = { destroyed: ['ip-ghost'], stranded: [], errors: [] };
+
+    await runWatchdog(deps());
+
+    const events = await db.collection('events').get();
+    expect(events.size).toBe(1);
+    expect(events.docs[0].get('worldId')).toBeNull();
+  });
+
+  // The contract task 12 exists to honour, with a real destruction on each
+  // side: `own` must be this world's outcomes and no other's, or the same
+  // stuck session would be filed twice — once per world it was handed to.
+  it('destroys a stuck session in each of two worlds, filed once and to its own world', async () => {
+    await seedWorld('a', {
+      state: 'STOPPING',
+      sessionId: 's-a',
+      stateSince: minutesAgo(11),
+      instanceId: 'i-a',
+    });
+    await seedWorld('b', {
+      state: 'STOPPING',
+      sessionId: 's-b',
+      stateSince: minutesAgo(11),
+      instanceId: 'i-b',
+    });
+    host.hosted = [hosted('s-a'), hosted('s-b')];
+
+    await runWatchdog(deps());
+
+    expect(host.closed.sort()).toEqual(['s-a', 's-b']);
+    const events = await db.collection('events').get();
+    expect(
+      events.docs.map((d) => [d.get('type'), d.get('sessionId'), d.get('worldId')]).sort(),
+    ).toEqual([
+      ['SessionStopped', 's-a', 'a'],
+      ['SessionStopped', 's-b', 'b'],
+    ]);
+    expect((await db.doc('worlds/a/server/current').get()).get('state')).toBe('IDLE');
+    expect((await db.doc('worlds/b/server/current').get()).get('state')).toBe('IDLE');
+  });
+
+  // The sentinel path (no world explains the machine) counted once whatever
+  // the number of open worlds — previously only exercised with zero worlds,
+  // where the loop over `view.worlds` never ran at all.
+  it('destroys a machine no world explains once, whatever worlds are open', async () => {
+    await seedWorld('a', { state: 'IDLE' });
+    await seedWorld('b', { state: 'IDLE' });
+    host.hosted = [hosted('ghost')];
+
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual(['ghost']);
+    const events = await db.collection('events').get();
+    expect(events.docs.map((d) => [d.get('type'), d.get('sessionId'), d.get('worldId')])).toEqual(
+      [['SessionReclaimed', 'ghost', null]],
+    );
   });
 });
 

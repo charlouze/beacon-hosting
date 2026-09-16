@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — les mondes, 1440 px</title>
+<link rel="stylesheet" href="worlds.css">
+
+<div class="note">
+  <h1>Beacon · tour des mondes · 2026-09-15 · écran large, 1440 px</h1>
+  <p>Le monde visuel ne rejoue pas : <b>The Departure Board</b>, tel que <code>apps/web/src/styles.css</code>
+  le code aujourd'hui. Ce tour dessine ce que la révision du spec du 2026-09-15 ajoute au-dessus de la
+  frontière Firestore : la liste de mes mondes, le monde sous <code>/worlds/{worldId}</code> avec ce qu'il
+  possède hors de toute session, et <code>/join/{worldId}/{code}</code>.</p>
+  <p><b>Une seule question ouverte, et elle est de composition</b> : comment trois ou quatre mondes tiennent
+  sur un tableau de gare. Trois structures sont construites ci-dessous, à l'échelle, avec les mêmes
+  trois mondes. Le reste hérite de l'écran existant et ne se choisit pas, il se relit.</p>
+  <p>Rien n'est inventé : chaque valeur affichée se lit dans <code>worlds/{worldId}</code>, son
+  <code>server/current</code>, <code>players/{uid}</code> ou <code>config/settings</code>. Les données sont
+  des exemples. Le cumul du mois n'y est pas : la face client ne lit pas encore <code>events</code>, et
+  il arrive avec la tranche 8 — décidé ce jour.</p>
+</div>
+
+<div class="stage">
+
+  <div class="label"><span class="roll">The roll</span> A · Your worlds — <b>une colonne par monde</b></div>
+  <p class="ask">Le bandeau à trois colonnes de « comment rejoindre », agrandi à la page : chaque monde
+  est une colonne entre deux filets verticaux, son nom en tête, sa mesure en pied — le décompte s'il
+  tourne, la fourchette s'il démarre, rien s'il dort. Trois ou quatre mondes tiennent ; le §1 n'en
+  promet pas plus. Le bandeau dit l'état de l'ensemble avant qu'on lise une colonne.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon<span class="sep"> · </span><span>Your worlds</span></div>
+        <div class="status"><span class="dot"></span>1 in service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="cols-worlds">
+        <a href="#">
+          <div class="status"><span class="dot"></span>In service</div>
+          <div class="wname">Les bras cassés</div>
+          <div class="wgame">Enshrouded · 3 players</div>
+          <div class="wfig">
+            <span class="k">Time left</span>
+            <div class="clock tabular" data-clock="10032">2:47<span class="sec">:12</span></div>
+            <div class="below">
+              <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+            </div>
+          </div>
+        </a>
+        <a href="#">
+          <div class="status" data-tone="off"><span class="dot"></span>Preparing</div>
+          <div class="wname">Le camp du lac</div>
+          <div class="wgame">Enshrouded · 4 players</div>
+          <div class="wfig">
+            <span class="k">Ready between</span>
+            <div class="clock range tabular">20:19<span class="to"> – </span>20:22</div>
+            <div class="below">
+              <div><span class="k">Closes at</span><div class="v">00:19</div></div>
+            </div>
+          </div>
+        </a>
+        <a href="#">
+          <div class="status" data-tone="off"><span class="dot"></span>Out of service</div>
+          <div class="wname">Vallée basse</div>
+          <div class="wgame">Sunkenland · 3 players</div>
+          <div class="wfig">
+            <span class="k">Next session</span>
+            <div class="none"><b>4 h</b> once opened.</div>
+          </div>
+        </a>
+      </div>
+
+      <div class="quiet">
+        <span></span>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label"><span class="roll">The roll</span> B · Your worlds — <b>l'index des noms</b></div>
+  <p class="ask">Le nom de chaque monde à l'échelle d'affichage, une bande par monde entre deux filets
+  fins, l'état et l'heure à droite comme dans le bandeau d'un écran en service. C'est le monde qui
+  mène, pas la mesure : on lit d'abord où on joue, puis si ça tourne.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon<span class="sep"> · </span><span>Your worlds</span></div>
+        <div class="status"><span class="dot"></span>1 in service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="index-worlds">
+        <a href="#">
+          <div>
+            <div class="big">Les bras cassés</div>
+            <div class="under"><span class="status"><span class="dot"></span>In service</span>Enshrouded · 3 players</div>
+          </div>
+          <div class="right">
+            <div><span class="k">Time left</span><div class="v tabular" data-clock="10032">2:47<span class="sec">:12</span></div></div>
+            <div><span class="k">Closes at</span><div class="v tabular">00:14</div></div>
+          </div>
+        </a>
+        <a href="#">
+          <div>
+            <div class="big">Le camp du lac</div>
+            <div class="under"><span class="status" data-tone="off"><span class="dot"></span>Preparing</span>Enshrouded · 4 players</div>
+          </div>
+          <div class="right">
+            <div><span class="k">Ready between</span><div class="v tabular">20:19 – 20:22</div></div>
+            <div><span class="k">Closes at</span><div class="v tabular">00:19</div></div>
+          </div>
+        </a>
+        <a href="#">
+          <div>
+            <div class="big">Vallée basse</div>
+            <div class="under"><span class="status" data-tone="off"><span class="dot"></span>Out of service</span>Sunkenland · 3 players</div>
+          </div>
+          <div class="right">
+            <div><span class="k">Next session</span><div class="v mute">4 h once opened</div></div>
+          </div>
+        </a>
+      </div>
+
+      <div class="quiet">
+        <span></span>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label"><span class="roll">The roll</span> C · Your worlds — <b>les lignes du tableau des départs</b></div>
+  <p class="ask">La forme la plus proche de la gare : une ligne par monde, des colonnes fixes, une tête en
+  capitales espacées, des chiffres qui s'alignent. Elle porte le plus d'information au centimètre, et
+  c'est aussi la seule des trois qui ressemble à une table — ce que la contrainte n° 2 ne refuse pas,
+  tant qu'aucune pastille ni identifiant n'y prend le devant.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon<span class="sep"> · </span><span>Your worlds</span></div>
+        <div class="status"><span class="dot"></span>1 in service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="rows-worlds">
+        <div class="row head">
+          <span class="k">World</span><span class="k">Game</span><span class="k">Status</span>
+          <span class="k">Closes at</span><span class="k right">Time left</span>
+        </div>
+        <a class="row" href="#">
+          <div class="n">Les bras cassés</div>
+          <div class="g">Enshrouded</div>
+          <div class="s"><span class="dot"></span>In service</div>
+          <div class="t tabular">00:14</div>
+          <div class="t tabular right" data-clock="10032">2:47<span class="sec">:12</span></div>
+        </a>
+        <a class="row" href="#">
+          <div class="n">Le camp du lac</div>
+          <div class="g">Enshrouded</div>
+          <div class="s" data-tone="off"><span class="dot"></span>Preparing</div>
+          <div class="t tabular">00:19</div>
+          <div class="t tabular right">20:19<span class="to"> – </span>20:22</div>
+        </a>
+        <a class="row" href="#">
+          <div class="n">Vallée basse</div>
+          <div class="g">Sunkenland</div>
+          <div class="s" data-tone="off"><span class="dot"></span>Out of service</div>
+          <div class="t mute">—</div>
+          <div class="t mute right">4 h once opened</div>
+        </a>
+      </div>
+
+      <div class="quiet">
+        <span></span>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">D · Your worlds — <b>aucun monde</b></div>
+  <p class="ask">Un membre sans monde, ce que le lotissement demande de traiter. La liste vide n'est pas une
+  panne : c'est la phrase qui dit de demander un lien, et rien d'autre à faire. Même forme que l'écran
+  hors service — un titre, une phrase qui rend la soirée.</p>
+  <div class="fit"><div class="art">
+    <div class="board short">
+      <div class="lede">
+        <div class="wordmark">Beacon<span class="sep"> · </span><span>Your worlds</span></div>
+        <div class="status" data-tone="off"><span class="dot"></span>No world yet</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="mid">
+        <div class="empty solo">
+          <div class="big">You’re not on any board yet.</div>
+          <div class="sub">Ask whoever you play with for their invite link. Opening it while you’re signed
+          in puts you on their world — nothing to fill in.</div>
+        </div>
+      </div>
+
+      <div class="quiet">
+        <span></span>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">E · Le monde, hors service — <b>l'écran d'aujourd'hui, moins le choix du jeu</b></div>
+  <p class="ask">Le jeu est figé à l'adoption et lu par la session (§4) : le sélecteur disparaît du pied,
+  et le bouton n'a plus rien à choisir. Le nom du monde entre dans le bandeau à la place du jeu ;
+  <b>Beacon</b> y devient le retour vers la liste. Sous l'état, une bande à trois colonnes porte ce que le
+  monde possède hors de toute session : son nom, son lien, ses joueurs. Elle ne bouge pas d'un état
+  à l'autre.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark"><a href="#">Beacon</a><span class="sep"> · </span><span>Les bras cassés</span></div>
+        <div class="status" data-tone="off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="mid">
+        <div class="empty">
+          <div>
+            <div class="big">Nothing is running.</div>
+            <div class="sub">It closed itself, which is the whole idea.</div>
+          </div>
+          <div class="plate">
+            <div class="line"><span class="k">Next session</span><span class="v">4 h · until 01:27</span></div>
+            <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="money"></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn xl">Open the service</div></div>
+          <div class="hint">We’ll tell you the exact time once it’s on its way.</div>
+        </div>
+      </div>
+
+      <div class="rule-thin" style="margin-top:30px"></div>
+      <div class="wband">
+        <div class="join-cols">
+          <div>
+            <div class="head"><span class="k">Name</span><button class="small" type="button">Rename</button></div>
+            <div class="v">Les bras cassés</div>
+            <div class="sub">Enshrouded. The server announces itself under this name.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Invite link</span><button class="copy" type="button" data-copy="https://beacon.charlouze.com/join/les-bras-casses/7f3a9c2e">Copy</button><button class="small" type="button">New link</button></div>
+            <div class="v link">beacon.charlouze.com/join/les-bras-casses/<span class="code">7f3a9c2e</span></div>
+            <div class="sub">Whoever opens it while signed in becomes a player. A new link puts this one out of use.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Players</span><button class="small" type="button">Leave this world</button></div>
+            <div class="count">3 <span>including you</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiet">
+        <a href="#">Your worlds</a>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">F · Le monde, en service — <b>la même bande sous le décompte</b></div>
+  <p class="ask">Rien ne change au-dessus du pied : le décompte, l'heure, le point de jonction, le coût et
+  les deux actions sont ceux de la tranche 5. La bande du monde vient après, plus bas que tout ce qui
+  concerne la soirée en cours — à 23 h 30 en alt-tab, on ne renomme pas un monde.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark"><a href="#">Beacon</a><span class="sep"> · </span><span>Les bras cassés</span></div>
+        <div class="status"><span class="dot"></span>In service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div>
+          <span class="k">Time left</span>
+          <div class="clock tabular" data-clock="10032">2:47<span class="sec">:12</span></div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v tabular">00:14</div></div>
+          <div><span class="k">Opened at</span><div class="v sm tabular">20:14</div></div>
+        </div>
+      </div>
+
+      <div class="rule-thin"></div>
+      <div class="mid">
+        <div>
+          <div class="blocklabel"><span class="k">How to join</span></div>
+          <div class="join-cols">
+            <div>
+              <div class="head"><span class="k">Address</span><button class="copy" type="button" data-copy="les-bras-casses.beacon.charlouze.com:15637">Copy</button></div>
+              <div class="v host">les-bras-casses.beacon.charlouze.com</div>
+            </div>
+            <div>
+              <div class="head"><span class="k">Raw ip, if that fails</span><button class="copy" type="button" data-copy="51.15.203.77:15637">Copy</button></div>
+              <div class="v">51.15.203.77</div>
+            </div>
+            <div>
+              <span class="k">Port</span>
+              <div class="v plain tabular">15637</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule-thin"></div>
+      <div class="foot">
+        <div class="money">
+          <div><span class="k">This session</span><div class="v tabular">€0.17</div></div>
+        </div>
+        <div class="btncol">
+          <div class="call"><span class="k">Extension call</span><span class="at tabular">23:44</span><span class="said">30 minutes before closing</span></div>
+          <div class="acts"><div class="btn xl off">+ 1 hour</div><div class="btn ghost">Close</div></div>
+        </div>
+      </div>
+
+      <div class="rule-thin" style="margin-top:30px"></div>
+      <div class="wband">
+        <div class="join-cols">
+          <div>
+            <div class="head"><span class="k">Name</span><button class="small" type="button">Rename</button></div>
+            <div class="v">Les bras cassés</div>
+            <div class="sub">Enshrouded. The server announces itself under this name.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Invite link</span><button class="copy" type="button" data-copy="https://beacon.charlouze.com/join/les-bras-casses/7f3a9c2e">Copy</button><button class="small" type="button">New link</button></div>
+            <div class="v link">beacon.charlouze.com/join/les-bras-casses/<span class="code">7f3a9c2e</span></div>
+            <div class="sub">Whoever opens it while signed in becomes a player. A new link puts this one out of use.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Players</span><button class="small" type="button">Leave this world</button></div>
+            <div class="count">3 <span>including you</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quiet">
+        <a href="#">Your worlds</a>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">G · Le monde — <b>renommer, sur place</b></div>
+  <p class="ask">Le nom s'édite là où il s'affiche : un champ à la place de la valeur, deux petits boutons,
+  la borne du domaine en clair. Ni page, ni fenêtre — c'est un réglage de trois secondes, et la
+  contrainte n° 5 veut qu'il reste sous l'état. Seule la bande est montrée ; le reste de l'écran est
+  celui de E ou F.</p>
+  <div class="fit"><div class="art">
+    <div class="board short" style="min-height:0">
+      <div class="rule-thin" style="margin-top:0"></div>
+      <div class="wband">
+        <div class="join-cols">
+          <div>
+            <div class="head"><span class="k">Name</span></div>
+            <input type="text" value="Les bras cassés" aria-label="Name">
+            <div class="row"><button class="small fill" type="button">Save</button><button class="small" type="button">Cancel</button></div>
+            <div class="sub">1 to 64 characters. Enshrouded shows it as the server name from the next start.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Invite link</span><button class="copy" type="button">Copy</button><button class="small" type="button">New link</button></div>
+            <div class="v link">beacon.charlouze.com/join/les-bras-casses/<span class="code">7f3a9c2e</span></div>
+            <div class="sub">Whoever opens it while signed in becomes a player. A new link puts this one out of use.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Players</span><button class="small" type="button">Leave this world</button></div>
+            <div class="count">3 <span>including you</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="quiet">
+        <a href="#">Your worlds</a>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">H · Le monde — <b>les deux gestes qui demandent confirmation</b></div>
+  <p class="ask">Un nouveau lien met l'ancien hors d'usage, celui que quelqu'un a collé sur Discord ; quitter
+  demande un lien pour revenir. Les deux se confirment sur place, dans leur colonne, avec la phrase qui dit
+  ce qui va se passer — jamais dans une fenêtre. Un seul des deux est ouvert à la fois ; ils sont
+  montrés ensemble pour la lecture.</p>
+  <div class="fit"><div class="art">
+    <div class="board short" style="min-height:0">
+      <div class="rule-thin" style="margin-top:0"></div>
+      <div class="wband">
+        <div class="join-cols">
+          <div>
+            <div class="head"><span class="k">Name</span><button class="small" type="button">Rename</button></div>
+            <div class="v">Les bras cassés</div>
+            <div class="sub">Enshrouded. The server announces itself under this name.</div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Invite link</span></div>
+            <div class="v link">beacon.charlouze.com/join/les-bras-casses/<span class="code">7f3a9c2e</span></div>
+            <div class="sub">This link stops working the moment a new one exists — including the copy on Discord. Make a new one?</div>
+            <div class="row"><button class="small fill" type="button">New link</button><button class="small" type="button">Keep this one</button></div>
+          </div>
+          <div>
+            <div class="head"><span class="k">Players</span></div>
+            <div class="count">3 <span>including you</span></div>
+            <div class="sub">You’ll need someone’s link to come back. The world stays, and so do its saves.</div>
+            <div class="row"><button class="small danger" type="button">Leave</button><button class="small" type="button">Stay</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="quiet">
+        <a href="#">Your worlds</a>
+        <button type="button">Sign out</button>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">I · <code>/join/{worldId}/{code}</code> — <b>on entre, puis on est redirigé</b></div>
+  <p class="ask">Décidé ce jour : ouvrir le lien fait entrer. Un premier entrant ne peut rien lire du monde
+  avant d'y être (§5), donc cette page ne le nomme pas ; elle dit ce qu'elle fait et disparaît vers le
+  monde dès que la règle a dit oui. Rien ne bouge — la seule animation autorisée est une seconde qui
+  tombe, et il n'y en a pas ici. Un visiteur déconnecté passe d'abord par la porte de la tranche 5, et
+  revient ici.</p>
+  <div class="fit"><div class="art">
+    <div class="board short">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status" data-tone="off"><span class="dot"></span>Joining</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="mid">
+        <div class="release joining">
+          <div class="big">Taking you in.</div>
+          <div class="sub">This link puts you among the players of a world. You’ll be on its board in a
+          moment, and you can leave it from there whenever you like.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">J · <code>/join</code> — <b>le lien ne vaut plus</b></div>
+  <p class="ask">§8 : « la règle refuse la création de <code>players/{uid}</code> ; l'écran dit que le lien
+  ne vaut plus et de demander le nouveau ». La règle ne distingue pas un code remplacé d'un code faux, et
+  l'écran ne le prétend pas. Une porte de sortie : la liste.</p>
+  <div class="fit"><div class="art">
+    <div class="board short">
+      <div class="lede">
+        <div class="wordmark">Beacon</div>
+        <div class="status" data-tone="warn"><span class="dot"></span>Link not valid</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="mid">
+        <div class="empty solo">
+          <div class="big sm">This link doesn’t open anything any more.</div>
+          <div class="sub">It was replaced by a newer one, or it never was right. Ask whoever plays there for
+          the link they have now — each new link puts the old one out of use.</div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="money"></div>
+        <div class="btncol">
+          <div class="acts"><a class="btn ghost" href="#">Your worlds</a></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+</div>
+
+<script>
+  function fit() {
+    document.querySelectorAll('.fit').forEach(box => {
+      const art = box.querySelector('.art');
+      const w = art.classList.contains('phone') ? 390 : 1440;
+      const s = Math.min(1, box.clientWidth / w);
+      art.style.transform = 'scale(' + s + ')';
+      box.style.height = (art.offsetHeight * s) + 'px';
+    });
+  }
+  addEventListener('resize', fit);
+  addEventListener('load', fit);
+  fit();
+
+  // The falling second is the only motion on the page, and only where something falls.
+  document.querySelectorAll('[data-clock]').forEach(el => {
+    let left = Number(el.dataset.clock);
+    setInterval(() => {
+      left = left > 0 ? left - 1 : 0;
+      const h = Math.floor(left / 3600);
+      const m = String(Math.floor(left % 3600 / 60)).padStart(2, '0');
+      const s = String(left % 60).padStart(2, '0');
+      el.innerHTML = h + ':' + m + '<span class="sec">:' + s + '</span>';
+    }, 1000);
+  });
+
+  // Copying is the whole point of a string nobody reads.
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.dataset.copy;
+      if (value && navigator.clipboard) navigator.clipboard.writeText(value).catch(() => {});
+      const label = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.dataset.done = '';
+      setTimeout(() => { btn.textContent = label; delete btn.dataset.done; }, 1400);
+    });
+  });
+</script>
+</html>

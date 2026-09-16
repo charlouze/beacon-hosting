@@ -1,31 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import type { Member } from '@beacon/membership-record/client';
 import type { ServerView } from '@beacon/session-record/client';
-import type { Game, SessionSettings } from '@beacon/session';
-import { gameLabel } from '../format';
+import type { SessionSettings, World } from '@beacon/session';
+import { stateLabel } from '../format';
 import { ClosingComponent } from './closing.component';
 import { InServiceComponent } from './in-service.component';
 import { NotClearedComponent } from './not-cleared.component';
 import { OutOfServiceComponent } from './out-of-service.component';
 import { PreparingComponent } from './preparing.component';
 import { SteamDeclarationComponent } from './steam-declaration.component';
-
-/**
- * What the state is called on the board, and the tone it is announced in.
- *
- * A table declared once, not a run of `@if`. The null row — a document this
- * vocabulary cannot read — is a sixth case of the same table rather than a
- * special path, and it says what happened instead of falling silent: an empty
- * board is the one thing worse than bad news.
- */
-const STATES = {
-  IDLE: { label: 'Out of service', tone: 'off' },
-  PROVISIONING: { label: 'Preparing', tone: 'off' },
-  RUNNING: { label: 'In service', tone: 'live' },
-  STOPPING: { label: 'Closing', tone: 'off' },
-  FAILED: { label: 'Not cleared', tone: 'warn' },
-  unreadable: { label: 'Unknown', tone: 'warn' },
-} as const;
+import { WorldBandComponent } from './world-band.component';
 
 /**
  * The board every state is announced on: the name, the state and its pip, the
@@ -48,7 +33,9 @@ const STATES = {
     NotClearedComponent,
     OutOfServiceComponent,
     PreparingComponent,
+    RouterLink,
     SteamDeclarationComponent,
+    WorldBandComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './session.page.html',
@@ -56,21 +43,21 @@ const STATES = {
 })
 export class SessionPage {
   readonly view = input.required<ServerView | null>();
+  readonly world = input.required<World>();
   readonly settings = input.required<SessionSettings>();
   readonly member = input.required<Member>();
 
-  readonly opened = output<Game>();
+  readonly opened = output<void>();
   readonly extended = output<void>();
   readonly closed = output<void>();
   readonly declared = output<string>();
   readonly signedOut = output<void>();
 
-  readonly state = computed(() => this.view()?.session.state ?? 'unreadable');
-  readonly announced = computed(() => STATES[this.state()]);
+  /** Relayed from the band of the world, which alone renders them. */
+  readonly renamed = output<string>();
+  readonly reinvited = output<void>();
+  readonly left = output<void>();
 
-  /** The game only once it is frozen — which is to say, once a session exists (§4). */
-  readonly game = computed(() => {
-    const game = this.view()?.session.game ?? null;
-    return game === null ? null : gameLabel(game);
-  });
+  readonly state = computed(() => this.view()?.session.state ?? 'unreadable');
+  readonly announced = computed(() => stateLabel(this.state()));
 }

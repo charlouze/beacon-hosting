@@ -3,7 +3,7 @@ import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
 import type { Expiration, Reclamation } from './reclamations.js';
-import type { WatchdogView } from './view.js';
+import type { WatchdogView, WorldView } from './view.js';
 
 export type ReclaimOutcome =
   | { readonly reclamation: Reclamation; readonly closed: true }
@@ -82,7 +82,47 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
 };
 
 /**
- * What server/current must become, once the destructions have been tried.
+ * What the sweep of the unclaimed leaves in the journal — once per pass, never
+ * once per world: these three facts carry no session, so nothing about them
+ * belongs to any one world's correction (§6). `reconcileWorld` never sees the
+ * sweep at all, which is what keeps that plural from creeping back in.
+ *
+ * Destroyed, failed and stranded are three independent facts, not a
+ * three-way choice: a sweep that destroyed one resource and was refused on
+ * the next has to say both, or the money that stopped being spent is never
+ * audited anywhere.
+ */
+export function sweepEvents(
+  sweep: UnclaimedSweep,
+  alreadyAnnounced: readonly string[],
+): DomainEvent[] {
+  const events: DomainEvent[] = [];
+
+  for (const error of sweep.errors) {
+    events.push({ type: 'CleanupFailed', sessionId: null, detail: error });
+  }
+  if (sweep.destroyed.length > 0) {
+    events.push({ type: 'SessionReclaimed', sessionId: null, detail: sweep.destroyed.join(', ') });
+  }
+  // Only what has just appeared. Nothing destroys a stranded volume, so it
+  // comes back in every sweep; §4 makes an event a fact in the past, and a
+  // fact that repeats itself every five minutes drowns the journal §11 reads.
+  const announced = new Set(alreadyAnnounced);
+  for (const detail of sweep.stranded) {
+    if (announced.has(detail)) continue;
+    events.push({ type: 'ResourceStranded', sessionId: null, detail });
+  }
+
+  return events;
+}
+
+/**
+ * What one world's server/current must become, once the destructions have
+ * been tried. §6: the watchdog reads every `server/current` in one pass and
+ * applies the table's decisions to each, separately — this is that
+ * application, called once per world, on that world's own record and
+ * session. It never sees the sweep of the unclaimed: those facts carry no
+ * session and belong to no world (see `sweepEvents`).
  *
  * It never concludes from `view.hosted` alone that a machine survives: that
  * listing predates the closes, so a session still in it may be gone. Survival
@@ -93,11 +133,26 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
  * expired can, in the same pass, also be a machine the provider already holds
  * nothing for — and only one function may decide what such a session becomes,
  * or the two can disagree about it in the same breath.
+ *
+ * `outcomes` must already be this world's own: every entry the loop below
+ * walks becomes a `CleanupFailed` or a `CLOSED[...]` event, with no filter by
+ * session or world, so an outcome that belongs elsewhere is filed here too,
+ * not merely ignored the way "ignores an outcome that belongs to another
+ * session" (reconcile.spec.ts) might suggest — that test only shows the
+ * *state* transition is skipped for a foreign session, not the event. The
+ * caller (the watchdog's full pass, task 12) is the one place that knows
+ * which sessions are this world's, and must filter `outcomes` down to those
+ * before calling — typically by `sessionId` — for every one of its per-world
+ * calls; otherwise the same destruction is filed once per world it is passed
+ * to. `reclamations()` returns one `destroy` list for the whole pass,
+ * including the world-less `no-open-session` outcomes for unexplained
+ * machines: those belong to no world and `reconcileWorld` must never receive
+ * them — the caller files them once, for the pass, not per world.
  */
-export function reconcile(
+export function reconcileWorld(
   view: WatchdogView,
+  world: WorldView,
   outcomes: readonly ReclaimOutcome[],
-  sweep: UnclaimedSweep,
   expired: readonly Expiration[],
 ): StateCorrection {
   const events: DomainEvent[] = [];
@@ -107,9 +162,12 @@ export function reconcile(
   // Session carries no fields to cost, and `estimatedCost` throws rather than
   // guess — reachable now that a pass can follow a teardown seconds later,
   // record/current already IDLE and reserved facts already cleared.
+  //
+  // Read from this world's own session, never another's: the whole trap of
+  // the plural is a stop billed on the wrong evening.
   const costEuros =
-    view.session !== null && view.session.state !== 'IDLE'
-      ? view.session.estimatedCost(clock, view.settings)
+    world.session !== null && world.session.state !== 'IDLE'
+      ? world.session.estimatedCost(clock, view.settings)
       : 0;
 
   for (const outcome of outcomes) {
@@ -122,26 +180,7 @@ export function reconcile(
     events.push(CLOSED[outcome.reclamation.reason].event(outcome.reclamation, costEuros));
   }
 
-  // Destroyed, failed and stranded are three independent facts, not a
-  // three-way choice: a sweep that destroyed one resource and was refused on
-  // the next has to say both, or the money that stopped being spent is never
-  // audited anywhere.
-  for (const error of sweep.errors) {
-    events.push({ type: 'CleanupFailed', sessionId: null, detail: error });
-  }
-  if (sweep.destroyed.length > 0) {
-    events.push({ type: 'SessionReclaimed', sessionId: null, detail: sweep.destroyed.join(', ') });
-  }
-  // Only what has just appeared. Nothing destroys a stranded volume, so it
-  // comes back in every sweep; §4 makes an event a fact in the past, and a
-  // fact that repeats itself every five minutes drowns the journal §11 reads.
-  const alreadyAnnounced = new Set(view.alreadyAnnounced);
-  for (const detail of sweep.stranded) {
-    if (alreadyAnnounced.has(detail)) continue;
-    events.push({ type: 'ResourceStranded', sessionId: null, detail });
-  }
-
-  const record = view.server;
+  const record = world.server;
   if (record === null) {
     return { ...NOTHING, closeIntents, events };
   }
@@ -176,8 +215,7 @@ export function reconcile(
     };
   }
 
-  const stillHeld =
-    record.sessionId !== null && view.hosted.some((s) => s.sessionId === record.sessionId);
+  const stillHeld = isStillHeld(view, record.sessionId);
 
   if (record.state === 'FAILED' && !stillHeld) {
     // Reachable only for a FAILED record naming no session: with one, the
@@ -241,8 +279,12 @@ export function reconcile(
   // record already being corrected says what it becomes. This is the branch
   // where the session is alive and unremarkable — the only one where a forged
   // deadline is worth bringing back.
-  const clamped = clamping(view);
+  const clamped = clamping(view, world);
   return { ...NOTHING, ...clamped, closeIntents, events: [...events, ...clamped.events] };
+}
+
+function isStillHeld(view: WatchdogView, sessionId: SessionId | null): boolean {
+  return sessionId !== null && view.hosted.some((s) => s.sessionId === sessionId);
 }
 
 /**
@@ -262,8 +304,11 @@ const closing = (closeIntents: readonly SessionId[], sessionId: SessionId | null
  * bound, and the gap is audited. Nothing shows it — §4 has the interface bound
  * on read, so the countdown never walks backwards under the players' eyes.
  */
-function clamping(view: WatchdogView): { deadline: Deadline | null; events: DomainEvent[] } {
-  const session = view.session;
+function clamping(
+  view: WatchdogView,
+  world: WorldView,
+): { deadline: Deadline | null; events: DomainEvent[] } {
+  const session = world.session;
   if (session === null || session.sessionId === null || session.state === 'IDLE') {
     return { deadline: null, events: [] };
   }

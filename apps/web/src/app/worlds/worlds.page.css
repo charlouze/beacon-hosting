@@ -1,0 +1,23 @@
+/* The band is the link, so the band is what answers the pointer — and it is
+   the name that underlines, not the strip that lights up. A whole row changing
+   surface on hover would be a card in disguise, which the direction refuses. */
+[data-field='world']:hover [data-field='world-name'] {
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 8px;
+}
+
+@media (max-width: 640px) {
+  /* Two lines, because a wordmark and the name of the page do not share
+     342 px at this tracking. The separator then has nothing left to separate,
+     and left in place it heads the second line alone. */
+  .wordmark span {
+    display: block;
+    margin-top: 6px;
+    letter-spacing: 0.12em;
+  }
+
+  .wordmark .sep {
+    display: none;
+  }
+}

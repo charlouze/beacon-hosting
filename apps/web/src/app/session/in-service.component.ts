@@ -175,6 +175,6 @@ export class InServiceComponent {
   readonly callSaid = computed(() =>
     this.canExtend()
       ? 'until it closes'
-      : `${Math.round(this.settings().extensionWindowMs / 60_000)} minutes before closing`,
+      : `${Math.round(this.settings().extensionWindowMs / 60_000)} min before closing`,
   );
 }

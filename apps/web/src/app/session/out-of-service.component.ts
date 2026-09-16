@@ -1,17 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import { forecastCost, GAMES, type Game, type SessionSettings } from '@beacon/session';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { forecastCost, type SessionSettings } from '@beacon/session';
 import type { ServerView } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
-import { euroLabel, gameLabel, hourLabel } from '../format';
+import { euroLabel, hourLabel } from '../format';
 
 /**
  * The screen most often seen, and the one a refused start comes back to. §8:
  * a creation the provider refuses is cleaned up and returns to `IDLE` with
  * `lastError`, the button clickable at once. That is not a sixth state — it is
  * this screen with a warning, and one word different on the button.
- *
- * The game is recorded, not browsed: the evening was decided on Discord, and
- * the screen takes no part in that choice. Picking one opens nothing.
  */
 @Component({
   selector: 'beacon-out-of-service',
@@ -55,28 +52,8 @@ import { euroLabel, gameLabel, hourLabel } from '../format';
     <div class="foot">
       <div class="money"></div>
       <div class="btncol">
-        <div class="pick">
-          <span class="k">Game</span>
-          <div class="opts" role="group" aria-label="Game for the next session">
-            @for (game of games; track game) {
-              <button
-                type="button"
-                [attr.data-game]="game"
-                [attr.aria-pressed]="game === chosen()"
-                (click)="chosen.set(game)"
-              >
-                {{ label(game) }}
-              </button>
-            }
-          </div>
-        </div>
         <div class="acts">
-          <button
-            type="button"
-            class="btn xl"
-            data-action="open"
-            (click)="opened.emit(chosen())"
-          >
+          <button type="button" class="btn xl" data-action="open" (click)="opened.emit()">
             {{ refusal() === null ? 'Open the service' : 'Try again' }}
           </button>
         </div>
@@ -90,19 +67,9 @@ export class OutOfServiceComponent {
   readonly view = input.required<ServerView>();
   readonly settings = input.required<SessionSettings>();
 
-  readonly opened = output<Game>();
+  readonly opened = output<void>();
 
   private readonly clock = inject(CLOCK);
-
-  readonly games = GAMES;
-  /**
-   * One is recorded from the start, so the button is never shut on a screen
-   * whose whole job is to be pressable. Which one is arbitrary — nothing on an
-   * idle document remembers the last evening — so it is the first, and one
-   * press changes it.
-   */
-  readonly chosen = signal<Game>(GAMES[0]);
-  readonly label = gameLabel;
 
   readonly refusal = computed(() => this.view().facts.lastError);
 

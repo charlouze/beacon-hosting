@@ -47,3 +47,20 @@ export function countdownTo(
     return splitCountdown(at.getTime() - beat.now().getTime());
   });
 }
+
+/**
+ * The same beat read by a list rather than by one band. A screen showing
+ * several worlds has as many seconds falling as it has worlds in service, and
+ * how many is only known once the list arrives — too late for a call to
+ * `countdownTo`, which has to reach the injector. One call, one array, and the
+ * seconds still fall together.
+ */
+export function countdownsTo(
+  deadlines: Signal<readonly (Date | null)[]>,
+): Signal<readonly ({ hoursMinutes: string; seconds: string } | null)[]> {
+  const beat = inject(Beat);
+  return computed(() => {
+    const now = beat.now().getTime();
+    return deadlines().map((at) => (at === null ? null : splitCountdown(at.getTime() - now)));
+  });
+}

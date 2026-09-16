@@ -1,0 +1,324 @@
+/* The world of apps/web/src/styles.css, copied so these boards open without a
+   build. What is new to this tour sits under "the worlds", "the world band"
+   and "the join page"; everything above it is the incumbent, and a value that
+   differs from styles.css is a mistake here, not a decision. */
+:root {
+  --paper: #faf8f3;
+  --ink: #16181b;
+  --red: #d8232a;
+  --blue: #12457f;
+  --rule: rgba(22, 24, 27, 0.18);
+  --mute: #6b6f75;
+  --quiet: #b6b2a8;
+  --edge: #d3cfc4;
+  --edge-live: #a8a49a;
+  --off-edge: #c9c5ba;
+  --off-ink: #b3aea3;
+  --rule-heavy: 4px;
+  --rule-mid: 3px;
+  --rule-thin: 1px;
+  --display-countdown: 172px;
+  --display-window: 112px;
+  --font-ui: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #e7e4dc;
+  color: var(--ink);
+  font: 16px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  padding: 0 0 72px;
+}
+
+::selection { background: rgba(216, 35, 42, 0.2); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+input { caret-color: var(--red); }
+a { color: inherit; text-decoration: none; }
+
+/* ---- the sheet around the boards: notes, labels, scaled artboards ---- */
+.note { max-width: 900px; margin: 0 auto; padding: 28px 24px 4px; font-size: 14px; color: #4d4a44; }
+.note h1 { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 8px; color: var(--ink); }
+.note h2 { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; margin: 22px 0 8px; color: var(--ink); }
+.note p, .note li { max-width: 70ch; }
+.note p + p { margin-top: 10px; }
+.note ul { margin-top: 8px; padding-left: 18px; }
+.note li + li { margin-top: 6px; }
+.note code { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+.stage { max-width: 1180px; margin: 0 auto; padding: 20px 24px; }
+.stage.narrow { max-width: 900px; }
+.label { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #6b6f75; margin: 36px 0 10px; }
+.label b { color: var(--ink); font-weight: 700; }
+.label .roll { color: var(--red); margin-right: 10px; }
+.ask { font-size: 13px; color: #4d4a44; max-width: 70ch; margin: -2px 0 12px; }
+.ask code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+.pair { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.pair > .fit { flex: 0 0 390px; }
+
+.fit { position: relative; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 18px 44px rgba(0, 0, 0, 0.16); }
+.art { width: 1440px; transform-origin: 0 0; background: var(--paper); }
+.art.phone { width: 390px; }
+
+/* ---- the three rules ---- */
+.rule { border-top: var(--rule-heavy) solid var(--ink); }
+.rule-mid { border-top: var(--rule-mid) solid var(--ink); }
+.rule-thin { border-top: var(--rule-thin) solid var(--rule); }
+
+/* ---- the two voices ---- */
+.k { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--mute); }
+.k[data-warn] { color: var(--red); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ---- the primary action ---- */
+.btn {
+  display: inline-block; padding: 22px 40px; border: 2px solid var(--ink); background: var(--ink); color: var(--paper);
+  font: 700 14px/1 var(--font-ui); letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; text-align: center;
+}
+.btn.xl { padding: 26px 54px; font-size: 15px; }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn:disabled, .btn.off { border-color: var(--off-edge); color: var(--off-ink); background: transparent; cursor: default; }
+
+/* ---- the board ---- */
+.board { display: flex; flex-direction: column; min-height: 820px; max-width: 1440px; margin: 0 auto; padding: 40px 64px 36px; }
+.board.short { min-height: 560px; }
+.lede { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.wordmark { font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; }
+.wordmark span { font-weight: 500; color: var(--mute); }
+.status { display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; white-space: nowrap; }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+.status[data-tone='off'] { color: var(--mute); }
+.status[data-tone='off'] .dot { background: var(--quiet); }
+.status[data-tone='warn'] { color: var(--red); }
+.board > .rule { margin-top: 22px; }
+.mid { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+.hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; padding: 40px 0 44px; }
+.clock { font: 800 var(--display-countdown) / 0.82 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.045em; margin-top: 16px; }
+.clock .sec { color: var(--red); }
+.clock.range { font-size: var(--display-window); letter-spacing: -0.035em; }
+.clock.range .to { color: var(--mute); }
+.hero .right { text-align: right; display: flex; flex-direction: column; gap: 22px; padding-bottom: 12px; }
+.hero .v { font: 700 34px/1 var(--font-ui); font-variant-numeric: tabular-nums; margin-top: 8px; }
+.hero .v.sm { font-size: 19px; font-weight: 600; }
+.blocklabel { padding: 20px 0 0; }
+
+.foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; padding-top: 26px; margin-top: auto; }
+.money { display: flex; gap: 56px; }
+.money .v { font: 700 26px/1 var(--font-ui); font-variant-numeric: tabular-nums; margin-top: 10px; }
+.btncol { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.acts { display: flex; gap: 14px; align-items: flex-end; }
+.call { display: flex; align-items: baseline; gap: 18px; }
+.call .at { font: 700 22px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.call .said { font-size: 14px; color: var(--mute); }
+.hint { font-size: 13px; color: var(--mute); }
+
+.empty { padding: 52px 0 46px; display: flex; justify-content: space-between; align-items: flex-start; gap: 80px; }
+.empty.solo { display: block; }
+.big { font: 800 76px/1.02 var(--font-display); letter-spacing: -0.035em; max-width: 13ch; }
+.big.sm { font-size: 60px; max-width: 20ch; }
+.sub { margin-top: 22px; font-size: 19px; color: var(--mute); max-width: 40ch; line-height: 1.5; }
+.plate { border: var(--rule-thin) solid var(--rule); background: rgba(18, 69, 127, 0.045); padding: 26px 30px; min-width: 400px; }
+.plate .line { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding: 11px 0; }
+.plate .line + .line { border-top: var(--rule-thin) solid var(--rule); }
+.plate .v { font: 700 20px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.warn { border-top: var(--rule-mid) solid var(--red); padding: 18px 0 0; margin-top: 34px; }
+.warn .said { font-size: 20px; margin-top: 12px; max-width: 62ch; }
+.release { padding: 16px 0 40px; display: flex; justify-content: space-between; align-items: flex-start; gap: 80px; }
+.release .big { font-size: 44px; line-height: 1.08; letter-spacing: -0.025em; max-width: 16ch; }
+.release .sub { max-width: 44ch; line-height: 1.55; padding-top: 6px; margin-top: 0; }
+
+.join-cols { display: grid; grid-template-columns: 2fr 1fr 1fr; }
+.join-cols > div { padding: 20px 28px 22px; border-left: var(--rule-thin) solid var(--rule); }
+.join-cols > div:first-child { padding-left: 0; border-left: 0; }
+.join-cols .head { display: flex; align-items: center; gap: 14px; min-height: 20px; }
+.join-cols .v { font-family: var(--font-mono); font-size: 17px; margin-top: 10px; overflow-wrap: break-word; }
+.join-cols .v.plain { font-family: inherit; font-size: 18px; }
+.join-cols .v.host { color: var(--blue); font-weight: 600; }
+
+/* The small bordered control of the copy button, shared by every quiet control
+   of this tour. 11 px and not the incumbent's 10: Rename and Leave this world
+   are functional text, and 10 px is under the legibility floor — the shipped
+   Copy button should follow. */
+.copy, .small {
+  font: 600 11px/1 var(--font-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--mute);
+  border: 1px solid var(--rule); padding: 6px 8px; background: transparent; cursor: pointer;
+  transition: color 0.12s ease-out, border-color 0.12s ease-out;
+}
+.copy:hover, .small:hover { color: var(--ink); border-color: var(--ink); }
+.copy[data-done] { color: var(--red); border-color: var(--red); }
+.small.fill { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.small.danger { color: var(--red); border-color: var(--red); }
+
+/* what belongs to the person, not to the session */
+.quiet { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 28px; padding-top: 14px; border-top: var(--rule-thin) solid var(--rule); }
+.quiet a, .quiet button { border: 0; background: transparent; padding: 0; cursor: pointer; font: 600 11px/1 var(--font-ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--mute); }
+.quiet a:hover, .quiet button:hover { color: var(--ink); }
+
+/* =====================================================================
+   NEW TO THIS TOUR
+   ===================================================================== */
+
+/* ---- the worlds, structure A: one column per world, vertical rules ---- */
+.cols-worlds { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 0; }
+.cols-worlds > a { display: flex; flex-direction: column; padding: 34px 36px 34px; border-left: var(--rule-thin) solid var(--rule); min-height: 520px; }
+.cols-worlds > a:first-child { padding-left: 0; border-left: 0; }
+.cols-worlds > a:last-child { padding-right: 0; }
+.cols-worlds > a:hover .wname { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 8px; }
+.wname { font: 800 44px/1.04 var(--font-display); letter-spacing: -0.03em; margin-top: 18px; overflow-wrap: anywhere; }
+.wgame { font-size: 15px; color: var(--mute); margin-top: 12px; }
+.wfig { margin-top: auto; padding-top: 40px; }
+.wfig .clock { font-size: 64px; line-height: 0.9; margin-top: 10px; letter-spacing: -0.04em; }
+.wfig .clock.range { font-size: 44px; }
+.wfig .none { font: 700 22px/1.15 var(--font-ui); margin-top: 10px; color: var(--mute); max-width: 22ch; }
+.wfig .none b { color: var(--ink); font-weight: 700; }
+.wfig .below { margin-top: 22px; display: flex; gap: 32px; }
+.wfig .below .v { font: 700 22px/1 var(--font-ui); font-variant-numeric: tabular-nums; margin-top: 7px; }
+
+/* ---- structure B: a name index, one band per world ---- */
+.index-worlds { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.index-worlds > a { display: flex; align-items: flex-end; justify-content: space-between; gap: 60px; padding: 30px 0 34px; border-top: var(--rule-thin) solid var(--rule); }
+.index-worlds > a:first-child { border-top: 0; }
+.index-worlds .big { font-size: 72px; max-width: none; }
+.index-worlds .under { margin-top: 12px; font-size: 15px; color: var(--mute); }
+.index-worlds .under .status { display: inline-flex; margin-right: 18px; vertical-align: middle; }
+.index-worlds .right { text-align: right; display: flex; gap: 48px; flex: none; }
+.index-worlds .right .v { font: 700 34px/1 var(--font-ui); font-variant-numeric: tabular-nums; margin-top: 8px; }
+.index-worlds .right .v .sec { color: var(--red); }
+.index-worlds .right .v.sm { font-size: 19px; font-weight: 600; margin-top: 12px; }
+.index-worlds .right .v.mute { color: var(--mute); font-weight: 600; font-size: 22px; }
+
+/* ---- structure C: the departures rows ---- */
+.rows-worlds { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.rows-worlds .row { display: grid; grid-template-columns: 2.4fr 1fr 1.2fr 1fr 1.3fr; gap: 24px; align-items: baseline; padding: 34px 0; border-top: var(--rule-thin) solid var(--rule); }
+.rows-worlds .row.head { padding: 0 0 10px; border-top: 0; align-items: end; }
+.rows-worlds a.row:hover .n { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 7px; }
+.rows-worlds .n { font: 800 34px/1.05 var(--font-display); letter-spacing: -0.025em; }
+.rows-worlds .g { font-size: 17px; color: var(--mute); }
+.rows-worlds .s { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; display: flex; align-items: center; gap: 9px; }
+.rows-worlds .s .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); flex: none; }
+.rows-worlds .s[data-tone='off'] { color: var(--mute); }
+.rows-worlds .s[data-tone='off'] .dot { background: var(--quiet); }
+.rows-worlds .t { font: 700 26px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.rows-worlds .t .sec { color: var(--red); }
+.rows-worlds .t.mute { color: var(--mute); font-weight: 600; font-size: 17px; }
+.rows-worlds .t .to { color: var(--mute); }
+.rows-worlds .right { text-align: right; }
+
+/* ---- the world band: what the world owns, apart from any session ---- */
+.wband { padding: 6px 0 0; }
+.wband .join-cols { grid-template-columns: 1.2fr 1.6fr 1fr; }
+.wband .v { font-family: var(--font-ui); font-size: 22px; font-weight: 700; margin-top: 10px; }
+.wband .v.link { font-family: var(--font-mono); font-size: 15px; font-weight: 400; color: var(--ink); overflow-wrap: anywhere; }
+.wband .v.link .code { color: var(--mute); }
+.wband .sub { font-size: 14px; margin-top: 10px; max-width: 34ch; }
+.wband .head .small, .wband .head .copy { margin-left: 0; }
+.wband .head .grow { flex: 1; }
+.wband .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.wband input { font: 700 22px/1.2 var(--font-ui); color: var(--ink); background: transparent; border: 0; border-bottom: 2px solid var(--ink); padding: 4px 0 6px; width: 100%; outline: 0; }
+.wband .count { font: 700 22px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
+.wband .count span { font-weight: 500; color: var(--mute); }
+
+/* ---- the join page ---- */
+.joining .release .big { font-size: 60px; max-width: 12ch; }
+.joining .release .sub { font-size: 19px; }
+
+/* =====================================================================
+   THE PHONE, 390 px — mirrors the media block of styles.css, prefixed
+   ===================================================================== */
+.phone { --display-countdown: 84px; --display-window: 52px; }
+.phone .board { min-height: 780px; padding: 26px 24px 24px; }
+.phone .board.short { min-height: 520px; }
+.phone .btn { flex: 1; padding: 16px 8px; font-size: 12px; letter-spacing: 0.16em; }
+.phone .btn.xl { padding: 18px 8px; font-size: 12px; }
+.phone .k { font-size: 10px; letter-spacing: 0.22em; }
+.phone .wordmark { font-size: 13px; letter-spacing: 0.26em; }
+/* Two lines, because a world name and a status do not share 342 px at this
+   tracking; the separator has nothing to separate once the line breaks. */
+.phone .wordmark span { display: block; margin-top: 6px; letter-spacing: 0.12em; }
+.phone .wordmark .sep { display: none; }
+.phone .status { font-size: 11px; letter-spacing: 0.18em; }
+.phone .status .dot { width: 8px; height: 8px; }
+.phone .board > .rule { margin-top: 18px; border-top-width: var(--rule-mid); }
+.phone .hero { flex-direction: column; align-items: flex-start; gap: 16px; padding: 22px 0 18px; }
+.phone .hero .right { text-align: left; flex-direction: row; gap: 28px; padding-bottom: 0; }
+.phone .hero .v { font-size: 22px; margin-top: 6px; }
+.phone .hero .v.sm { font-size: 15px; }
+.phone .clock { line-height: 0.86; letter-spacing: -0.035em; margin-top: 10px; }
+.phone .clock.range { line-height: 1.04; letter-spacing: -0.03em; }
+.phone .clock.range .to { display: block; font-size: 0.5em; }
+.phone .foot { display: block; padding-top: 16px; }
+.phone .money { gap: 26px; padding-bottom: 16px; }
+.phone .money .v { font-size: 19px; line-height: 1.2; margin-top: 6px; }
+.phone .btncol { align-items: stretch; }
+.phone .acts { gap: 10px; }
+.phone .call { justify-content: space-between; gap: 12px; margin-top: 4px; padding-top: 12px; border-top: var(--rule-thin) solid var(--rule); }
+.phone .call .at { font-size: 17px; }
+.phone .call .said { font-size: 12px; }
+.phone .hint { margin-top: 11px; font-size: 11.5px; }
+.phone .empty { display: block; padding: 40px 0 6px; }
+.phone .big { font-size: 40px; line-height: 1.06; letter-spacing: -0.02em; max-width: none; }
+.phone .big.sm { font-size: 33px; }
+.phone .sub { margin-top: 14px; font-size: 14.5px; max-width: 34ch; }
+.phone .plate { margin-top: 18px; min-width: 0; padding: 14px 15px; }
+.phone .plate .v { font-size: 16px; }
+.phone .warn { margin-top: 22px; }
+.phone .warn .said { font-size: 15px; }
+.phone .release { display: block; padding: 18px 0 6px; }
+.phone .release .big { font-size: 26px; line-height: 1.14; letter-spacing: -0.015em; }
+.phone .release .sub { margin-top: 12px; padding-top: 0; }
+.phone .join-cols { grid-template-columns: 1fr; }
+.phone .join-cols > div { padding: 13px 0; border-left: 0; border-bottom: var(--rule-thin) solid var(--rule); }
+.phone .join-cols > div:last-child { border-bottom: 0; }
+.phone .join-cols .head { justify-content: space-between; }
+.phone .join-cols .v { font-size: 12px; line-height: 1.5; margin-top: 7px; }
+.phone .join-cols .v.plain { font-size: 15px; }
+.phone .quiet { margin-top: 20px; }
+
+/* the worlds on the phone: every structure becomes one column of bands, and
+   what differs is what leads inside the band */
+.phone .cols-worlds { grid-auto-flow: row; grid-auto-columns: auto; }
+.phone .cols-worlds > a { min-height: 0; padding: 22px 0 24px; border-left: 0; border-top: var(--rule-thin) solid var(--rule); }
+.phone .cols-worlds > a:first-child { border-top: 0; padding-top: 18px; }
+.phone .wname { font-size: 30px; margin-top: 10px; }
+.phone .wgame { font-size: 13px; margin-top: 6px; }
+.phone .wfig { padding-top: 16px; }
+.phone .wfig .clock { font-size: 44px; margin-top: 6px; }
+.phone .wfig .clock.range { font-size: 30px; }
+.phone .wfig .clock.range .to { display: inline; font-size: inherit; }
+.phone .wfig .none { font-size: 16px; }
+.phone .wfig .below { margin-top: 12px; gap: 22px; }
+.phone .wfig .below .v { font-size: 16px; }
+
+.phone .index-worlds > a { display: block; padding: 20px 0 22px; }
+.phone .index-worlds .big { font-size: 34px; }
+.phone .index-worlds .under { font-size: 13px; margin-top: 8px; }
+.phone .index-worlds .right { text-align: left; gap: 26px; margin-top: 12px; }
+.phone .index-worlds .right .v { font-size: 22px; margin-top: 6px; }
+.phone .index-worlds .right .v.sm { font-size: 14px; margin-top: 8px; }
+.phone .index-worlds .right .v.mute { font-size: 16px; }
+
+/* The rows start under the rule: the first thing under the thumb, not a
+   block floated to the middle of the screen. */
+.phone .rows-worlds { justify-content: flex-start; padding-top: 4px; }
+.phone .rows-worlds .row.head { display: none; }
+.phone .rows-worlds .row { grid-template-columns: 1fr auto; grid-template-areas: 'n s' 'g t' 'c t'; gap: 6px 18px; padding: 18px 0 20px; }
+.phone .rows-worlds .n { grid-area: n; font-size: 24px; }
+.phone .rows-worlds .g { grid-area: g; font-size: 13px; }
+.phone .rows-worlds .s { grid-area: s; font-size: 10px; letter-spacing: 0.18em; justify-self: end; }
+.phone .rows-worlds .s .dot { width: 8px; height: 8px; }
+.phone .rows-worlds .c { grid-area: c; font-size: 13px; color: var(--mute); }
+.phone .rows-worlds .t { grid-area: t; font-size: 22px; align-self: end; }
+.phone .rows-worlds .t.mute { font-size: 13px; }
+
+.phone .wband .join-cols { grid-template-columns: 1fr; }
+.phone .wband .v { font-size: 18px; margin-top: 8px; }
+.phone .wband .v.link { font-size: 12px; }
+.phone .wband .sub { font-size: 13px; }
+.phone .wband input { font-size: 18px; }
+.phone .wband .count { font-size: 18px; }
+.phone .joining .release .big { font-size: 34px; }
+.phone .joining .release .sub { font-size: 14.5px; }

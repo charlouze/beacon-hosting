@@ -1,45 +1,107 @@
 import { describe, expect, it } from 'vitest';
-import { Timestamp } from 'firebase-admin/firestore';
-import { DEFAULT_SETTINGS } from '@beacon/session';
-import { displayedFactsFrom, sessionFrom, settingsFrom } from './fields.js';
+import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
+import {
+  displayedFactsFrom,
+  idleServerDocument,
+  openingFields,
+  playerDocument,
+  serverDocPath,
+  sessionFrom,
+  settingsFrom,
+  worldDocument,
+  worldFrom,
+} from './fields.js';
 
-const document = {
-  state: 'RUNNING',
-  sessionId: 's1',
-  game: 'enshrouded',
-  startedBy: 'u1',
-  startedAt: Timestamp.fromDate(new Date('2026-09-06T20:00:00Z')),
-  deadline: Timestamp.fromDate(new Date('2026-09-07T00:00:00Z')),
-  instanceSize: 'DEV1-L',
-  joinInfo: { game: 'enshrouded', hostname: 'h', address: '1.2.3.4', port: 15637 },
-};
+const WORLD = World.from({
+  worldId: 'les-copains',
+  game: 'sunkenland',
+  name: 'Les copains',
+  inviteCode: 'c0de',
+  players: ['u1'],
+});
+const clock = { now: () => new Date('2026-09-15T20:00:00Z') };
 
-describe('sessionFrom', () => {
-  it('reads a running session without losing anything the domain uses', () => {
-    const session = sessionFrom(document);
-    expect(session?.state).toBe('RUNNING');
-    expect(session?.sessionId).toBe('s1');
-    expect(session?.game).toBe('enshrouded');
-    expect(session?.instanceSize).toBe('DEV1-L');
-    expect(session?.deadline.at).toEqual(new Date('2026-09-07T00:00:00Z'));
+describe('paths under a world', () => {
+  it('names the server document of a world', () => {
+    expect(serverDocPath('les-copains')).toBe('worlds/les-copains/server/current');
+  });
+});
+
+describe('worldFrom', () => {
+  it('reads a world with its players', () => {
+    const world = worldFrom(
+      'les-copains',
+      { game: 'sunkenland', name: 'Les copains', inviteCode: 'c0de' },
+      ['u1', 'u2'],
+    );
+    expect(world?.game).toBe('sunkenland');
+    expect(world?.hasPlayer('u2')).toBe(true);
   });
 
-  it('reads the seeded document as no session at all', () => {
-    expect(sessionFrom({ state: 'IDLE', sessionId: null })?.state).toBe('IDLE');
+  it('reads nothing this vocabulary does not recognise', () => {
+    expect(worldFrom('les-copains', { game: 'tetris', name: 'x', inviteCode: 'c' }, [])).toBeNull();
+    expect(
+      worldFrom('Les Copains', { game: 'enshrouded', name: 'x', inviteCode: 'c' }, []),
+    ).toBeNull();
+    expect(worldFrom('les-copains', { game: 'enshrouded', name: 'x' }, [])).toBeNull();
   });
 
-  // Null rather than a guess, like `toState` of tranche 1. A document this
-  // vocabulary does not recognise must not become a session with invented
-  // fields: the caller shows that it cannot read it, and the watchdog — which
-  // has its own view and never needed this one — carries on regardless.
-  it('refuses to invent a session from a document it cannot read', () => {
-    expect(sessionFrom({ state: 'RUNNING', sessionId: 's1' })).toBeNull();
-    expect(sessionFrom({ state: 'BANANA' })).toBeNull();
+  it('writes what it reads', () => {
+    const data = worldDocument(WORLD, new Date('2026-09-15T20:00:00Z'));
+    expect(worldFrom('les-copains', data, ['u1'])?.name).toBe('Les copains');
+    expect(data['players']).toBeUndefined(); // les joueurs sont une sous-collection, jamais un champ
+  });
+});
+
+describe('sessionFrom with a world', () => {
+  it('takes the game and the world id from the world, never from the document', () => {
+    const session = sessionFrom(
+      {
+        state: 'RUNNING',
+        sessionId: 's1',
+        startedAt: new Date(),
+        deadline: new Date(),
+        game: 'enshrouded',
+      },
+      WORLD,
+    );
+    expect(session?.game).toBe('sunkenland');
+    expect(session?.worldId).toBe('les-copains');
+  });
+});
+
+describe('what a client writes', () => {
+  it('opens without writing the game', () => {
+    const { session } = Session.opening(
+      { sessionId: 's1', world: WORLD, actor: { uid: 'u1', name: 'Alice' } },
+      clock,
+      DEFAULT_SETTINGS,
+    );
+    expect(Object.keys(openingFields(session, 'now'))).not.toContain('game');
   });
 
-  it('reads the join point as an opinion of the document, never as one of its own', () => {
-    expect(sessionFrom(document)?.hasJoinInfo).toBe(true);
-    expect(sessionFrom({ ...document, joinInfo: null })?.hasJoinInfo).toBe(false);
+  it('seeds a server document with every field present and null', () => {
+    const doc = idleServerDocument(new Date());
+    expect(doc['state']).toBe('IDLE');
+    for (const key of [
+      'sessionId',
+      'startedBy',
+      'startedAt',
+      'deadline',
+      'instanceId',
+      'ipId',
+      'ip',
+      'joinInfo',
+      'provisionClaimedAt',
+      'lastError',
+    ]) {
+      expect(doc).toHaveProperty(key, null);
+    }
+    expect(doc).not.toHaveProperty('game');
+  });
+
+  it('writes a player with its uid as a field', () => {
+    expect(playerDocument('u2', 'c0de', 'now')).toEqual({ uid: 'u2', code: 'c0de', joinedAt: 'now' });
   });
 });
 

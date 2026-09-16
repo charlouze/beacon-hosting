@@ -403,6 +403,7 @@ write_files:
     content: |
       BEACON_SESSION_ID=__SESSION_ID__
       BEACON_GAME=${GAME}
+      BEACON_WORLD=__WORLD_ID__
       BEACON_TOKEN=__AGENT_TOKEN__
       BEACON_ENDPOINT=__ENDPOINT__
       BEACON_S3_ENDPOINT=__S3_ENDPOINT__
@@ -465,12 +466,17 @@ runcmd:
 export const sunkenland: GameCatalogEntry = {
   game: GAME,
 
+  // Measured: the entry point above refuses to boot without exactly one
+  // `<name>~<guid>` folder already on disk (§8) — this game never lays one
+  // down on its own, so `world-depot adopt` cannot skip `--from` for it.
+  generatesWorlds: false,
+
   /**
    * Nothing to point a record at: discovery goes through the game's own
    * lobby and transport through direct UDP that NAT traverses. Measured — a
    * player joined from the list with no address announced at all.
    */
-  hostname: null,
+  hostname: (): null => null,
 
   compose: () => COMPOSE,
 
@@ -478,6 +484,7 @@ export const sunkenland: GameCatalogEntry = {
     let rendered = fill(CLOUD_INIT, '__START_SH__', indent(startSh(request.adminSteamIds)));
     rendered = fill(rendered, '__SERVERID_FILTER__', indent(SERVERID_FILTER));
     rendered = fill(rendered, '__DOCKER_COMPOSE__', indent(COMPOSE));
+    rendered = fill(rendered, '__WORLD_ID__', request.world.worldId);
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);
     rendered = fill(rendered, '__SLOT_COUNT__', String(request.slotCount));
     rendered = fill(rendered, '__SESSION_ID__', request.sessionId);

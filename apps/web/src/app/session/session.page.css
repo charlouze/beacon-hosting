@@ -4,31 +4,29 @@
   flex-direction: column;
 }
 
-/* What belongs to the person and not to the session. Quiet on purpose: the
-   state is what this page is for, and nothing here competes with it. */
-.quiet {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-top: 28px;
-  padding-top: 14px;
-  border-top: var(--rule-thin) solid var(--rule);
+/* The foot has two ends and not three stops. The Steam control was its left
+   half until the list arrived; « Your worlds » took that place, and a third
+   child under `space-between` would park a 17-digit number in ink at the exact
+   centre of a foot made of two greys. It joins Sign out on the right, which is
+   the shape every comp gives this foot. Not below 640 px, where the three wrap
+   onto their own lines and a pushed margin would only rag one of them. */
+@media (min-width: 641px) {
+  .quiet beacon-steam-declaration {
+    margin-left: auto;
+  }
 }
 
-.quiet button {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  font: 600 11px/1 var(--font-ui);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--mute);
-  transition: color 0.12s ease-out;
-}
+/* Same repli as `worlds.page.css`, duplicated rather than shared: component
+   stylesheets are encapsulated, and no global rule in `styles.css` covers a
+   two-word wordmark yet. */
+@media (max-width: 640px) {
+  .wordmark span {
+    display: block;
+    margin-top: 6px;
+    letter-spacing: 0.12em;
+  }
 
-.quiet button:hover {
-  color: var(--ink);
+  .wordmark .sep {
+    display: none;
+  }
 }

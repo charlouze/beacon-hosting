@@ -132,6 +132,11 @@ output = mustReplaceAll(
   output,
   `    env_file:\n      - ${envFile}\n`,
   `    env_file:\n      - ${envFile}\n` +
+    // Not a fourth line in `<game>.env`: a world is a session concern, not a
+    // catalogue one, so this harness poses it once here rather than in every
+    // per-game fixture — run.sh exports the same literal for its own asserts.
+    '    environment:\n' +
+    '      BEACON_WORLD: smoke\n' +
     '    # Only this harness needs to reach the fake endpoint on the host; nothing\n' +
     '    # in production resolves this name.\n' +
     '    extra_hosts:\n' +

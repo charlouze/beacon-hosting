@@ -4,6 +4,7 @@ import { readConfig } from './config.js';
 const ENV = {
   BEACON_SESSION_ID: 's1',
   BEACON_GAME: 'enshrouded',
+  BEACON_WORLD: 'les-copains',
   BEACON_TOKEN: 'a'.repeat(64),
   BEACON_ENDPOINT: 'https://europe-west1-beacon.cloudfunctions.net/agentReport',
   BEACON_S3_ENDPOINT: 'https://s3.fr-par.scw.cloud',
@@ -24,8 +25,17 @@ describe('readConfig', () => {
     const config = readConfig(ENV);
     expect(config.sessionId).toBe('s1');
     expect(config.game).toBe('enshrouded');
+    expect(config.world).toBe('les-copains');
     expect(config.saveDir).toBe('/opt/enshrouded/savegame');
     expect(config.pushIntervalMs).toBe(600_000);
+  });
+
+  // §8: a companion that listed "the world of no world" would restore
+  // nothing, let the game generate one, and push it as that world's newest
+  // save — the silent failure this variable exists to make impossible.
+  it('requires the world', () => {
+    expect(() => readConfig({ ...ENV, BEACON_WORLD: undefined })).toThrow(/BEACON_WORLD/);
+    expect(readConfig(ENV).world).toBe('les-copains');
   });
 
   // Failing here beats failing three minutes into a boot with an unreadable

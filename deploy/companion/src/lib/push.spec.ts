@@ -14,8 +14,8 @@ let deps: PushDeps;
 const deposited = () =>
   Save.of({
     createdAt: NOW,
-    game: 'enshrouded',
-    objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+    worldId: 'enshrouded',
+    objectKey: 'auto/enshrouded/2026-09-06T20-10-00Z-s1.tar.gz',
     sizeBytes: 20_000,
     origin: 'auto',
   });
@@ -72,7 +72,7 @@ beforeEach(() => {
     log: vi.fn(),
     clock: { now: () => NOW },
     config: {
-      game: 'enshrouded',
+      world: 'enshrouded',
       sessionId: 's1',
       saveDir: worldOf(20_000),
       workDir: join(root, 'work'),
@@ -87,11 +87,21 @@ describe('pushSave', () => {
     await pushSave(deps, 'auto');
     const [, draft] = (deps.store.deposit as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(draft).toEqual({
-      game: 'enshrouded',
+      worldId: 'enshrouded',
       sessionId: 's1',
       origin: 'auto',
       createdAt: NOW,
     });
+  });
+
+  // §8: a companion that deposited under the wrong world would make its push
+  // land as another world's newest save, and the next restore for either
+  // world would be wrong.
+  it('deposits under its world and its session', async () => {
+    deps = { ...deps, config: { ...deps.config, world: 'les-copains', sessionId: 's1' } };
+    await pushSave(deps, 'auto');
+    const [, draft] = (deps.store.deposit as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(draft).toMatchObject({ worldId: 'les-copains', sessionId: 's1', origin: 'auto' });
   });
 
   it('tells the control plane what it deposited', async () => {
@@ -99,7 +109,7 @@ describe('pushSave', () => {
     expect(deps.report).toHaveBeenCalledWith({
       phase: 'saved',
       save: {
-        objectKey: 'saves/enshrouded/auto/s1/2026-09-06T20-10-00Z.tar.gz',
+        objectKey: 'auto/enshrouded/2026-09-06T20-10-00Z-s1.tar.gz',
         sizeBytes: 20_000,
         origin: 'auto',
       },

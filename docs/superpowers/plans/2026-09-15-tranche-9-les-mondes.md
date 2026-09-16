@@ -318,7 +318,7 @@ dit — une racine, référencée par identifiant, jamais contenue — et pas de
 - **`World.from` copie `players`** : un tableau que l'appelant garde est un tableau que l'appelant
   peut bouger, et un objet valeur n'est pas fait pour ça — même règle que `Save.of` sur la date.
 
-- [ ] **Étape 1 : écrire les tests qui échouent**
+- [x] **Étape 1 : écrire les tests qui échouent**
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -408,18 +408,18 @@ describe('World', () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer**
+- [x] **Étape 2 : les voir échouer**
 
 Lancer : `npx nx test session`
 Attendu : ÉCHEC — `Cannot find module './world.js'`
 
-- [ ] **Étape 3 : implémenter `world.ts`, ajouter les trois événements, exporter depuis `index.ts`**
+- [x] **Étape 3 : implémenter `world.ts`, ajouter les trois événements, exporter depuis `index.ts`**
 
-- [ ] **Étape 4 : les tests passent**
+- [x] **Étape 4 : les tests passent**
 
 Lancer : `npx nx test session` → SUCCÈS, toute la suite
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session/
@@ -451,7 +451,7 @@ git commit -m "feat(session): fait entrer le monde comme seconde racine, avec se
 - **`Session.idle()` reste sans monde**, `worldId` y est `null` comme `sessionId` : l'appelant
   connaît le monde par le chemin du document.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — dans `session-aggregate.spec.ts`, en plus de
+- [x] **Étape 1 : écrire les tests qui échouent** — dans `session-aggregate.spec.ts`, en plus de
   l'adaptation mécanique des tests existants (chaque `opening({ game })` devient `opening({ world })`)
 
 ```typescript
@@ -489,16 +489,16 @@ describe('Session.opening on a world', () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test session` → ÉCHEC, `world` n'est pas une propriété de
+- [x] **Étape 2 : les voir échouer** — `npx nx test session` → ÉCHEC, `world` n'est pas une propriété de
   `OpeningRequest`
 
-- [ ] **Étape 3 : implémenter, puis adapter `OpenServerRequest` dans `ports.ts`** (le compilateur
+- [x] **Étape 3 : implémenter, puis adapter `OpenServerRequest` dans `ports.ts`** (le compilateur
   nommera les appelants — `scaleway-compute` et `apps/functions` — qui seront repris dans leurs
   tâches ; ici, seule `libs/session` doit compiler et passer)
 
-- [ ] **Étape 4 : `npx nx test session` → SUCCÈS**
+- [x] **Étape 4 : `npx nx test session` → SUCCÈS**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session/
@@ -523,7 +523,7 @@ git commit -m "feat(session): ouvre une session sur un monde, dont elle tient so
   invente plus une (§5). `Save` lui-même ne porte pas le `sessionId` — il ne le portait pas.
 - **Le plancher ne bouge pas.** `SAVE_FLOOR_BYTES` et `isPlausibleSaveSize` restent ce qu'ils sont.
 
-- [ ] **Étape 1 : écrire le test qui échoue**
+- [x] **Étape 1 : écrire le test qui échoue**
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -544,14 +544,14 @@ describe('Save on a world', () => {
 });
 ```
 
-- [ ] **Étape 2 : le voir échouer** — `npx nx test session` → ÉCHEC, `worldId` inconnu de `SaveFields`
+- [x] **Étape 2 : le voir échouer** — `npx nx test session` → ÉCHEC, `worldId` inconnu de `SaveFields`
 
-- [ ] **Étape 3 : implémenter** — `save.ts`, puis `ports.ts` ; reprendre `newest.spec.ts` et tout
+- [x] **Étape 3 : implémenter** — `save.ts`, puis `ports.ts` ; reprendre `newest.spec.ts` et tout
   test de la lib qui construit un `Save` avec `game`
 
-- [ ] **Étape 4 : `npx nx test session` → SUCCÈS**
+- [x] **Étape 4 : `npx nx test session` → SUCCÈS**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session/
@@ -593,7 +593,7 @@ document singulier, c'est `view.server`, et c'est ce que cette tâche défait.
   autre — c'est le piège de la mise au pluriel : `costEuros` était calculé une fois en tête de
   `reconcile` sur `view.session`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — en plus de la reprise des scénarios existants,
+- [x] **Étape 1 : écrire les tests qui échouent** — en plus de la reprise des scénarios existants,
   ces trois-là sont nouveaux et sont le sens de la tâche
 
 ```typescript
@@ -680,15 +680,15 @@ describe('reconcileWorld', () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test session` → ÉCHEC, `worlds` n'existe pas sur
+- [x] **Étape 2 : les voir échouer** — `npx nx test session` → ÉCHEC, `worlds` n'existe pas sur
   `WatchdogView`
 
-- [ ] **Étape 3 : implémenter** — `view.ts` d'abord, puis `reclamations.ts`, `reconcile.ts`
+- [x] **Étape 3 : implémenter** — `view.ts` d'abord, puis `reclamations.ts`, `reconcile.ts`
   (scinder en `reconcileWorld` + `sweepEvents`, sans dupliquer une branche), `sweep.ts`
 
-- [ ] **Étape 4 : `npx nx test session` → SUCCÈS, toute la suite**
+- [x] **Étape 4 : `npx nx test session` → SUCCÈS, toute la suite**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session/
@@ -727,7 +727,7 @@ git commit -m "feat(session): fait décider le watchdog monde par monde, et bala
   règles précédentes sont lettre morte, et que remplacer la configuration est un geste de console
   fait une fois après la fusion — pas par ce plan.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — `keys.spec.ts`, en remplacement du fichier
+- [x] **Étape 1 : écrire les tests qui échouent** — `keys.spec.ts`, en remplacement du fichier
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -804,9 +804,9 @@ it('lists one world across its three origins, and no other world', async () => {
 méthode d'écriture à ce qu'elle expose réellement. Le point du test est le nombre de préfixes lus et
 l'exclusion de l'autre monde.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test scaleway-storage` → ÉCHEC sur la chaîne épinglée
+- [x] **Étape 2 : les voir échouer** — `npx nx test scaleway-storage` → ÉCHEC sur la chaîne épinglée
 
-- [ ] **Étape 3 : implémenter `keys.ts` et le `list` à trois préfixes ; réécrire le JSON de cycle de
+- [x] **Étape 3 : implémenter `keys.ts` et le `list` à trois préfixes ; réécrire le JSON de cycle de
   vie et le paragraphe du README**
 
 ```json
@@ -823,9 +823,9 @@ l'exclusion de l'autre monde.
 }
 ```
 
-- [ ] **Étape 4 : `npx nx test scaleway-storage` → SUCCÈS**
+- [x] **Étape 4 : `npx nx test scaleway-storage` → SUCCÈS**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/scaleway-storage/ deploy/scaleway/
@@ -859,7 +859,7 @@ git commit -m "feat(scaleway-storage): range les sauvegardes par origine puis pa
   et qu'une règle ne sait prouver une requête que sur un champ.
 - **`round-trip.spec.ts` continue de tourner une fois par transport**, avec un monde.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — dans `fields.spec.ts`
+- [x] **Étape 1 : écrire les tests qui échouent** — dans `fields.spec.ts`
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -927,15 +927,15 @@ describe('what a client writes', () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC, `serverDocPath` inconnu
+- [x] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC, `serverDocPath` inconnu
 
-- [ ] **Étape 3 : implémenter** — et laisser `server-state.ts`, `client-session.ts` rouges : ce
+- [x] **Étape 3 : implémenter** — et laisser `server-state.ts`, `client-session.ts` rouges : ce
   sont T7 et T8
 
-- [ ] **Étape 4 : `npx nx test session-record` → les specs de `fields` et `round-trip` passent** ;
+- [x] **Étape 4 : `npx nx test session-record` → les specs de `fields` et `round-trip` passent** ;
   les autres échouent encore à la compilation, et c'est attendu jusqu'à T8
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session-record/src/lib/fields.ts libs/session-record/src/lib/fields.spec.ts libs/session-record/src/lib/round-trip.spec.ts
@@ -975,7 +975,7 @@ git commit -m "feat(session-record): traduit le monde, et met server/current sou
 - **`saveRecords` déménage sans changer**, hormis `worldId` à la place de `game` : `world-depot`
   (T16) l'appellera, et `apps/functions` n'est pas importable par un outil.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — `world-state.spec.ts`, sur le même harnais
+- [x] **Étape 1 : écrire les tests qui échouent** — `world-state.spec.ts`, sur le même harnais
   émulateur que `server-state.spec.ts`
 
 ```typescript
@@ -1054,15 +1054,15 @@ describe('systemEvents', () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC, module absent
+- [x] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC, module absent
 
-- [ ] **Étape 3 : implémenter ; reprendre `server-state.spec.ts` sur un chemin de monde ; déplacer
+- [x] **Étape 3 : implémenter ; reprendre `server-state.spec.ts` sur un chemin de monde ; déplacer
   `save-records` et son spec** (les imports d'`apps/functions` seront repris en T10-T11)
 
-- [ ] **Étape 4 : `npx nx test session-record` → `world-state`, `server-state`, `save-records`,
+- [x] **Étape 4 : `npx nx test session-record` → `world-state`, `server-state`, `save-records`,
   `fields`, `round-trip` passent** ; `client-session` et `authorised-writes` restent rouges jusqu'à T8
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session-record/ apps/functions/src/save-records.ts apps/functions/src/save-records.spec.ts
@@ -1109,7 +1109,7 @@ git commit -m "feat(session-record): fait naître un monde, et tient un état de
   joueur. `authorised-writes.spec.ts` — les écritures que les règles acceptent — est repris avec
   les règles de T9 ; s'il est exécuté avant T9, il échoue sur les règles et c'est la bonne raison.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — dans `client-session.spec.ts`
+- [x] **Étape 1 : écrire les tests qui échouent** — dans `client-session.spec.ts`
 
 ```typescript
 describe('a member and their worlds', () => {
@@ -1172,14 +1172,14 @@ describe('a member and their worlds', () => {
 non nulle d'un `watch*` et se désabonne ; `eventTypes` lit `events` par ordre d'`at`. Les tests
 existants — `watch`, `extend`, `requestStop`, la transaction — se conservent, sur un monde.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC à la compilation
+- [x] **Étape 2 : les voir échouer** — `npx nx test session-record` → ÉCHEC à la compilation
 
-- [ ] **Étape 3 : implémenter** ; `connectSessionRecord` ne change pas de forme
+- [x] **Étape 3 : implémenter** ; `connectSessionRecord` ne change pas de forme
 
-- [ ] **Étape 4 : `npx nx test session-record` → SUCCÈS** — si `authorised-writes` échoue sur les
+- [x] **Étape 4 : `npx nx test session-record` → SUCCÈS** — si `authorised-writes` échoue sur les
   règles, passer à T9 puis revenir : ce spec est la couture entre les deux
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add libs/session-record/
@@ -1224,7 +1224,7 @@ git commit -m "feat(session-record): donne au navigateur ses mondes, et le geste
 - **Les règles font `get()` sur `members` et sur le monde, `exists()` sur `players`, et rien
   d'autre** (§9).
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — `worlds.spec.ts`
+- [x] **Étape 1 : écrire les tests qui échouent** — `worlds.spec.ts`
 
 ```typescript
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
@@ -1352,21 +1352,21 @@ it('no longer serves a server document at the root', async () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test rules` → ÉCHEC, `worlds` refusé partout par le
+- [x] **Étape 2 : les voir échouer** — `npx nx test rules` → ÉCHEC, `worlds` refusé partout par le
   déni par défaut
 
-- [ ] **Étape 3 : écrire les règles, reprendre le harnais et `server-current.spec.ts`** sur le chemin
+- [x] **Étape 3 : écrire les règles, reprendre le harnais et `server-current.spec.ts`** sur le chemin
   du monde (chaque `doc(as(env, uid), 'server', 'current')` devient `server(uid)`, `game` retiré des
   ouvertures, et le test « refuses a session identity rewritten outside an opening » perd sa ligne
   `game`)
 
-- [ ] **Étape 4 : `npx nx test rules` → SUCCÈS ; puis `npx nx test session-record` → SUCCÈS**, la
+- [x] **Étape 4 : `npx nx test rules` → SUCCÈS ; puis `npx nx test session-record` → SUCCÈS**, la
   couture de T8
 
-- [ ] **Étape 5 : passer `firebase-security-rules-auditor` sur le fichier**, et corriger ce qu'il
+- [x] **Étape 5 : passer `firebase-security-rules-auditor` sur le fichier**, et corriger ce qu'il
   trouve avant de commiter
 
-- [ ] **Étape 6 : commit**
+- [x] **Étape 6 : commit**
 
 ```bash
 git add firestore.rules libs/rules/
@@ -1406,7 +1406,7 @@ AdminWorldRecord`, `ProvisionDeps.states: WorldStateStores`.
 - **`failed()` écrit sur le magasin du monde**, `deps.states.for(worldId)`.
 - **`buildProvisionDeps` câble `worlds` et `states`** ; `state` singulier disparaît.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — `provisioning.spec.ts`, en plus de la reprise des
+- [x] **Étape 1 : écrire les tests qui échouent** — `provisioning.spec.ts`, en plus de la reprise des
   scénarios existants sur un monde
 
 ```typescript
@@ -1454,15 +1454,15 @@ it('answers the steam ids of the named members only, sorted, skipping the malfor
 `main.spec.ts` : le test qui épingle le chemin du trigger, s'il existe, passe à
 `worlds/{worldId}/server/current` ; sinon l'ajouter.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test functions` et `npx nx test membership-record`
+- [x] **Étape 2 : les voir échouer** — `npx nx test functions` et `npx nx test membership-record`
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
-- [ ] **Étape 4 : les deux cibles → SUCCÈS** (les specs d'`agent-report` et du `watchdog` restent
+- [x] **Étape 4 : les deux cibles → SUCCÈS** (les specs d'`agent-report` et du `watchdog` restent
   rouges jusqu'à T11 et T12 — les exclure de ce passage n'est pas permis ; les faire compiler avec le
   minimum et laisser leurs assertions rouges l'est)
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add apps/functions/ libs/membership-record/
@@ -1492,7 +1492,7 @@ git commit -m "feat(functions): provisionne une session sur son monde, avec les 
 - **Le nom d'hôte se demande au catalogue avec le monde** : `entry.hostname(worldId)`, T14.
 - **`destroy` et `fileEvent` écrivent sur le magasin du monde.**
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — en plus de la reprise des scénarios existants,
+- [x] **Étape 1 : écrire les tests qui échouent** — en plus de la reprise des scénarios existants,
   chacun sur un monde `les-copains` dont le registre connaît la session
 
 ```typescript
@@ -1527,13 +1527,13 @@ it('points the record derived from the world', async () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test functions`
+- [x] **Étape 2 : les voir échouer** — `npx nx test functions`
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
-- [ ] **Étape 4 : `npx nx test functions` → `agent-report` passe** ; `watchdog` reste rouge jusqu'à T12
+- [x] **Étape 4 : `npx nx test functions` → `agent-report` passe** ; `watchdog` reste rouge jusqu'à T12
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add apps/functions/
@@ -1562,7 +1562,7 @@ git commit -m "feat(functions): fait retrouver son monde au rapport de l agent p
   pour lui, la réclamation par tag tourne quand même.
 - **Le battement est écrit en dernier**, comme aujourd'hui, une fois.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — dans `watchdog.spec.ts`, avec l'émulateur, en
+- [x] **Étape 1 : écrire les tests qui échouent** — dans `watchdog.spec.ts`, avec l'émulateur, en
   plus de la reprise des scénarios existants sur `worlds/w1/server/current`
 
 ```typescript
@@ -1593,13 +1593,13 @@ it('files what the sweep found once, with no world', async () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test functions`
+- [x] **Étape 2 : les voir échouer** — `npx nx test functions`
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
-- [ ] **Étape 4 : `npx nx test functions` → SUCCÈS, toute la suite**
+- [x] **Étape 4 : `npx nx test functions` → SUCCÈS, toute la suite**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add apps/functions/
@@ -1625,7 +1625,7 @@ git commit -m "feat(functions): fait passer le watchdog sur tous les mondes en u
 - **`screen` écrit `worlds/dev-world/server/current`** avec les mêmes fixtures, `game` en moins, et
   `joinInfo.hostname` devient `dev-world.beacon.charlouze.com`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent**
+- [x] **Étape 1 : écrire les tests qui échouent**
 
 ```typescript
 // seed.spec.ts
@@ -1657,15 +1657,15 @@ it('stages the screen on the dev world', async () => {
 **Note pour l'exécutant :** adapter les noms `personas()`, `stage()` et `PERSONAS[].member` à ce
 que les fichiers exposent réellement ; le sens des trois tests ne dépend pas de ces noms.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test functions`
+- [x] **Étape 2 : les voir échouer** — `npx nx test functions`
 
-- [ ] **Étape 3 : implémenter, puis reprendre les trois descriptions de `mise.toml` et l'étape 2 du
+- [x] **Étape 3 : implémenter, puis reprendre les trois descriptions de `mise.toml` et l'étape 2 du
   README de `apps/web`**
 
-- [ ] **Étape 4 : `npx nx test functions` → SUCCÈS ; puis `mise run dev` et vérifier dans l'UI de
+- [x] **Étape 4 : `npx nx test functions` → SUCCÈS ; puis `mise run dev` et vérifier dans l'UI de
   l'émulateur que `worlds/dev-world` existe avec ses joueurs**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add apps/functions/ mise.toml apps/web/README.md
@@ -1696,7 +1696,7 @@ git commit -m "feat(functions): ne sème plus de serveur à la racine, et donne 
 - **Le `$` dans un nom de monde est refusé par `renderCloudInit`**, par le mécanisme existant, et
   c'est le test à écrire : le nom vient d'un joueur, par l'écran.
 
-- [ ] **Étape 1 : écrire les tests qui échouent**
+- [x] **Étape 1 : écrire les tests qui échouent**
 
 ```typescript
 // catalog.spec.ts
@@ -1732,14 +1732,14 @@ it('tells the companion its world', () => {
 `request()` est l'aide de `catalogue-fixtures.spec-helper.ts`, à reprendre avec `world` à la place
 de `serverName`.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test cloud-init`
+- [x] **Étape 2 : les voir échouer** — `npx nx test cloud-init`
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
-- [ ] **Étape 4 : `npx nx test cloud-init` → SUCCÈS ; `npx nx test functions` → SUCCÈS** (T10 et T11
+- [x] **Étape 4 : `npx nx test cloud-init` → SUCCÈS ; `npx nx test functions` → SUCCÈS** (T10 et T11
   consomment ces signatures)
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add deploy/cloud-init/
@@ -1768,7 +1768,7 @@ git commit -m "feat(cloud-init): fait descendre le monde jusqu à la machine, et
 - **Le test de fumée attend `pre-shutdown/<world>/`** là où il attendait `saves/$GAME/pre-shutdown`.
   Le harnais y pose `BEACON_WORLD`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent**
+- [x] **Étape 1 : écrire les tests qui échouent**
 
 ```typescript
 // config.spec.ts
@@ -1792,13 +1792,13 @@ it('deposits under its world and its session', async () => {
 });
 ```
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test companion`
+- [x] **Étape 2 : les voir échouer** — `npx nx test companion`
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
-- [ ] **Étape 4 : `npx nx test companion` → SUCCÈS**
+- [x] **Étape 4 : `npx nx test companion` → SUCCÈS**
 
-- [ ] **Étape 5 : commit**
+- [x] **Étape 5 : commit**
 
 ```bash
 git add deploy/companion/
@@ -1851,7 +1851,7 @@ l'enregistrement DNS à créer. Pour cela il gagne une identité Firebase.
   et pour Enshrouded `create the A record <worldId>.beacon.charlouze.com in the OVH zone, DynHost enabled,
   before the first session — DynHost updates a record, it never creates one`.
 
-- [ ] **Étape 1 : écrire les tests qui échouent** — `world-birth.spec.ts`
+- [x] **Étape 1 : écrire les tests qui échouent** — `world-birth.spec.ts`
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -1886,14 +1886,14 @@ describe('newInviteCode', () => {
 Et un test d'`adopt` contre l'émulateur et `FakeObjectApi`, si le câblage d'`adopt.ts` se prête à
 être appelé sans terminal — sinon, l'étape 5 en tient lieu, et la raison s'écrit dans le README.
 
-- [ ] **Étape 2 : les voir échouer** — `npx nx test world-depot` → ÉCHEC, module absent
+- [x] **Étape 2 : les voir échouer** — `npx nx test world-depot` → ÉCHEC, module absent
 
-- [ ] **Étape 3 : implémenter `admin-firestore.ts`, `world-birth.ts`, `generatesWorlds` au
+- [x] **Étape 3 : implémenter `admin-firestore.ts`, `world-birth.ts`, `generatesWorlds` au
   catalogue, puis câbler `adopt.ts`**
 
-- [ ] **Étape 4 : `npx nx test world-depot` et `npx nx test cloud-init` → SUCCÈS**
+- [x] **Étape 4 : `npx nx test world-depot` et `npx nx test cloud-init` → SUCCÈS**
 
-- [ ] **Étape 5 : l'éprouver contre l'émulateur et MinIO, les trois cas**
+- [x] **Étape 5 : l'éprouver contre l'émulateur et MinIO, les trois cas**
 
 ```bash
 # émulateur debout (mise run dev), MinIO local, BEACON_SAVES_BUCKET sur MinIO
@@ -1906,7 +1906,7 @@ npx nx run world-depot:adopt -- --world=les-autres --game=enshrouded --name="x" 
 Vérifier dans l'UI de l'émulateur : deux mondes, chacun avec son `server/current` en `IDLE` et un
 `inviteCode` ; un seul document `saves/{id}` ; et dans MinIO une clé `manual/les-autres/<instant>.tar.gz`.
 
-- [ ] **Étape 6 : commit**
+- [x] **Étape 6 : commit**
 
 ```bash
 git add tools/world-depot/ deploy/cloud-init/
@@ -1931,14 +1931,14 @@ git commit -m "feat(world-depot): fait naître un monde à l adoption, et le dit
   `world-depot` écrit dans Firestore, par `gcloud auth application-default login`, et c'est le
   même poste, le même compte, pas un secret de plus.
 
-- [ ] **Étape 1 : reprendre `retrieve.spec.ts`** — `emptyHistoryMessage('les-copains', 'b')` contient
+- [x] **Étape 1 : reprendre `retrieve.spec.ts`** — `emptyHistoryMessage('les-copains', 'b')` contient
   `les-copains`
 
-- [ ] **Étape 2 : le voir échouer**, implémenter, `npx nx test world-depot` → SUCCÈS
+- [x] **Étape 2 : le voir échouer**, implémenter, `npx nx test world-depot` → SUCCÈS
 
-- [ ] **Étape 3 : écrire le README et la ligne de `STACK.md`**
+- [x] **Étape 3 : écrire le README et la ligne de `STACK.md`**
 
-- [ ] **Étape 4 : commit**
+- [x] **Étape 4 : commit**
 
 ```bash
 git add tools/world-depot/ STACK.md

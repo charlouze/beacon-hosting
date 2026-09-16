@@ -2,10 +2,11 @@ import { statSync } from 'node:fs';
 import {
   isPlausibleSaveSize,
   Save,
-  type Game,
+  SAVE_ORIGINS,
   type LocalPath,
   type SaveDraft,
   type SaveStore,
+  type WorldId,
 } from '@beacon/session';
 import { objectKeyFor, parseObjectKey } from './keys.js';
 import type { ObjectApi } from './object-api.js';
@@ -21,11 +22,17 @@ import type { ObjectApi } from './object-api.js';
 export class ScalewaySaveStore implements SaveStore {
   constructor(private readonly api: ObjectApi) {}
 
-  async list(game: Game): Promise<Save[]> {
-    // A failure propagates, deliberately. An empty list means "this game has
+  async list(worldId: WorldId): Promise<Save[]> {
+    // Three prefixes, one per origin — never a listing of the whole bucket
+    // filtered client-side (§5): the bucket grows by one object per evening
+    // and per world, without end.
+    //
+    // A failure propagates, deliberately. An empty list means "this world has
     // never been saved" and a caller acts on it by generating a fresh world;
     // a bucket that cannot answer must never be able to say that.
-    const summaries = await this.api.list(`saves/${game}/`);
+    const summaries = (
+      await Promise.all(SAVE_ORIGINS.map((origin) => this.api.list(`${origin}/${worldId}/`)))
+    ).flat();
 
     const saves: Save[] = [];
     for (const summary of summaries) {
@@ -34,12 +41,12 @@ export class ScalewaySaveStore implements SaveStore {
       // A key it did not write, or an object under the floor, would each hand a
       // restore something that is not a world.
       if (parsed === null) continue;
-      if (parsed.game !== game) continue;
+      if (parsed.worldId !== worldId) continue;
       if (!isPlausibleSaveSize(summary.sizeBytes)) continue;
       saves.push(
         Save.of({
           createdAt: parsed.createdAt,
-          game: parsed.game,
+          worldId: parsed.worldId,
           objectKey: summary.key,
           sizeBytes: summary.sizeBytes,
           origin: parsed.origin,
@@ -63,7 +70,7 @@ export class ScalewaySaveStore implements SaveStore {
     // machine rather than after (§8).
     const save = Save.of({
       createdAt: draft.createdAt,
-      game: draft.game,
+      worldId: draft.worldId,
       objectKey: objectKeyFor(draft),
       sizeBytes: statSync(fromFile).size,
       origin: draft.origin,

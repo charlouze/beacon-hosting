@@ -2,17 +2,26 @@ import {
   Deadline,
   DEFAULT_SETTINGS,
   isGame,
+  isWorldId,
   SESSION_STATES,
   Session,
+  World,
   type InstanceSize,
   type JoinInfo,
   type SessionSettings,
   type SessionState,
+  type WorldId,
 } from '@beacon/session';
 
-export const SERVER_DOC = 'server/current';
+export const WORLDS = 'worlds';
+export const PLAYERS = 'players';
 export const SETTINGS_DOC = 'config/settings';
 export const EVENTS = 'events';
+
+/** `worlds/{worldId}/server/current` — the one session context a world holds. */
+export function serverDocPath(worldId: WorldId): string {
+  return `${WORLDS}/${worldId}/server/current`;
+}
 
 /**
  * The fields of `config/settings` the deployment owns and a client may not
@@ -61,26 +70,31 @@ export function toState(value: unknown): SessionState | null {
 }
 
 /**
- * `server/current` as the domain reads it. Null means the document says
- * nothing this vocabulary recognises — never a session with invented fields.
+ * `worlds/{worldId}/server/current` as the domain reads it. Null means the
+ * document says nothing this vocabulary recognises — never a session with
+ * invented fields.
+ *
+ * The game and the world id come from `world`, never from the document: §5
+ * moved `game` off this document, and a session cannot be read without
+ * knowing which world it belongs to in the first place.
  */
-export function sessionFrom(data: Record<string, unknown>): Session | null {
+export function sessionFrom(data: Record<string, unknown>, world: World): Session | null {
   const state = toState(data['state']);
   if (state === null) return null;
   if (state === 'IDLE') return Session.idle();
 
   const sessionId = data['sessionId'];
-  const game = data['game'];
   const startedAt = toDate(data['startedAt']);
   const deadline = toDate(data['deadline']);
-  if (typeof sessionId !== 'string' || !isGame(game) || startedAt === null || deadline === null) {
+  if (typeof sessionId !== 'string' || startedAt === null || deadline === null) {
     return null;
   }
 
   return Session.from({
     state,
     sessionId,
-    game,
+    worldId: world.worldId,
+    game: world.game,
     startedBy: typeof data['startedBy'] === 'string' ? data['startedBy'] : '',
     startedAt,
     deadline: Deadline.at(deadline),
@@ -89,6 +103,33 @@ export function sessionFrom(data: Record<string, unknown>): Session | null {
     instanceSize: typeof data['instanceSize'] === 'string' ? data['instanceSize'] : null,
     hasJoinInfo: (data['joinInfo'] ?? null) !== null,
   });
+}
+
+/**
+ * `worlds/{worldId}` as the domain reads it. Null for the same reason as
+ * `sessionFrom`: a document with an unrecognised game, or missing the
+ * fields a world cannot be built without, is not a world with invented
+ * fields — it is not a world at all.
+ *
+ * `worldId` is the document's own id, checked here rather than trusted:
+ * whatever named the document might not be one `isWorldId` accepts, and
+ * `World.from` throws rather than returning null on that.
+ */
+export function worldFrom(
+  worldId: WorldId,
+  data: Record<string, unknown>,
+  playerUids: readonly string[],
+): World | null {
+  if (!isWorldId(worldId)) return null;
+  const game = data['game'];
+  const name = data['name'];
+  const inviteCode = data['inviteCode'];
+  if (!isGame(game) || typeof name !== 'string' || typeof inviteCode !== 'string') return null;
+  try {
+    return World.from({ worldId, game, name, inviteCode, players: playerUids });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -183,7 +224,11 @@ export function rulesVersionFrom(data: Record<string, unknown>): string | null {
   return typeof data['rulesVersion'] === 'string' ? data['rulesVersion'] : null;
 }
 
-/** What a session's opening writes. The instants are the caller's sentinel. */
+/**
+ * What a session's opening writes. The instants are the caller's sentinel.
+ * No `game`: the document no longer carries it (§5) — the world above it
+ * does, once and for every session it opens.
+ */
 export function openingFields(session: Session, serverTime: unknown): Record<string, unknown> {
   return {
     state: session.state,
@@ -193,7 +238,6 @@ export function openingFields(session: Session, serverTime: unknown): Record<str
     stateSince: serverTime,
     startedAt: serverTime,
     sessionId: session.sessionId,
-    game: session.game,
     startedBy: session.startedBy,
     deadline: session.deadline.at,
     // Written only when an admin chose one. §5 reserves the field, and an
@@ -201,6 +245,56 @@ export function openingFields(session: Session, serverTime: unknown): Record<str
     // tranche 4 rules — every opening, for every player.
     ...(session.instanceSize !== null ? { instanceSize: session.instanceSize } : {}),
   };
+}
+
+/**
+ * What `seed.ts` writes at `worlds/{worldId}/server/current`, identically,
+ * `game` less: every reserved fact present and null, because an absent key
+ * and a null one do not read the same way in a rules diff.
+ */
+export function idleServerDocument(now: Date): Record<string, unknown> {
+  return {
+    state: 'IDLE',
+    stateSince: now,
+    sessionId: null,
+    startedBy: null,
+    startedAt: null,
+    deadline: null,
+    instanceId: null,
+    ipId: null,
+    ip: null,
+    joinInfo: null,
+    provisionClaimedAt: null,
+    lastError: null,
+  };
+}
+
+/**
+ * What `worlds/{worldId}` holds. Never `players`: they are a subcollection,
+ * not a field — `worldFrom` takes them separately, and a field here would be
+ * a second, driftable copy of what the subcollection already says.
+ */
+export function worldDocument(world: World, at: Date): Record<string, unknown> {
+  return {
+    game: world.game,
+    name: world.name,
+    inviteCode: world.inviteCode,
+    createdAt: at,
+  };
+}
+
+/**
+ * A player of `worlds/{worldId}/players/{uid}`. `uid` is written as a field
+ * and not only as the document's id, because "my worlds" is a collection
+ * group query on this field (T8), and a rule can only prove what a query
+ * asked for on a field, never on a document id.
+ */
+export function playerDocument(
+  uid: string,
+  code: string,
+  serverTime: unknown,
+): Record<string, unknown> {
+  return { uid, code, joinedAt: serverTime };
 }
 
 export interface EventFields {

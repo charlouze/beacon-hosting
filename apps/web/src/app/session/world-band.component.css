@@ -1,0 +1,135 @@
+/* The band of the world, which is the join band's grid used a second time: a
+   thin rule, then three columns between vertical rules. The proportions differ
+   because the columns hold different things — a name, a link, a count — and
+   the grid itself stays the one in `styles.css`. */
+:host {
+  display: block;
+}
+
+/* Air above, because what precedes it is the primary action of the evening and
+   nothing here competes with it. */
+.rule-thin {
+  margin-top: 30px;
+}
+
+.wband {
+  padding: 6px 0 0;
+}
+
+.wband .join-cols {
+  grid-template-columns: 1.2fr 1.6fr 1fr;
+}
+
+/* A name is read, not pasted: it leaves the monospace of the join band. */
+.wband .v {
+  font-family: var(--font-ui);
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.wband .v.link {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* The code steps back in print: it is the part nobody reads, and the copy
+   button hands over the whole address anyway. */
+.wband .v.link .code {
+  color: var(--mute);
+}
+
+.wband .sub {
+  font-size: 14px;
+  margin-top: 10px;
+  max-width: 34ch;
+}
+
+/* The one place the hint turns red: a name the domain would refuse, said where
+   the bound is already written. */
+.wband .sub[data-warn] {
+  color: var(--red);
+}
+
+/* The only head of the three that carries two buttons, and the spacer the
+   phone comps give it. On wide it is out of the flow entirely: `.head` has a
+   14 px gap, so a merely flex-less spacer would still count twice and push
+   Copy 28 px off its key, where the wide comps keep it at 14. */
+.wband .head .grow {
+  display: none;
+}
+
+.wband .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* A ruled line and not a box: the field takes the place of the value, at the
+   weight the value had. */
+.wband input {
+  font:
+    700 22px/1.2 var(--font-ui);
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  padding: 4px 0 6px;
+  width: 100%;
+}
+
+.wband .count {
+  font:
+    700 22px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.wband .count span {
+  font-weight: 500;
+  color: var(--mute);
+}
+
+@media (max-width: 640px) {
+  .rule-thin {
+    margin-top: 22px;
+  }
+
+  /* One column, like the join band above it: three columns of this width hold
+     nothing, and the vertical rules become horizontal ones. */
+  .wband .join-cols {
+    grid-template-columns: 1fr;
+  }
+
+  /* Here `styles.css` turns the head into a `space-between`, which would share
+     the line three ways and strand Copy in the middle. The spacer takes the
+     slack so the pair stays at the right, as the phone comps have it. */
+  .wband .head .grow {
+    display: block;
+    flex: 1;
+  }
+
+  .wband .v {
+    font-size: 18px;
+    margin-top: 8px;
+  }
+
+  .wband .v.link {
+    font-size: 12px;
+  }
+
+  .wband .sub {
+    font-size: 13px;
+  }
+
+  .wband input {
+    font-size: 18px;
+  }
+
+  .wband .count {
+    font-size: 18px;
+  }
+}

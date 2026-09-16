@@ -2,6 +2,7 @@ import type { HostedServer } from '../ports.js';
 import type { Session } from '../session-aggregate.js';
 import type { SessionId, SessionState } from '../session.js';
 import type { SessionSettings } from '../settings.js';
+import type { WorldId } from '../world.js';
 
 /** server/current, as the watchdog reads it. */
 export interface ServerRecord {
@@ -23,10 +24,28 @@ export interface ServerRecord {
   readonly hasReservedFacts: boolean;
 }
 
+/**
+ * One world's `server/current`, as the watchdog reads it — its own record and
+ * its own session, nothing shared with any other world (§6: the watchdog
+ * "applique à chacun, séparément, les décisions du tableau").
+ */
+export interface WorldView {
+  readonly worldId: WorldId;
+  /** Null when server/current does not exist yet for this world. */
+  readonly server: ServerRecord | null;
+  /**
+   * The same document, read as the domain reads it (§4). Two views and not
+   * one, by design: destroying needs no business rule and must work on a
+   * record it cannot parse, while a deadline and a cost need the model. Null
+   * when the document says nothing this vocabulary recognises.
+   */
+  readonly session: Session | null;
+}
+
 export interface WatchdogView {
   readonly now: Date;
-  /** Null when server/current does not exist yet. */
-  readonly server: ServerRecord | null;
+  /** Every world this pass covers, read in one sweep. */
+  readonly worlds: readonly WorldView[];
   readonly hosted: readonly HostedServer[];
   /** Sessions whose provisioning intent is written and not yet closed. */
   readonly openSessions: readonly SessionId[];
@@ -36,13 +55,6 @@ export interface WatchdogView {
    * is stranded *now* is a state, and reading it belongs to whoever stores it.
    */
   readonly alreadyAnnounced: readonly string[];
-  /**
-   * The same document as `server`, read as the domain reads it. Two views and
-   * not one, by design (§4): destroying needs no business rule and must work
-   * on a record it cannot parse, while a deadline and a cost need the model.
-   * Null when the document says nothing this vocabulary recognises.
-   */
-  readonly session: Session | null;
   /** From `config/settings`, so the bound is the deployed one, never a guess. */
   readonly settings: SessionSettings;
 }
