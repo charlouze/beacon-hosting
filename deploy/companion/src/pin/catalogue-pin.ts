@@ -8,14 +8,20 @@ import { workspaceRoot } from './fingerprint.js';
  * second reader would be a second answer to "which image ran tonight", which
  * `companion-image.ts` exists to prevent.
  */
-const SOURCES = /COMPANION_SOURCES\s*=\s*['"](sha256:[0-9a-f]{64})['"]/;
+const SOURCES = /(COMPANION_SOURCES\s*=\s*['"])(sha256:[0-9a-f]{64})(['"])/;
 
 /** Null when the catalogue carries no fingerprint yet. */
 export function sourcesIn(catalogue: string): string | null {
-  return SOURCES.exec(catalogue)?.[1] ?? null;
+  return SOURCES.exec(catalogue)?.[2] ?? null;
 }
 
 const DIGEST = /(beacon-companion@)sha256:[0-9a-f]{64}/;
+const REPOSITORY = /ghcr\.io\/([^@'"]+)@sha256:/;
+
+/** Where the pinned image lives, so no second place has to spell it. */
+export function repositoryIn(catalogue: string): string | null {
+  return REPOSITORY.exec(catalogue)?.[1] ?? null;
+}
 
 /**
  * Both lines or neither. A digest moved without its fingerprint would pass the
@@ -28,7 +34,7 @@ export function withPin(catalogue: string, digest: string, sources: string): str
   }
   return catalogue
     .replace(DIGEST, `$1${digest}`)
-    .replace(SOURCES, `COMPANION_SOURCES = '${sources}'`);
+    .replace(SOURCES, `$1${sources}$3`);
 }
 
 /** Where the catalogue keeps the pin, relative to the workspace root. */

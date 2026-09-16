@@ -36,6 +36,13 @@
           }
         }
       },
+      "pin": {
+        "dependsOn": ["build"],
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx tsx deploy/companion/src/pin/pin-entry.ts"
+        }
+      },
       "smoke": {
         "dependsOn": ["build"],
         "executor": "nx:run-commands",
