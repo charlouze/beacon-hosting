@@ -78,8 +78,8 @@ un jeu par tranche.
 | 7 | Les mondes vont et viennent | Un monde entre dans le système, et en ressort | **livrée le 2026-09-14** |
 | 6 | L'infra en code | Ce qui vit longtemps se relit en revue au lieu de se redécouvrir dans une console | à venir |
 | 8 | Ce que la 5 n'a pas pris | Les quatre surfaces que l'écran de session laisse en console | née des reports de la 5, le 2026-09-11 |
-| 9 | Les mondes | Plusieurs mondes par jeu, chacun avec ses joueurs, plusieurs sessions le même soir — sous l'écran | plan écrit le 2026-09-15 |
-| 9 bis | L'écran des mondes | La liste de mes mondes, le monde, l'entrée par un lien | maquettes à venir |
+| 9 | Les mondes | Plusieurs mondes par jeu, chacun avec ses joueurs, plusieurs sessions le même soir — sous l'écran | implémentée, PR #40 (avec la 9 bis) |
+| 9 bis | L'écran des mondes | La liste de mes mondes, le monde, l'entrée par un lien | implémentée, PR #40 (avec la 9) |
 
 ### 0 · Sonder
 
@@ -533,15 +533,24 @@ surfaces d'administration qui se dessinent mieux une fois que l'écran connaît 
 
 ### 9 bis · L'écran des mondes
 
-**Née avec la 9.** La liste de mes mondes, chacun avec son état et son décompte s'il tourne, le
-cumul du mois en pied ; le monde, qui est l'écran d'aujourd'hui sous `/worlds/{worldId}`, plus le
-nom modifiable, le lien d'invitation à copier, et « quitter ce monde » ; et `/join/{worldId}/{code}`,
-qui entre et redirige. Un membre sans monde voit la liste vide, avec la phrase qui dit de demander
-un lien. Le glossaire du §4 porte déjà tous les termes que ces écrans afficheront.
+**Née avec la 9, écrite après le tour de maquettes du 2026-09-15.** Son plan est
+[`2026-09-15-tranche-9-bis-l-ecran-des-mondes.md`](2026-09-15-tranche-9-bis-l-ecran-des-mondes.md).
+La liste de mes mondes, chacun avec son état et son décompte s'il tourne ; le monde, qui est l'écran
+d'aujourd'hui sous `/worlds/{worldId}`, plus le nom modifiable sur place, le lien d'invitation à
+copier ou régénérer, et « quitter ce monde », tous confirmés sur place ; et `/join/{worldId}/{code}`,
+qui entre tout de suite puis redirige — rouvrir son propre lien ne fait rien et réussit. Un membre
+sans monde voit la liste vide, avec la phrase qui dit de demander un lien. **Le cumul du mois n'y
+est pas** : le tour de maquettes a tranché que la face client ne lit pas `events`, et qu'il arrive
+avec la tranche 8, pas ici.
 
-Son plan s'écrit après le tour de maquettes, et il consomme ce que la 9 laisse prêt : la face
-client de `libs/session-record` avec ses neuf opérations, testée contre les règles, et un monde de
+Livrée : `apps/web` gagne son routeur, jamais utilisé jusque-là — trois routes, trois conteneurs
+humbles, des pages pures qui ne connaissent aucun `*-record`. `App` cède ses connexions Firebase à
+`Records`, racine de composition du navigateur. Consomme ce que la 9 laisse prêt : la face client de
+`libs/session-record` avec ses onze opérations, testée contre les règles, et un monde de
 développement dans `mise run dev`.
+
+**Reste, avant la fusion :** la soirée contre l'émulateur, humaine (tâche 12 du plan) — la dernière
+vérification que rien n'y manque qu'un test ne peut pas voir.
 
 ## La livraison ne fait pas de tranche
 
