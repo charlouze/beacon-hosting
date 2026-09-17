@@ -27,20 +27,26 @@ bibliothèque, outillage, runner de tests, générateur, service — s'écrit da
 ## Avant de proposer quoi que ce soit
 
 Ces décisions ont été prises en atelier avec le commanditaire. Elles vivent dans
-les fichiers ci-dessous, qui font autorité et en donnent le pourquoi. **Les lire
-avant de concevoir, et les ressortir quand une proposition les touche** — ne pas
-les redécouvrir, ne pas les contredire en silence.
+les fichiers ci-dessous, et — pour celles qu'aucun document vivant ne porte
+encore — plus bas dans ce fichier. **Les lire avant de concevoir, et les
+ressortir quand une proposition les touche** — ne pas les redécouvrir, ne pas
+les contredire en silence.
 
 | Avant de… | Lire |
 |---|---|
 | dessiner un écran, écrire du CSS, choisir une couleur ou un mot visible | `.impeccable/DIRECTION.md`, puis `.impeccable/mocks/decision/README.md` — il porte les cinq contraintes fermes d'interface |
-| écrire une règle Firestore, une Function, ou toucher à `libs/*` | §2 et §4 du spec — décisions actées, modèle de domaine, ports, et où chaque invariant tient réellement |
-| écrire le plan d'une tranche, ou en changer l'ordre | `docs/superpowers/plans/` — deux gates fermes y conditionnent l'exposition du système et la migration d'un monde |
-| créer une ressource chez un fournisseur, ou décider qui l'instancie | §14 du spec — la frontière entre ce qui meurt avec une session et ce qui est le compte, et pourquoi aucun outil d'ici ne peut détruire |
+| écrire une règle Firestore, une Function, ou toucher à `libs/*` | **Les décisions d'architecture**, plus bas |
+| créer une ressource chez un fournisseur, ou décider qui l'instancie | **Les décisions d'architecture**, plus bas |
 | trancher sur le produit, les utilisateurs, le périmètre | `PRODUCT.md` |
 | toucher à la stack, aux conteneurs, aux identifiants | `STACK.md` |
 
-Le spec est `docs/superpowers/specs/2026-09-02-game-hosting-design.md`.
+**L'autorité de conception est `docs/specs/<module>.md`** — une spec vivante par
+module, normative, sans date, et c'est contre elle que toute revue se fait.
+
+**Aucun module n'est encore adopté**, donc cette autorité n'existe pas encore.
+Un travail qui touche un module sans spec commence par son adoption : elle
+reprend les décisions d'atelier depuis les documents validés et les rend
+opposables. Concevoir avant, c'est fabriquer de la dérive le jour de la fusion.
 
 `PRODUCT.md` et `.impeccable/` sont écrits par la skill `impeccable` sous son
 propre schéma : ils se régénèrent, ils ne s'éditent pas à la main.
@@ -48,22 +54,98 @@ propre schéma : ils se régénèrent, ils ne s'éditent pas à la main.
 Les maquettes s'ouvrent depuis `.impeccable/mocks/decision/index.html`. Aucune
 dépendance externe, elles s'ouvrent dans un navigateur telles quelles.
 
+## Les décisions d'architecture
+
+Prises en atelier, antérieures à toute spec de module, et énoncées ici parce
+qu'elles restent vraies toute la vie du projet. Leur pourquoi complet reviendra
+dans les specs vivantes à l'adoption ; ce qui suit est ce qu'on ne redécouvre
+pas et qu'on ne contredit pas en silence.
+
+### Les règles Firestore sont de la sécurité, jamais du métier
+
+Elles répondent à *qui écrit quoi* — identité, appartenance, rôle, propriété des
+champs — et à rien d'autre. Réécrire les durées et les transitions en langage de
+règles dupliquerait `libs/session` dans un second langage, et deux écritures du
+même calcul divergent toujours. Le contrôle métier côté serveur est le watchdog,
+qui rejoue le même code.
+
+Corollaire : **le navigateur écrit directement dans Firestore**, et une Function
+n'existe que là où un secret est indispensable. Lui interdire l'écriture ne
+protégerait rien — il ne porte aucun identifiant d'hébergeur — et ajouterait une
+couche à maintenir.
+
+### Le domaine ne garde pas ses invariants, il converge
+
+`libs/session` est un **noyau de décision partagé, pas un gardien** : le même
+calcul tourne dans le navigateur, dans les Functions et dans le watchdog — donc
+aussi dans un processus qu'on ne contrôle pas. Un invariant « porté par
+l'agrégat » mais exécuté dans un navigateur hostile est une phrase, pas une
+garantie.
+
+Donc **un invariant s'énonce avec où il tient et en combien de temps.** Ceux que
+les règles Firestore tiennent sont immédiats et incontournables ; ceux que
+`libs/session` tient dans le navigateur sont contournables, et le watchdog les
+rattrape au tour suivant. Écrire un invariant sans dire lequel des deux il est,
+c'est ne rien avoir écrit.
+
+### Les ports sont déclarés par le contexte qui s'en sert
+
+Jamais par l'infrastructure qui les implémente. Un port parle métier — ouvrir
+**un serveur de jeu**, pas des ressources — et l'adapter sait combien d'objets
+cela représente chez le fournisseur. C'est ce qui a laissé le gabarit libre, puis
+le jeu, sans rien coûter au domaine. C'est aussi la couche anticorruption : le
+modèle du fournisseur s'arrête à la frontière de son adapter et n'entre jamais
+dans le contexte.
+
+Corollaire : **fermer se dit par le tag, jamais par une liste d'identifiants.**
+Sinon une panne entre la création d'une ressource et son enregistrement la
+laisserait introuvable et facturée. Ce qui est enregistré sert à décider *s'il
+faut* détruire, jamais à savoir *quoi* détruire.
+
+### Le système possède la session ; tout le reste est le compte
+
+**Ce qui naît et meurt avec une session appartient au système. Ce qui survit à
+toutes les sessions est le compte, et le compte se déclare — il ne se manipule
+pas à l'exécution.** La durée de vie est le critère, et il tranche tous les cas
+sans qu'on ait à les énumérer.
+
+La frontière porte sur **qui crée la ressource, jamais sur qui écrit dedans** :
+une sauvegarde survit à sa session et le système l'écrit pourtant à chaque fois.
+Elle est du contenu ; le seau est la ressource, et le seau est au compte.
+
+Trois conséquences, et ce sont elles qu'une proposition touche sans le vouloir :
+
+- **Aucun outil de mise en place n'acquiert de verbe de destruction.** Il déclare
+  le contenant, jamais le contenu. Il reste **sans état** : il lit ce qui existe,
+  comble l'écart avec ce qui est déclaré, et ne tient aucun registre de ce qu'il
+  croit avoir créé — donc il n'a pas de notion de « remplacer », donc il n'existe
+  aucun chemin par lequel un changement de nom emporte un seau et les mondes
+  dedans.
+- **Un enregistrement DNS se déclare en existence, jamais en valeur.** Le
+  *record* survit aux sessions, c'est le compte ; son *IP* est réécrite à chaque
+  session, c'est la session. Déclarer la valeur repointerait un sous-domaine vers
+  une session morte pendant qu'une autre tourne.
+- **Le watchdog garde seul ce qui meurt avec la session.** Un outil de mise en
+  place qui croirait le détenir se battrait avec lui — et il gagne, parce qu'il
+  tourne en boucle quand l'autre attend qu'on le lance. Deux outils sur le même
+  objet est une guerre d'états.
+
 ## Où en est le projet
 
-Le dépôt avance par tranches, chacune avec son plan sous
-`docs/superpowers/plans/`. Le plan de la tranche en cours, ou la dernière
-livrée, dit où en est le projet mieux que ce fichier ne pourrait le suivre —
-c'est là qu'il faut regarder pour le détail.
+Le dépôt avance par lots sous `docs/batches/`, chacun un groupe de user stories
+qui font grandir les specs. Le lot en cours, ou le dernier clos, dit où en est
+le projet mieux que ce fichier ne pourrait le suivre — c'est là qu'il faut
+regarder pour le détail.
 
-**Un spec validé n'est pas un spec vérifié.** La tranche 0 — une sonde, sans
-code de production — a répondu par la mesure aux questions ouvertes du §12 du
-spec, dans `probe/RESULTS.md`, et a fait tomber une hypothèse le jour même de
-la validation du spec : l'API OVH ne portait de tag ni sur l'instance ni sur
-l'IP flottante, ce dont dépendait toute la réconciliation. Le projet a changé
+**Un spec validé n'est pas un spec vérifié.** La sonde initiale — sans code de
+production — a répondu par la mesure aux questions ouvertes du spec, dans
+`probe/RESULTS.md`, et a fait tomber une hypothèse le jour même de la
+validation du spec : l'API OVH ne portait de tag ni sur l'instance ni sur l'IP
+flottante, ce dont dépendait toute la réconciliation. Le projet a changé
 d'hébergeur avant d'écrire une ligne d'adapter. C'est la règle à retenir plus
-que l'anecdote, et elle survit à toute tranche : si une sonde ou une mise en
-production invalide une hypothèse, le spec se corrige **avant** que le plan de
-la tranche suivante s'écrive.
+que l'anecdote, et elle survit à tout lot : si une sonde ou une mise en
+production invalide une hypothèse, le spec se corrige **avant** que la story
+suivante s'écrive.
 
 ## Les skills ne sont pas optionnelles
 
@@ -74,15 +156,15 @@ réinjectent d'elles-mêmes à chaque session n'ont pas besoin d'y figurer.
 
 | À ce moment | Invoquer avant d'agir |
 |---|---|
-| écrire ou modifier un spec — **systématiquement, sans exception** | `clean-architecture` **et** `domain-driven-design`. C'est dans le spec que les frontières et le modèle se décident ; une revue externe a déjà dû réparer le §4 après coup, ça ne se refait pas |
-| le plan d'une tranche vient d'être écrit, avant de l'exécuter | `clean-code` et `software-design-philosophy` — **relire le plan avec**, tant qu'un défaut de conception coûte encore une ligne et pas une tranche |
+| écrire ou modifier un spec — **systématiquement, sans exception** | `clean-architecture` **et** `domain-driven-design`. C'est dans le spec que les frontières et le modèle se décident ; une revue externe a déjà dû réparer le modèle de domaine après coup, ça ne se refait pas |
+| une user story vient d'être écrite, avant de l'exécuter | `clean-code` et `software-design-philosophy` — **relire la story avec**, tant qu'un défaut de conception coûte encore une ligne et pas un lot |
 | dès que l'interface est en jeu — écran, composant, texte visible | `impeccable:impeccable` |
 | avant de scaffolder une app, une lib, un projet | `nx-generate` |
 | pour lancer un build, un test, un lint, un serve | `nx-run-tasks` |
 | avant d'écrire ou de modifier `firestore.rules` | `firebase-firestore`, puis `firebase-security-rules-auditor` |
 | avant de toucher à l'authentification | `firebase-auth-basics` |
 | avant de décider où un bout de code atterrit, ou de créer une lib | `clean-architecture` |
-| avant de modifier `libs/session` ou le modèle de domaine | `domain-driven-design` — pour **vérifier** qu'on ne défait pas le §4, jamais pour re-modéliser |
+| avant de modifier `libs/session` ou le modèle de domaine | `domain-driven-design` — pour **vérifier** qu'on ne défait pas le modèle de domaine, jamais pour re-modéliser |
 
 Annoncer « Using [skill] to [purpose] », puis suivre la skill telle quelle. Si
 elle porte une checklist, une tâche par item.
@@ -134,7 +216,7 @@ Types : `feat` `fix` `refactor` `perf` `test` `docs` `build` `ci` `chore`, plus
 
 **La portée est le projet Nx touché** — `session`, `session-record`, `saves`,
 `scaleway-compute`, `web`, `functions`, `rules`… Pour ce qui n'est pas du code, elle
-nomme l'artefact : `spec`, `product`, `plan`, `design`, `agent`. Un commit qui
+nomme l'artefact : `spec`, `product`, `batch`, `story`, `design`, `agent`. Un commit qui
 peine à tenir dans une seule portée en fait probablement deux.
 
 **Le message dit la décision, pas la manœuvre.** Un corps seulement quand le
@@ -211,5 +293,14 @@ referme.
 ## Langue
 
 Code et interface en **anglais**. Spec, documentation et échanges en
-**français**. Le glossaire qui fait le pont est au §4 du spec ; tout terme
-visible dans l'interface doit y figurer.
+**français**. Le glossaire qui fait le pont vit dans la spec du module
+concerné ; tout terme visible dans l'interface doit y figurer.
+
+<!-- supercharlouze:begin -->
+## Specs and plans
+
+This project overrides how superpowers organizes specs and plans.
+Invoke `supercharlouze:using-batches` before any design work, and again before executing any plan.
+It relocates specs and plans, replaces steps 6 to 9 of the architectural checklist of superpowers:brainstorming, extends the stop conditions of superpowers:subagent-driven-development, requires subagent-driven-development as the execution mode, and constrains superpowers:finishing-a-development-branch to the pull request option.
+It declares each of these overrides explicitly; where it declares none, superpowers applies unchanged.
+<!-- supercharlouze:end -->

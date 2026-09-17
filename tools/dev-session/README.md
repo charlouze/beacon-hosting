@@ -18,7 +18,7 @@ rewrite, build, emulator, seed, probe, pilot. Rewriting after the build, or
 building after the emulator has started, provisions a billed machine that
 reports to a dead url. That happened on 2026-09-08, and the two sessions it
 cost are written up in
-[the tranche 3 bis log](../../docs/superpowers/plans/2026-09-09-tranche-3-bis-session.md).
+[the tranche 3 bis log](../../docs/archive/plans/2026-09-09-tranche-3-bis-session.md).
 
 ## What the 401 proves
 
