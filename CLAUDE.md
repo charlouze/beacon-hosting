@@ -43,6 +43,10 @@ les contredire en silence.
 **L'autorité de conception est `docs/specs/<module>.md`** — une spec vivante par
 module, normative, sans date, et c'est contre elle que toute revue se fait.
 
+**Dans une spec, un bloc `[!NOTE]` précise ou tempère une règle voisine, et n'en
+porte jamais une.** Le plugin pose le principe sans prescrire de balisage ;
+celui-ci est le nôtre.
+
 Un travail qui touche un module sans spec commence par son adoption : elle
 reprend les décisions d'atelier depuis les documents validés et les rend
 opposables. Concevoir avant, c'est fabriquer de la dérive le jour de la fusion.
