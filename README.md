@@ -24,8 +24,9 @@ détruit ce qu'aucune intention de création ouverte n'explique.
 | `CLAUDE.md` | Les règles de travail — à lire avant de proposer quoi que ce soit |
 | `STACK.md` | Stack technique, tests, conteneurs, identifiants |
 | `PRODUCT.md` | Utilisateurs, but, périmètre, principes produit |
-| `docs/superpowers/specs/` | Architecture, modèle de données, sécurité, tests, livraison |
-| `docs/superpowers/plans/` | Ordre de construction et plan de chaque tranche |
+| `docs/specs/` | Une spec vivante par module — l'autorité de toute revue |
+| `docs/batches/` | Les lots de user stories qui font grandir les specs |
+| `docs/archive/` | Les documents datés d'avant les specs vivantes — matière d'adoption, sans autorité |
 | `.impeccable/` | Monde visuel, maquettes et décisions d'interface |
 
 Les maquettes s'ouvrent depuis `.impeccable/mocks/decision/index.html`, sans
