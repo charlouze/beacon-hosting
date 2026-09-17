@@ -43,7 +43,6 @@ les contredire en silence.
 **L'autorité de conception est `docs/specs/<module>.md`** — une spec vivante par
 module, normative, sans date, et c'est contre elle que toute revue se fait.
 
-**Aucun module n'est encore adopté**, donc cette autorité n'existe pas encore.
 Un travail qui touche un module sans spec commence par son adoption : elle
 reprend les décisions d'atelier depuis les documents validés et les rend
 opposables. Concevoir avant, c'est fabriquer de la dérive le jour de la fusion.
