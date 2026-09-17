@@ -43,7 +43,14 @@ les contredire en silence.
 **L'autorité de conception est `docs/specs/<module>.md`** — une spec vivante par
 module, normative, sans date, et c'est contre elle que toute revue se fait.
 
-**Aucun module n'est encore adopté**, donc cette autorité n'existe pas encore.
+**Une règle qui vaut pour tous les modules ne vit dans aucun**, sinon l'écrire
+dans un seul laisse entendre que les autres n'y sont pas tenus. Elle remonte
+dans les décisions d'architecture, plus bas.
+
+**Dans une spec, un bloc `[!NOTE]` précise ou tempère une règle voisine, et n'en
+porte jamais une.** Le plugin pose le principe sans prescrire de balisage ;
+celui-ci est le nôtre.
+
 Un travail qui touche un module sans spec commence par son adoption : elle
 reprend les décisions d'atelier depuis les documents validés et les rend
 opposables. Concevoir avant, c'est fabriquer de la dérive le jour de la fusion.
@@ -101,6 +108,23 @@ Corollaire : **fermer se dit par le tag, jamais par une liste d'identifiants.**
 Sinon une panne entre la création d'une ressource et son enregistrement la
 laisserait introuvable et facturée. Ce qui est enregistré sert à décider *s'il
 faut* détruire, jamais à savoir *quoi* détruire.
+
+### Rien de ce qu'un membre peut lire ne révèle un secret du système
+
+Un écran, une trace, un message d'erreur : **tout ce qui atteint une surface
+qu'un membre peut lire est borné et expurgé, sans exception.** La règle ne
+distingue pas les modules — elle vaut pour tous, et l'écrire dans un seul
+laisserait entendre que les autres n'y sont pas tenus.
+
+Ce qu'elle protège n'est pas théorique : ce qu'un fournisseur renvoie quand un
+appel échoue peut contenir ce que cet appel portait, donc ce que le système
+confie à une machine au moment de sa mise en place. Rien ne garantit qu'un
+client tienne ces valeurs hors de sa prose d'erreur.
+
+Corollaire : **ce qui garde la trace entière est le journal de la plateforme**,
+que seul l'exploitant lit. Une surface lisible par un membre n'est pas l'endroit
+où l'on comprend ce qui a échoué, et la vouloir complète est précisément ce qui
+fait tomber la règle.
 
 ### Le système possède la session ; tout le reste est le compte
 
