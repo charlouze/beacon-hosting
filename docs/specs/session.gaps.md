@@ -77,10 +77,11 @@ ci-dessous sont établis par lecture.
   question la plus chère se pose en euros : au bout de combien de temps une
   ressource orpheline coûte-t-elle trop cher ?
 
-- **Ubiquitous language** — l'écran d'un monde au repos annonce la durée d'une
+- **Aucune section** — l'écran d'un monde au repos annonce la durée d'une
   session sous le libellé `Next session`, qui se lit « la session suivante » et
-  ne dit rien d'une durée. Aucun document ne décrit ce que ce libellé doit dire,
-  et le glossaire ne le porte plus.
+  ne dit rien d'une durée. Aucune section ne dit ce que cet écran doit annoncer,
+  et un libellé n'est pas du ressort du glossaire : il n'existe donc aujourd'hui
+  aucun document contre lequel le corriger.
 
 - **Aucune section** — les écrans affichent un coût de session et un cumul du
   mois dont la spec ne dit plus rien, par décision. Tant qu'aucune règle ne les

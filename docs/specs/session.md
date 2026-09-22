@@ -21,33 +21,37 @@ de session doit **dire** est ci-dessous, dans la section que ça concerne.
 
 Les noms de code sont en anglais alors que la langue métier est le français :
 l'expert du domaine lit lui-même le code, donc il n'y a pas de fossé de
-traduction à combler. La colonne du milieu porte le nom de code et, quand il en
-diffère, le libellé que les joueurs lisent.
+traduction à combler.
 
-**Tout terme visible dans l'interface d'une session doit figurer ici.** Un mot
-qu'on peine à nommer dans les deux colonnes est le signe que le modèle est faux,
-pas que la traduction est difficile.
+**Ce tableau nomme les concepts du domaine, et rien d'autre.** Un libellé de
+bouton, un titre d'écran ou un message ne sont pas des concepts : ils habillent
+un concept déjà nommé ici, ou ils n'en portent aucun. La colonne du milieu ne se
+remplit que là où le mot affiché **diffère réellement** du nom de code.
+
+Un concept qu'on peine à nommer dans les deux colonnes est le signe que le
+modèle est faux, pas que la traduction est difficile.
 
 | Métier | Code, et libellé s'il diffère | Ce que c'est |
 |---|---|---|
 | session | `Session` | une partie ouverte, de son démarrage à la disparition de son serveur |
-| échéance, *affichée* « heure de fermeture » | `Deadline`, libellé `Closes at` | l'instant auquel le serveur s'arrête |
-| temps restant | libellé `Time left` | l'écart entre maintenant et l'heure de fermeture |
-| prolongation | `extend`, libellé `Extend` | repousser l'heure de fermeture d'une heure |
-| fenêtre de prolongation | `extensionWindow` | les trente dernières minutes, seul moment où prolonger est possible |
-| durée d'une session | `sessionDurationMs` | quatre heures : ce que dure une session à son ouverture |
+| heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel le serveur s'arrête |
+| ouvrir une session | `opening` | la faire naître sur un monde, son heure de fermeture déjà fixée |
+| prolonger | `extend` | repousser l'heure de fermeture d'un pas |
+| fermer | `requestStop` | demander l'arrêt. La disparition du serveur, elle, se constate |
+| durée d'une session | `sessionDurationMs` | quatre heures : ce qui sépare l'ouverture de la première heure de fermeture |
+| pas de prolongation | `extensionStepMs` | une heure : ce qu'une prolongation ajoute |
+| fenêtre de prolongation | `extensionWindowMs` | les trente dernières minutes, seul moment où prolonger est possible |
 | gabarit | `InstanceSize` | le calibre du serveur |
-| point de jonction, *affiché* « comment rejoindre » | `JoinInfo`, libellé `How to join` | ce que le joueur copie pour rejoindre |
 | l'ouvrant | `startedBy` | le joueur qui a ouvert la session |
-| heure d'ouverture | `startedAt`, libellé `Opened at` | l'instant où la session a été ouverte |
-| hors service | `Idle`, libellé `Out of service` | aucun serveur ; on peut ouvrir une session |
-| en préparation | `Provisioning`, libellé `Preparing` | le serveur se met en place |
-| en service | `Running`, libellé `In service` | on peut rejoindre le monde dans le jeu |
-| en fermeture | `Stopping`, libellé `Closing` | la session est finie, le serveur n'a pas encore disparu |
-| bloqué | `Failed`, libellé `Not cleared` | le système n'a pas pu garantir que tout a disparu |
-| début d'état | `stateSince`, libellé `Left behind since` | depuis quand la session est dans l'état où elle est |
-| dernière erreur | `lastError`, libellé `What the host said` | ce que l'hébergeur a répondu au dernier échec |
-| fourchette de disponibilité | `readyWindow`, libellé `Ready between` | les deux heures entre lesquelles le serveur devrait être joignable |
+| heure d'ouverture | `startedAt`, affiché `Opened at` | l'instant où la session a été ouverte |
+| point de jonction | `JoinInfo`, affiché `How to join` | ce que le joueur copie pour rejoindre |
+| fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait être joignable |
+| réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
+| hors service | `IDLE`, affiché `Out of service` | aucun serveur ; on peut ouvrir une session |
+| en préparation | `PROVISIONING`, affiché `Preparing` | le serveur se met en place |
+| en service | `RUNNING`, affiché `In service` | on peut rejoindre le monde dans le jeu |
+| en fermeture | `STOPPING`, affiché `Closing` | la session est finie, le serveur n'a pas encore disparu |
+| bloqué | `FAILED`, affiché `Not cleared` | le système n'a pas pu garantir que tout a disparu |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
 
@@ -58,11 +62,11 @@ session, au lieu de l'apprendre par une panne.
 
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
-| `World` | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et l'ensemble de ses joueurs. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
-| `Game` | l'identité du jeu d'un monde, figée. Une session ne sait ni comment on se connecte à ce jeu, ni comment il se sauvegarde, ni ce qu'il coûte à mettre en place |
-| `Save` | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
-| `Player` | un membre qui joue dans ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
-| `Member` | une personne autorisée. Une session ne distingue que membre, administrateur, et ni l'un ni l'autre |
+| `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et l'ensemble de ses joueurs. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
+| `Game` (`docs/specs/jeu.md`) | l'identité du jeu d'un monde, figée. Une session ne sait ni comment on se connecte à ce jeu, ni comment il se sauvegarde, ni ce qu'il coûte à mettre en place |
+| `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
+| `Player` (`docs/specs/monde.md`) | un membre qui joue dans ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
+| `Member` (`docs/specs/membre.md`) | une personne autorisée. Une session ne distingue que membre, administrateur, et ni l'un ni l'autre |
 
 ## Opening a session
 
@@ -82,9 +86,9 @@ ouvrent au même moment ouvrent une seule session, et le second apprend que la
 première existe. Il n'existe pas de fenêtre, même brève, pendant laquelle les
 deux coexistent.
 
-**Plusieurs mondes tournent en même temps, et rien ne les plafonne.** L'échéance
-est le seul garde-fou : trois mondes lancés le même soir font trois soirées
-facturées, et chacune s'éteint seule.
+**Plusieurs mondes tournent en même temps, et rien ne les plafonne.** L'heure
+de fermeture est le seul garde-fou : trois mondes lancés le même soir font trois
+soirées facturées, et chacune s'éteint seule.
 
 **Une session ouvre le monde dans l'état où la précédente l'a laissé**, quelle
 qu'ait été la cause de sa fermeture. C'est la seule donnée irremplaçable du
@@ -186,7 +190,7 @@ avec « personne n'est jamais bloqué ».
 
 **Aucune de ces garanties n'attend qui que ce soit.** Elles tiennent sans que
 personne soit devant l'écran, et c'est ce qui permet à une session de naître avec
-son heure de fin : sans elles, l'échéance ne serait qu'une intention.
+son heure de fermeture : sans elles, cette heure ne serait qu'une intention.
 
 | Garantie | Pas avant | Au plus tard |
 |---|---|---|
@@ -236,3 +240,4 @@ contrepartie de « chacun peut fermer la session d'un autre ».
 
 | batch | date | change |
 |---|---|---|
+| out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne l'heure de fermeture |
