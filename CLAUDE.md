@@ -318,7 +318,19 @@ referme.
 
 Code et interface en **anglais**. Spec, documentation et échanges en
 **français**. Le glossaire qui fait le pont vit dans la spec du module
-concerné ; tout terme visible dans l'interface doit y figurer.
+concerné.
+
+**Ce glossaire nomme les concepts du domaine, et rien d'autre.** Il n'est pas
+l'inventaire des mots qu'on croise dans l'interface ou dans le code. Un libellé
+de bouton, un titre d'écran, un message : ils habillent un concept qui y figure
+déjà, ou ils n'en portent aucun — dans les deux cas ils n'y entrent pas. Ce que
+la colonne du milieu porte, c'est le nom de code, et le mot affiché seulement
+quand il **diffère réellement** de ce nom.
+
+Un glossaire écrit depuis l'écran se reconnaît à ce qu'il grossit à chaque
+maquette sans que le modèle bouge. Il finit par cacher les quelques concepts
+qu'un expert du domaine doit pouvoir lire d'un trait, et c'est précisément ce
+qu'il existait pour rendre visible.
 
 <!-- supercharlouze:begin -->
 ## Specs and plans
