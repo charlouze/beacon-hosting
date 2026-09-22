@@ -55,10 +55,6 @@ jeu — le démarrer, restaurer son monde, publier ce qu'il faut pour le rejoind
 — ne vit jamais dans cette identité. Un monde et une session la lisent sans rien
 pouvoir en déduire.
 
-**Le jeu d'un monde ne change jamais.** Un monde d'un autre jeu est un autre
-monde : la sauvegarde, la façon de rejoindre et ce que les joueurs y ont bâti
-en dépendent tous.
-
 **Un jeu de plus apporte une forme de point de jonction de plus, et c'est le
 coût annoncé.** Il ne retire rien aux autres et ne change rien à ce qui les
 manipule.
