@@ -47,6 +47,7 @@ que les joueurs lisent.
 |---|---|
 | `World` | un monde adossé à ce jeu. Ce module ignore comment un monde naît, ce qu'il devient, qui y joue, et combien il en existe par jeu |
 | `Save` | ce que le serveur de jeu écrit de lui-même. Ce module sait ce qu'une sauvegarde contient et quand elle est produite ; il ignore où elle est rangée et laquelle est reprise |
+| `JoinInfo` | ce que le joueur copie pour rejoindre. Ce module décide de sa forme ; il ignore ce qu'on en fait ensuite — qui la transporte, qui l'affiche, et à partir de quand une session est joignable |
 
 ## Ce qu'un jeu est
 
