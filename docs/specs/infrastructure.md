@@ -5,20 +5,21 @@
 Ce module porte **ce que le système suppose en place pour tourner, et ce qui
 fait que ce qui tourne est ce qu'on a voulu** : le compte sur lequel Beacon vit,
 la façon dont on le déclare et dont on prouve qu'il se reconstruit, la mise en
-production, et ce qui prévient l'administrateur quand le système cesse de se
-tenir seul.
+production, et ce qui prévient l'exploitant quand le système cesse de se tenir
+seul.
 
 Il couvre ce que le compte porte et ce qu'il ne revendique jamais, la mise en
 place du compte et ce qu'elle a le droit de faire, la reconstruction sur un
 compte vide, la mise en production et ce qui la garde, les identifiants que le
 système confie et à qui, ce qui ramène un onglet ouvert sur le code en
-production, et ce qui prévient l'administrateur.
+production, et ce qui prévient l'exploitant.
 
 **Il déclare le contenant, jamais le contenu.** Ce qui s'écrit dans le compte
 pendant que le système tourne n'est pas à lui : ni ce qui naît et meurt avec une
 session, ni ce qu'un serveur de jeu a le droit de toucher (`session`), ni les
 mondes, leurs sauvegardes et ce que la règle de durée du stockage en retire
-(`monde`), ni qui est membre (`membre`).
+(`monde`), ni qui est membre ou administrateur (`membre`). L'exploitant n'est
+pas un rôle de Beacon : être administrateur ne donne aucun accès au compte.
 
 ## Ubiquitous language
 
@@ -41,6 +42,7 @@ modèle est faux, pas que la traduction est difficile.
 | mise en place | `deploy-setup` | le geste qui comble l'écart |
 | mise en production | — | la fusion d'une pull request dans `main` |
 | version en production | `rulesVersion` | la version du code que la dernière mise en production a publiée |
+| exploitant | — | celui qui détient le compte d'hébergement : il reçoit les alertes du compte et fait ses gestes humains |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
 
@@ -52,8 +54,6 @@ qu'on verra si elle bouge aussi pour lui, au lieu de l'apprendre par une panne.
 |---|---|
 | `Session` (`docs/specs/session.md`) | ce qui naît et meurt dans le compte sans que personne le déclare. Ce contexte sait seulement qu'une session tient certaines garanties sans attendre personne, et qu'il faut savoir quand elles cessent d'être tenues |
 | `Save` (`docs/specs/monde.md`) | du contenu, écrit dans un seau que le compte déclare. Ce contexte ne l'écrit, ne le lit et ne le retire jamais |
-| `Member` (`docs/specs/membre.md`) | une personne autorisée. Ce contexte ne connaît que l'administrateur : celui qui détient le compte, reçoit ses alertes et fait ses gestes humains |
-
 ## What the account holds
 
 **Ce qui survit à toutes les sessions est le compte, et le compte se déclare :
@@ -92,7 +92,7 @@ que c'est toujours bien posé ».
 est signalé ; une ressource qui existe sans être déclarée ne l'est pas. Pour un
 compte d'une vingtaine de ressources connues, c'est le bon marché.
 
-**Rien ne se pose sur le compte sans que l'administrateur y ait consenti, geste
+**Rien ne se pose sur le compte sans que l'exploitant y ait consenti, geste
 par geste**, en lisant ce qui manque et ce que le geste va faire. Un seul
 consentement pour treize droits d'administration, ce sont treize décisions que
 personne n'a prises. Une mise en place partielle le dit, et ne ressemble jamais
@@ -199,24 +199,24 @@ voit un bouton qui marche puis un effet qui s'évapore.
 module dont la règle a changé.
 
 **Seule la mise en production écrit la version en production, et l'adresse à
-laquelle un serveur de jeu rapporte.** Personne d'autre, administrateur
-compris : écrire la première désynchroniserait tous les onglets, écrire la
+laquelle un serveur de jeu rapporte.** Personne d'autre, quel que soit son rôle
+dans Beacon : écrire la première désynchroniserait tous les onglets, écrire la
 seconde redirigerait l'endroit où les serveurs rapportent.
 
-## Warning the administrator
+## Warning the operator
 
 **Quand ce qui tient les garanties d'une session sans attendre personne cesse
-de tourner, l'administrateur est prévenu au plus tard une heure après.** Une
+de tourner, l'exploitant est prévenu au plus tard une heure après.** Une
 alerte de dépense mesure le dégât une fois qu'il est fait ; celle-ci mesure la
 panne. Une heure, c'est au pire une heure de serveur facturée de plus pour
 chaque session que plus rien ne ferme.
 
 **Une dépense du mois chez l'hébergeur qui dépasse 5 € prévient
-l'administrateur.** C'est le garde-fou de dernier recours, quand tout le reste a
+l'exploitant.** C'est le garde-fou de dernier recours, quand tout le reste a
 manqué. Le seuil laisse de la marge sous les 7,90 € du serveur dédié que Beacon
 remplace, au-delà desquels le produit ne tient plus sa promesse.
 
-**Ces alertes vont à l'administrateur, hors de l'application, et jamais aux
+**Ces alertes vont à l'exploitant, hors de l'application, et jamais aux
 joueurs.** Un bandeau « le système ne se surveille plus » sur l'écran des
 joueurs n'apprendrait rien d'actionnable à quelqu'un qui veut juste jouer.
 

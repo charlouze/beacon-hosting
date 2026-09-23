@@ -17,8 +17,8 @@ n'a été trouvé » :
   tenus, les secrets présents. Tout ce que ce registre dit du compte vient de ce
   que le dépôt en déclare ou en raconte.
 - **Ce que fait `firebase deploy` entre ses cibles** quand l'une échoue.
-- **Si la console Firebase permet à un administrateur** d'écrire la version en
-  production ou l'adresse de rapport hors des règles d'accès.
+- **Si la console Firebase permet à quiconque y a accès** d'écrire la version
+  en production ou l'adresse de rapport hors des règles d'accès.
 - **Si deux constructions de l'image du compagnon** depuis le même contexte
   donnent le même contenu.
 
@@ -157,7 +157,7 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   version compilée dans son code à celle que la mise en production a écrite, et
   se recharge quand elles diffèrent.
   `docs/archive/specs/2026-09-02-game-hosting-design.md` §4 le prescrit.
-- **Warning the administrator** — l'alerte sur l'arrêt du rattrapage surveille
+- **Warning the operator** — l'alerte sur l'arrêt du rattrapage surveille
   l'échec ou l'absence d'exécution de la tâche planifiée. Elle détecte un arrêt,
   jamais une absence de départ, d'où une première exécution constatée à la main,
   une fois, à la pose. `docs/archive/specs/2026-09-02-game-hosting-design.md` §6
