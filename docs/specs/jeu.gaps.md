@@ -67,12 +67,12 @@ règles Firestore — aucun écrit de ce module ne les traverse.
   d'administration, cherche l'installation locale du serveur dédié dans les
   bibliothèques de la plateforme, et imprime la commande exacte à lancer quand il
   ne la trouve pas `docs/archive/specs/2026-09-02-game-hosting-design.md`.
-- **What an evening can lose** — la cadence, quand elle se règle, l'est par une
+- **What a session can lose** — la cadence, quand elle se règle, l'est par une
   option de ligne de commande que le manuel de l'éditeur ne documente pas
   `docs/archive/specs/2026-09-02-game-hosting-design.md`.
-- **What an evening can lose** — le jeu qui laisse choisir sa cadence borne
+- **What a session can lose** — le jeu qui laisse choisir sa cadence borne
   lui-même son historique sur la machine à dix instantanés glissants, et l'index
   le plus élevé n'y est pas le plus récent `probe/RESULTS.md`.
-- **What an evening can lose** — ce qu'une soirée perd au plus sur un jeu dont la
+- **What a session can lose** — ce qu'une session perd au plus sur un jeu dont la
   cadence ne se choisit pas n'a jamais été décidé ni mesuré. Le dépôt applique
   une cadence de poussée de dix minutes, que personne n'a arrêtée.
