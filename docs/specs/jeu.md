@@ -40,7 +40,7 @@ que les joueurs lisent.
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
 | `World` | un monde adossé à ce jeu. Ce module ignore comment un monde naît, ce qu'il devient, qui y joue, et combien il en existe par jeu |
-| `Save` | ce que le jeu écrit de lui-même pour qu'un monde survive à la session. Ce module sait ce qu'une sauvegarde contient et quand elle est écrite ; il ignore où elle est rangée et laquelle est reprise |
+| `Save` | ce que le jeu écrit de lui-même pour qu'un monde survive à la session. Ce module sait quand elle est écrite ; il ignore ce qu'elle contient, où elle est rangée et laquelle est reprise |
 | `Session` | une partie ouverte sur un monde, de son ouverture à sa fermeture. Ce module sait qu'une session retrouve le dépôt du jeu en s'ouvrant et que sa fermeture n'écrit rien de plus que ce que le jeu a déjà écrit ; il ignore comment elle s'ouvre, se prolonge et se ferme |
 | `JoinInfo` | ce que le joueur copie pour rejoindre. Ce module en exige un moyen principal et un recours ; il ignore qui le transporte, qui l'affiche, et à partir de quand une session est joignable |
 | `Member` | une personne autorisée. Ce module ne distingue que l'administrateur, qui entretient les jeux, de tous les autres |
@@ -49,45 +49,13 @@ que les joueurs lisent.
 
 **Tout jeu offre au joueur un moyen principal de rejoindre et un recours.** Quand
 le premier fait défaut, le second suffit, et rejoindre ne dépend d'aucun des
-deux seul. C'est une exigence faite à chaque jeu, pas une précaution d'écran.
+deux seul.
 
 ## Making a game available
 
 **Un jeu que seul son propriétaire peut obtenir est mis à disposition par
-l'administrateur**, depuis sa propre machine, et c'est ce dépôt que chaque
-session retrouve. Un jeu que chacun peut obtenir ne demande rien : la session le
-prend elle-même.
-
-**Le compte qui possède un jeu reste chez son administrateur.** Rien dans le
-système ne le détient, et rien de ce qui tourne pendant une session ne le voit
-passer.
-
-**Ce que l'administrateur a mis à disposition, rien dans le système ne l'efface
-ni ne l'altère.** Cela ne se redépose que depuis une machine qui possède le jeu,
-et le perdre rendrait le jeu injouable jusqu'à ce que l'administrateur le
-redépose.
-
-**Entretenir un jeu ne peut jamais atteindre un monde.** Mettre un jeu à
-disposition ou le rafraîchir ne touche aucune sauvegarde, quelle que soit
-l'erreur commise en le faisant : le monde est la seule donnée irremplaçable du
-produit.
-
-## Keeping a game up to date
-
-**Un jeu mis à disposition ne suit pas l'éditeur de lui-même.** Les joueurs ont
-une nouvelle version dès sa sortie ; le serveur, seulement quand l'administrateur
-rafraîchit le dépôt.
-
-**Le système ne garantit pas qu'un jeu hébergé soit à jour.** Un serveur en
-retard sur les joueurs ne peut pas les accueillir, et cela se découvre la session
-ouverte, en tentant de rejoindre. C'est un risque accepté, pas un oubli.
-
-**Rafraîchir est un geste de l'administrateur, et de lui seul.** Il demande le
-compte qui possède le jeu, et aucun joueur ne peut y suppléer.
-
-> [!NOTE]
-> Cette dépendance est l'exception assumée à « personne n'est jamais bloqué » :
-> le geste ne se délègue pas.
+l'administrateur**, et c'est ce dépôt que chaque session retrouve. Un jeu que
+chacun peut obtenir ne demande rien : la session le prend elle-même.
 
 ## What a session can lose
 
@@ -99,12 +67,6 @@ lui-même.
 cinq minutes de jeu.** C'est ce qu'un joueur accepte de rejouer, et c'est dans
 cette unité que la valeur se décide.
 
-**Une sauvegarde ne garde que ce que le serveur du jeu détient.** Un jeu peut
-conserver chez chaque joueur une part de ce qu'il a bâti — sa progression, son
-inventaire, sa position — et cette part échappe au produit. Ce que Beacon
-protège s'arrête là où s'arrête ce que le serveur écrit, et rien ne doit
-laisser entendre le contraire.
-
 ## Who may do what
 
 | Qui | Ce qu'il peut faire sur un jeu |
@@ -113,10 +75,7 @@ laisser entendre le contraire.
 | un joueur | rien |
 | un visiteur | rien du tout |
 
-**Aucun geste sur un jeu ne passe par l'interface.** Ce qui touche un actif
-partagé par tous les mondes se fait depuis la machine d'un administrateur, là où
-réside le compte qui possède le jeu, et jamais depuis l'écran que les joueurs
-consultent.
+**Aucun geste sur un jeu ne passe par l'interface que les joueurs consultent.**
 
 ## Changelog
 
