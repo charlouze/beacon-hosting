@@ -212,9 +212,10 @@ alerte de dépense mesure le dégât une fois qu'il est fait ; celle-ci mesure l
 panne. Une heure, c'est au pire une heure de serveur facturée de plus pour
 chaque session que plus rien ne ferme.
 
-**Une dépense chez l'hébergeur qui dépasse ce qu'on attend prévient
+**Une dépense du mois chez l'hébergeur qui dépasse 5 € prévient
 l'administrateur.** C'est le garde-fou de dernier recours, quand tout le reste a
-manqué.
+manqué. Le seuil laisse de la marge sous les 7,90 € du serveur dédié que Beacon
+remplace, au-delà desquels le produit ne tient plus sa promesse.
 
 **Ces alertes vont à l'administrateur, hors de l'application, et jamais aux
 joueurs.** Un bandeau « le système ne se surveille plus » sur l'écran des
