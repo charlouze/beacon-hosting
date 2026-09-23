@@ -51,7 +51,7 @@ La forme de l'interface appartient à `.impeccable/DIRECTION.md`.
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
 | `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité, un jeu, un nom et des membres |
-| `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit à sa fermeture |
+| `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session reprend la dernière de son monde à son ouverture, et en produit jusqu'à sa fin |
 | membre, `Member` (`docs/specs/monde.md`) | un utilisateur qui appartient à un monde |
 | `User` (`docs/specs/utilisateur.md`) | une personne qui s'est connectée à Beacon, administrateur ou non |
 
@@ -69,8 +69,8 @@ existe.
 
 Le nombre de mondes qui tournent en même temps n'a aucun plafond.
 
-Une session ouvre le monde dans l'état où la précédente l'a laissé, quelle
-qu'ait été la cause de sa fermeture.
+Une session ouvre le monde sur sa dernière sauvegarde, quelle qu'ait été la
+cause de la fermeture de la précédente.
 
 Chaque ouverture met un nouveau serveur en place.
 
