@@ -37,6 +37,10 @@ règles Firestore — aucun écrit de ce module ne les traverse.
   variables et options de démarrage, et c'est le seul endroit du dépôt qui sait
   qu'un serveur de jeu se lance ; le jeu lui-même n'est qu'un identifiant
   `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+- **Making a game available** — aucun identifiant du compte qui possède un jeu
+  n'est confié à une machine de jeu, et c'est ce qui fait passer par un dépôt
+  les fichiers d'un jeu que seul son propriétaire peut obtenir
+  `docs/archive/specs/2026-09-02-game-hosting-design.md`.
 - **Making a game available** — le conteneur de chaque jeu est épinglé à son
   empreinte et jamais à une étiquette mobile ; l'un d'eux tourne avec un point
   d'entrée monté et impose deux contraintes qui ne se devinent pas — l'identité
