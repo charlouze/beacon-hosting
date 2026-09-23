@@ -57,8 +57,8 @@ ci-dessous sont établis par lecture.
 - **`CLAUDE.md`, « Rien de ce qu'un membre peut lire ne révèle un secret du
   système »** — ce qui vient d'un échec d'hébergeur est expurgé avant d'atteindre
   l'écran d'une session, mais recopié tel quel dans la trace que tout membre peut
-  lire. Ce qui a échoué portait ce que le système confie au serveur au moment de
-  sa mise en place. **Cette entrée désigne une décision de projet et non une
+  lire. Ce qui a échoué portait ce que le système confie à la machine au moment
+  de sa mise en place. **Cette entrée désigne une décision de projet et non une
   section de spec**, parce que la règle vaut pour tous les modules et ne peut donc
   vivre dans aucun ; la fuite, elle, est dans le code de celui-ci.
 
@@ -68,6 +68,15 @@ ci-dessous sont établis par lecture.
   a raison** — fermer une session pendant sa mise en place est un geste que le
   produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
   requalifie.
+
+- **Ubiquitous language** — le code appelle *server* ce que le glossaire appelle
+  *machine* : le port qui en ouvre et en ferme une (`ServerHost`), ce qu'il en
+  rend (`OpenedServer`, `HostedServer`) et ce qu'on lui demande
+  (`OpenServerRequest`). Ses commentaires disent pourtant *the machine* pour ce
+  qui démarre et porte une adresse, si bien que le même objet y a déjà deux
+  noms. Le *serveur* du glossaire, le jeu qu'on rejoint, n'a aucun nom de code.
+  Aucun des deux concepts n'a encore de nom fixé : c'est le lot correctif qui
+  les choisit, et le glossaire les reçoit avec lui.
 
 ## Gaps
 

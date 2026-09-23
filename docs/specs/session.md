@@ -3,12 +3,12 @@
 ## Boundary
 
 Ce module porte **ce qui naît et meurt avec une partie** : une session s'ouvre
-sur un monde, porte une heure de fermeture, se prolonge, s'arrête, et le serveur
+sur un monde, porte une heure de fermeture, se prolonge, s'arrête, et la machine
 qu'elle a fait naître disparaît avec elle.
 
 Il couvre l'ouverture, la prolongation et la fermeture d'une session, ce qu'il
-faut pour rejoindre le serveur qu'elle fait tourner, le jeu que ce serveur lance
-et ce qu'il faut pour le lancer, ce que le système garantit quand elle échoue,
+faut pour rejoindre le serveur qu'elle fait tourner, le jeu qu'elle lance et ce
+qu'il faut pour le lancer, ce que le système garantit quand elle échoue,
 qui a le droit d'agir dessus, et ce qu'elle laisse voir aux autres.
 
 **Ce qui survit aux sessions n'est pas à lui** : le monde et tout ce qui dure
@@ -35,15 +35,17 @@ modèle est faux, pas que la traduction est difficile.
 
 | Métier | Code, et libellé s'il diffère | Ce que c'est |
 |---|---|---|
-| session | `Session` | une partie ouverte, de son démarrage à la disparition de son serveur |
-| heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel le serveur s'arrête |
+| session | `Session` | une partie ouverte, de son démarrage à la disparition de sa machine |
+| machine | — | ce qu'une session fait naître chez l'hébergeur et qui disparaît avec elle : c'est elle qui est facturée, et elle qui fait tourner le jeu |
+| serveur | — | le jeu qui tourne sur la machine d'une session, et que les joueurs rejoignent |
+| heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel la machine s'arrête |
 | ouvrir une session | `opening` | la faire naître sur un monde, son heure de fermeture déjà fixée |
 | prolonger | `extend` | repousser l'heure de fermeture d'un pas |
-| fermer | `requestStop` | demander l'arrêt. La disparition du serveur, elle, se constate |
+| fermer | `requestStop` | demander l'arrêt. La disparition de la machine, elle, se constate |
 | durée d'une session | `sessionDurationMs` | quatre heures : ce qui sépare l'ouverture de la première heure de fermeture |
 | pas de prolongation | `extensionStepMs` | une heure : ce qu'une prolongation ajoute |
 | fenêtre de prolongation | `extensionWindowMs` | les trente dernières minutes, seul moment où prolonger est possible |
-| gabarit | `InstanceSize` | le calibre du serveur |
+| gabarit | `InstanceSize` | le calibre de la machine |
 | jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité. Celui d'une session est celui de son monde, et ne se choisit pas |
 | dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne, et que chaque machine reprend |
 | mettre à disposition | `push` | déposer ce qu'un jeu exige pour tourner |
@@ -53,10 +55,10 @@ modèle est faux, pas que la traduction est difficile.
 | point de jonction | `JoinInfo`, affiché `How to join` | ce que le joueur copie pour rejoindre |
 | fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait être joignable |
 | réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
-| hors service | `IDLE`, affiché `Out of service` | aucun serveur ; on peut ouvrir une session |
-| en préparation | `PROVISIONING`, affiché `Preparing` | le serveur se met en place |
+| hors service | `IDLE`, affiché `Out of service` | aucune machine ; on peut ouvrir une session |
+| en préparation | `PROVISIONING`, affiché `Preparing` | la machine se met en place |
 | en service | `RUNNING`, affiché `In service` | on peut rejoindre le monde dans le jeu |
-| en fermeture | `STOPPING`, affiché `Closing` | la session est finie, le serveur n'a pas encore disparu |
+| en fermeture | `STOPPING`, affiché `Closing` | la session est finie, la machine n'a pas encore disparu |
 | bloqué | `FAILED`, affiché `Not cleared` | le système n'a pas pu garantir que tout a disparu |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
@@ -99,7 +101,7 @@ trois sessions facturées, et chacune s'éteint seule.
 qu'ait été la cause de sa fermeture. C'est la seule donnée irremplaçable du
 système.
 
-**Le serveur se met en place à chaque ouverture, et l'attente est
+**La machine se met en place à chaque ouverture, et l'attente est
 incompressible.** Sa durée varie d'une session à l'autre. L'écran annonce donc
 **une fourchette d'heures de disponibilité, jamais une heure unique ni une durée
 promise.**
@@ -117,8 +119,8 @@ apporte sa forme sans que rien ici ne change.
 Quand le premier fait défaut, le second suffit.
 
 **Une session est *en service* quand un joueur peut rejoindre le monde dans le
-jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni un
-serveur qui répond.
+jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni une
+machine qui répond.
 
 **Un échec de publication n'interrompt jamais une session.** Ce qui n'a pas pu
 être publié manque à l'écran ; la session continue avec ce qui reste.
@@ -137,20 +139,20 @@ Une session ouverte à 20 h ferme donc à minuit ; entre 23 h 30 et minuit on pe
 la porter à 1 h ; entre 0 h 30 et 1 h, à 2 h ; et ainsi de suite.
 
 **Il n'y a aucun plafond**, et c'est le cœur du produit : le garde-fou n'a jamais
-été une durée maximale mais l'obligation de recliquer. Un serveur oublié s'arrête
-donc toujours dans l'heure, quel que soit le nombre de prolongations déjà
-accordées.
+été une durée maximale mais l'obligation de recliquer. Une machine oubliée
+s'arrête donc toujours dans l'heure, quel que soit le nombre de prolongations
+déjà accordées.
 
 **Prolonger est un acte collectif sur une ressource commune.** Deux joueurs qui
 prolongent au même moment gagnent une heure, pas deux.
 
 ## Closing a session
 
-**Une session se ferme à son heure.** Personne n'a besoin d'être là : le serveur
-disparaît de lui-même. N'importe quel joueur du monde peut aussi la fermer avant.
+**Une session se ferme à son heure.** Personne n'a besoin d'être là : la machine
+disparaît d'elle-même. N'importe quel joueur du monde peut aussi la fermer avant.
 
 **Une session terminée ne coûte plus rien.** Ce qu'elle a fait naître chez
-l'hébergeur cesse d'être facturé, et il n'existe donc pas de « serveur en
+l'hébergeur cesse d'être facturé, et il n'existe donc pas de « machine en
 pause » — ni dans le produit, ni à l'écran.
 
 > [!NOTE]
@@ -167,9 +169,9 @@ stateDiagram-v2
     IDLE --> PROVISIONING : un joueur du monde ouvre une session
     PROVISIONING --> RUNNING : on peut rejoindre le monde dans le jeu
     RUNNING --> STOPPING : le bouton, ou l'heure de fermeture
-    STOPPING --> IDLE : le serveur a disparu
+    STOPPING --> IDLE : la machine a disparu
     PROVISIONING --> IDLE : la mise en place a échoué, mais rien ne subsiste
-    RUNNING --> IDLE : le serveur a disparu chez l'hébergeur
+    RUNNING --> IDLE : la machine a disparu chez l'hébergeur
     PROVISIONING --> FAILED : échec, et le système ne peut pas garantir que rien ne subsiste
     RUNNING --> FAILED : la destruction a été refusée
     STOPPING --> FAILED : la destruction a été refusée
@@ -178,7 +180,7 @@ stateDiagram-v2
 
 **Un joueur demande, le système constate.** Ouvrir et fermer sont des intentions,
 qu'un joueur exprime. *En service*, *hors service* et *bloqué* sont des constats
-sur le monde réel — un serveur joignable, un serveur disparu, un nettoyage
+sur le monde réel — un serveur joignable, une machine disparue, un nettoyage
 incertain — et personne ne peut les déclarer à la place du système.
 
 **Un échec ordinaire ne bloque rien.** Une mise en place refusée par l'hébergeur
@@ -204,7 +206,7 @@ son heure de fermeture : sans elles, cette heure ne serait qu'une intention.
 |---|---|---|
 | Une session dont l'heure de fermeture est passée se ferme | 2 minutes après l'heure | — |
 | Une mise en place qui n'aboutit pas est abandonnée, et le monde redevient ouvrable | 25 minutes | — |
-| Une fermeture dont le serveur ne dit rien se termine quand même | 10 minutes | — |
+| Une fermeture dont la machine ne dit rien se termine quand même | 10 minutes | — |
 | Une session dont l'état ne correspond plus à la réalité de l'hébergeur est remise d'équerre | — | — |
 | Un nettoyage refusé est retenté jusqu'à aboutir | — | — |
 
@@ -274,3 +276,4 @@ contrepartie de « chacun peut fermer la session d'un autre ».
 |---|---|---|
 | out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne chacun d'eux |
 | out-of-batch | 2026-09-23 | le jeu entre dans session : ce qu'on exige de lui pour rejoindre, pour le lancer et pour le mettre à disposition |
+| out-of-batch | 2026-09-23 | la machine, que la session fait naître et qui est facturée, se distingue du serveur, le jeu qu'on y rejoint |
