@@ -98,16 +98,14 @@ consentement pour treize droits d'administration, ce sont treize décisions que
 personne n'a prises. Une mise en place partielle le dit, et ne ressemble jamais
 à une mise en place complète.
 
-**Quatre choses restent des gestes humains, et ce n'est pas un manque** :
+**Trois choses restent des gestes humains, et ce n'est pas un manque** :
 
 - **la mise en production**, parce qu'elle est une décision ;
 - **la valeur des secrets** : un mécanisme capable de les reconstituer seul
   serait un mécanisme qui les détient ;
 - **l'identifiant qui met à jour le domaine** : l'adopter demanderait de le
   recréer, donc d'en changer le mot de passe, et la session en cours perdrait
-  sa mise à jour au passage ;
-- **le premier administrateur** : rien d'antérieur à sa première connexion ne
-  peut le nommer.
+  sa mise à jour au passage.
 
 ## Rebuilding the account
 
