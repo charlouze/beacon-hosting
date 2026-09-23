@@ -7,6 +7,12 @@ périodique, l'expurgation des messages d'erreur et les gardes du rapport de la
 machine, les droits de lecture, les libellés des écrans qui montrent une session,
 et le chemin par lequel une demande de fermeture part de l'écran.
 
+**Audité aussi, sans violation trouvée** : le catalogue des jeux et les deux
+entrées qui le peuplent, l'outil de dépôt, ce que la Function de
+provisionnement passe à un jeu, et la restauration des fichiers de jeu par le
+compagnon. Ce périmètre a été lu le 2026-09-22 pour l'adoption d'un module
+`jeu` qui a été dissous depuis, et dont les règles sont revenues ici.
+
 **Non audité**, et il faut le lire comme « on ne sait pas » et non comme « rien
 n'a été trouvé » :
 
@@ -88,3 +94,54 @@ ci-dessous sont établis par lecture.
   décrit, rien ne dit ce qu'ils valent, quand ils sont faux, ni ce qu'ils
   deviennent quand un gabarit n'a pas de tarif — cas qu'un administrateur crée en
   ajoutant un gabarit.
+
+- **Joining** — chaque jeu construit sa propre forme de point de jonction
+  plutôt qu'une liste commune d'étiquettes et de valeurs, et un jeu de plus
+  ajoute une forme sans toucher au code qui manipule les autres
+  `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Joining** — l'identité du monde que le catalogue des jeux porte sert à
+  vérifier le préfixe d'un identifiant de serveur avant de le publier, et un
+  identifiant au mauvais préfixe ne publie rien
+  `docs/archive/plans/2026-09-08-tranche-3-bis-le-second-jeu.md`.
+
+- **Running a game** — un catalogue par jeu porte image, ports, variables et
+  options de démarrage, et c'est le seul endroit du dépôt qui sait qu'un serveur
+  de jeu se lance ; le jeu lui-même n'est qu'un identifiant
+  `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Running a game** — le conteneur de chaque jeu est épinglé à son empreinte et
+  jamais à une étiquette mobile ; l'un d'eux tourne avec un point d'entrée monté
+  et impose deux contraintes qui ne se devinent pas — l'identité système sous
+  laquelle il écrit, et la reprise de son gestionnaire d'arrêt `STACK.md`.
+
+- **Making a game available** — le jeu que chacun peut obtenir est repris par
+  l'outil de sa plateforme à chaque démarrage de la machine, ce qui évite
+  plusieurs gigaoctets de stockage permanent
+  `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Making a game available** — le dépôt vit dans un seau distinct de celui des
+  sauvegardes, la machine de jeu n'en a que la lecture, et ce qui tient
+  réellement cette frontière est une politique de seau en liste blanche posée
+  chez le fournisseur `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Making a game available** — l'outil qui dépose les fichiers d'un jeu n'a
+  aucun verbe qui détruit et ne connaît pas l'adresse des sauvegardes ; c'est
+  pour cette raison exacte que l'outil qui manipule les mondes en est séparé
+  `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Making a game available** — les fichiers déposés voyagent en une archive
+  unique par jeu, reconstruite entière à chaque dépôt, et le seau cesse d'être
+  inspectable fichier par fichier
+  `docs/archive/plans/2026-09-08-tranche-3-bis-le-second-jeu.md`.
+
+- **Making a game available** — le geste de rafraîchissement résout la clé
+  d'administration, cherche l'installation locale du serveur dédié dans les
+  bibliothèques de la plateforme, et imprime la commande exacte à lancer quand il
+  ne la trouve pas `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+
+- **Making a game available** — rien ne compare ce qui est déposé à ce que
+  l'éditeur publie, ni à l'installation locale depuis laquelle le dépôt se fait.
+  Le 2026-09-21, une heure a été payée pour un serveur périmé que personne ne
+  pouvait voir venir. L'ancre existe déjà et ne coûte rien à lire : le manifeste
+  de la plateforme voyage dans l'archive déposée et porte un numéro de version.

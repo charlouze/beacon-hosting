@@ -7,12 +7,14 @@ sur un monde, porte une heure de fermeture, se prolonge, s'arrête, et le serveu
 qu'elle a fait naître disparaît avec elle.
 
 Il couvre l'ouverture, la prolongation et la fermeture d'une session, ce qu'il
-faut pour rejoindre le serveur qu'elle fait tourner, ce que le système garantit
-quand elle échoue, qui a le droit d'agir dessus, et ce qu'elle laisse voir aux
-autres.
+faut pour rejoindre le serveur qu'elle fait tourner, le jeu que ce serveur lance
+et ce qu'il faut pour le lancer, ce que le système garantit quand elle échoue,
+qui a le droit d'agir dessus, et ce qu'elle laisse voir aux autres.
 
 **Ce qui survit aux sessions n'est pas à lui** : le monde et tout ce qui dure
-avec lui, les personnes autorisées, ce qui se déclare une fois et reste.
+avec lui, les personnes autorisées, ce qui se déclare une fois et reste. **Une
+seule exception : ce qu'il faut pour qu'un jeu tourne**, parce que tout ce qu'on
+en exige se voit depuis une session.
 
 La forme de l'interface appartient à `.impeccable/DIRECTION.md`. Ce qu'un écran
 de session doit **dire** est ci-dessous, dans la section que ça concerne.
@@ -42,6 +44,10 @@ modèle est faux, pas que la traduction est difficile.
 | pas de prolongation | `extensionStepMs` | une heure : ce qu'une prolongation ajoute |
 | fenêtre de prolongation | `extensionWindowMs` | les trente dernières minutes, seul moment où prolonger est possible |
 | gabarit | `InstanceSize` | le calibre du serveur |
+| jeu | `Game` | ce que le serveur d'une session fait tourner. Il vient du monde, et ne se choisit pas |
+| dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne, et que chaque machine reprend |
+| mettre à disposition | `push` | déposer ce qu'un jeu exige pour tourner |
+| rafraîchir | `update` | remplacer le dépôt d'un jeu par sa version courante |
 | l'ouvrant | `startedBy` | le joueur qui a ouvert la session |
 | heure d'ouverture | `startedAt`, affiché `Opened at` | l'instant où la session a été ouverte |
 | point de jonction | `JoinInfo`, affiché `How to join` | ce que le joueur copie pour rejoindre |
@@ -63,7 +69,6 @@ session, au lieu de l'apprendre par une panne.
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
 | `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et l'ensemble de ses joueurs. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
-| `Game` | l'identité du jeu d'un monde, figée. Une session ne sait ni comment on se connecte à ce jeu, ni comment il se sauvegarde, ni ce qu'il coûte à mettre en place |
 | `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
 | `Player` (`docs/specs/monde.md`) | un membre qui joue dans ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
 | `Member` (`docs/specs/membre.md`) | une personne autorisée. Une session ne distingue que membre, administrateur, et ni l'un ni l'autre |
@@ -107,6 +112,9 @@ mondes.** Une ouverture qui n'en nomme aucun prend le gabarit en vigueur.
 **Ce qu'il faut pour rejoindre dépend du jeu**, et le système ne l'interprète
 jamais : il le transporte, et l'écran le rend lisible et copiable. Un jeu de plus
 apporte sa forme sans que rien ici ne change.
+
+**Tout jeu offre au joueur un moyen principal de rejoindre et un recours.**
+Quand le premier fait défaut, le second suffit.
 
 **Une session est *en service* quand un joueur peut rejoindre le monde dans le
 jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni un
@@ -216,6 +224,26 @@ d'hébergement ne sert qu'à ce produit, et ce qui y traîne est une facture que
 personne n'a demandée. **Au bout de combien de temps elle coûte trop cher n'est
 pas encore décidé**, et c'est une question d'argent, pas de surveillance.
 
+## Running a game
+
+**Beacon ne modifie aucun jeu.** Il le lance tel qu'il est publié, et n'y
+ajoute que ce qu'il faut pour le démarrer et le relier au reste du produit. Le
+jeu n'est pas la valeur du produit, et le refaire priverait chaque jeu des
+corrections de ceux qui le publient.
+
+**Aucune machine de jeu ne détient le compte qui possède un jeu.** Ce qu'une
+machine reçoit pour lancer un jeu ne lui permet jamais d'agir au nom de ce
+compte.
+
+## Making a game available
+
+**Un jeu que chacun peut obtenir, la machine le prend elle-même.** Rien n'est
+mis à disposition pour lui, et rien de lui n'est gardé entre deux sessions.
+
+**Un jeu que seul son propriétaire peut obtenir est mis à disposition une fois,
+et chaque machine le reprend de là.** C'est ce dépôt qui fait tourner le jeu,
+et c'est lui qu'on rafraîchit quand le jeu change.
+
 ## Who may do what
 
 | Qui | Ce qu'il peut faire sur une session |
@@ -232,6 +260,10 @@ partagent.
 **La durée d'une session, le pas et la fenêtre de prolongation, et le gabarit
 sont les mêmes pour tous les mondes.** Seul un administrateur les change.
 
+**Un administrateur met un jeu à disposition et le rafraîchit ; un joueur et un
+visiteur, rien.** Aucun geste sur un jeu ne passe par l'interface que les
+joueurs consultent.
+
 **Aucun geste sur une session n'est anonyme.** Personne n'ouvre une session au
 nom d'un autre, et qui a fermé la session de quelqu'un reste su. C'est la
 contrepartie de « chacun peut fermer la session d'un autre ».
@@ -241,3 +273,4 @@ contrepartie de « chacun peut fermer la session d'un autre ».
 | batch | date | change |
 |---|---|---|
 | out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne chacun d'eux |
+| out-of-batch | 2026-09-23 | le jeu entre dans session : ce qu'on exige de lui pour rejoindre, pour le lancer et pour le mettre à disposition |
