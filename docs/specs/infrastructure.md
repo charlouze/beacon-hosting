@@ -2,223 +2,150 @@
 
 ## Boundary
 
-Ce module porte **ce que le système suppose en place pour tourner, et ce qui
-fait que ce qui tourne est ce qu'on a voulu** : le compte sur lequel Beacon vit,
-la façon dont on le déclare et dont on prouve qu'il se reconstruit, la mise en
-production, et ce qui prévient l'exploitant quand le système cesse de se tenir
-seul.
+Ce module porte le compte sur lequel Beacon tourne, sa mise en place et sa
+reconstruction, la mise en production, les identifiants que le système confie,
+le rechargement d'un onglet périmé, et les alertes qui préviennent l'exploitant.
 
-Il couvre ce que le compte porte et ce qu'il ne revendique jamais, la mise en
-place du compte et ce qu'elle a le droit de faire, la reconstruction sur un
-compte vide, la mise en production et ce qui la garde, les identifiants que le
-système confie et à qui, ce qui ramène un onglet ouvert sur le code en
-production, et ce qui prévient l'exploitant.
+Il déclare le contenant, jamais le contenu.
 
-**Il déclare le contenant, jamais le contenu.** Ce qui s'écrit dans le compte
-pendant que le système tourne n'est pas à lui : ni ce qui naît et meurt avec une
-session, ni ce qu'un serveur de jeu a le droit de toucher (`session`), ni les
-mondes, leurs sauvegardes et ce que la règle de durée du stockage en retire
-(`monde`), ni qui est membre ou administrateur (`membre`). L'exploitant n'est
-pas un rôle de Beacon : être administrateur ne donne aucun accès au compte.
+Il ne porte ni ce qui naît et meurt avec une session, ni ce qu'un serveur de jeu
+a le droit de toucher (`session`) ; ni les mondes, leurs sauvegardes et ce que
+la règle de durée du stockage en retire (`monde`) ; ni qui est utilisateur ou
+administrateur (`utilisateur`).
 
 ## Ubiquitous language
 
-Les noms de code sont en anglais alors que la langue métier est le français :
-l'expert du domaine lit lui-même le code, donc il n'y a pas de fossé de
-traduction à combler.
-
-**Ce tableau nomme les concepts du domaine, et rien d'autre.** Un libellé, un
-titre ou un message ne sont pas des concepts : ils habillent un concept déjà
-nommé ici, ou ils n'en portent aucun.
-
-Un concept qu'on peine à nommer dans les deux colonnes est le signe que le
-modèle est faux, pas que la traduction est difficile.
-
 | Métier | Code | Ce que c'est |
 |---|---|---|
-| compte | — | tout ce qui survit à toutes les sessions et que le système suppose en place avant de tourner |
+| compte | — | tout ce qui survit à toutes les sessions et que le système suppose en place pour tourner |
 | déclaration du compte | `WANTED` | ce que le compte doit porter, écrit dans le dépôt |
 | écart | `gap` | ce qui sépare ce que le compte porte de ce qui est déclaré |
 | mise en place | `deploy-setup` | le geste qui comble l'écart |
 | mise en production | — | la fusion d'une pull request dans `main` |
 | version en production | `rulesVersion` | la version du code que la dernière mise en production a publiée |
-| exploitant | — | celui qui détient le compte d'hébergement : il reçoit les alertes du compte et fait ses gestes humains |
+| exploitant | — | la personne qui détient le compte d'hébergement |
 
-### Ce que ce contexte emprunte, et ce qu'il en connaît
-
-**Ce contexte a son propre modèle des objets qu'il touche, réduit à ce dont il
-se sert** — et c'est délibéré : si leur définition bouge ailleurs, c'est ici
-qu'on verra si elle bouge aussi pour lui, au lieu de l'apprendre par une panne.
+### Borrowed terms
 
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
-| `Session` (`docs/specs/session.md`) | ce qui naît et meurt dans le compte sans que personne le déclare. Ce contexte sait seulement qu'une session tient certaines garanties sans attendre personne, et qu'il faut savoir quand elles cessent d'être tenues |
-| `Save` (`docs/specs/monde.md`) | du contenu, écrit dans un seau que le compte déclare. Ce contexte ne l'écrit, ne le lit et ne le retire jamais |
+| `Session` (`docs/specs/session.md`) | ce qui naît et meurt dans le compte sans être déclaré. Une session tient des garanties sans attendre personne, et ce qui les tient peut cesser de tourner |
+| `Save` (`docs/specs/monde.md`) | du contenu écrit dans un seau du compte. Ce contexte ne l'écrit, ne le lit ni ne le retire |
+
 ## What the account holds
 
-**Ce qui survit à toutes les sessions est le compte, et le compte se déclare :
-il ne se manipule pas à l'exécution.** La durée de vie est le critère, et il
-tranche tous les cas sans qu'on ait à les énumérer.
+Une ressource appartient au compte selon qui la crée, jamais selon qui y écrit.
 
-**La frontière porte sur qui crée la ressource, jamais sur qui écrit dedans.**
-Une sauvegarde survit à sa session et le système l'écrit pourtant à chaque fois :
-elle est du contenu. Le seau qui la contient est la ressource, et le seau est au
-compte. Ce qui limite ce qu'une ressource laisse faire, et la règle de durée qui
-finit par en retirer du contenu, sont des attributs de la ressource, donc du
-compte.
+La politique d'accès d'une ressource et la règle de durée qui en retire du
+contenu sont des attributs de cette ressource, donc du compte.
 
-**Le compte ne revendique jamais ce qui naît et meurt avec une session.** Deux
-mécanismes sur le même objet se le disputent, et celui qui tourne en boucle
-gagne contre celui qu'on lance — après l'avoir fait échouer.
+Le compte ne comprend rien de ce qui naît et meurt avec une session.
 
-**Un enregistrement de domaine se déclare en existence, jamais en valeur.**
-L'enregistrement survit à toutes les sessions : c'est le compte. L'adresse qu'il
-porte est réécrite à chaque session : c'est la session. Déclarer l'adresse
-repointerait le sous-domaine vers une session morte pendant qu'une autre tourne.
+Un enregistrement de domaine se déclare en existence, jamais en valeur.
 
 ## Setting up the account
 
-**La mise en place ne détruit jamais une ressource.** Elle déclare le contenant,
-jamais le contenu : il n'existe aucun chemin par lequel un changement de nom
-emporte un seau et les mondes qu'il contient.
+La mise en place ne détruit aucune ressource.
 
-**On sait toujours, sans rien modifier, en quoi le compte diffère de sa
-déclaration.** L'écart se lit sans écrire, et relancée sur un compte conforme,
-la mise en place ne propose rien. La question à laquelle elle répond le plus
-souvent n'est pas « comment installer », qui n'arrive qu'une fois, mais « est-ce
-que c'est toujours bien posé ».
+La mise en place ne crée, ne modifie ni ne retire aucun contenu.
 
-**L'écart porte sur ce qui est déclaré.** Ce qui diverge d'un attribut déclaré
-est signalé ; une ressource qui existe sans être déclarée ne l'est pas. Pour un
-compte d'une vingtaine de ressources connues, c'est le bon marché.
+L'écart se lit sans rien modifier.
 
-**Rien ne se pose sur le compte sans que l'exploitant y ait consenti, geste
-par geste**, en lisant ce qui manque et ce que le geste va faire. Un seul
-consentement pour treize droits d'administration, ce sont treize décisions que
-personne n'a prises. Une mise en place partielle le dit, et ne ressemble jamais
-à une mise en place complète.
+L'écart signale tout attribut déclaré qui diverge. Exception : une ressource
+présente et non déclarée n'est pas signalée.
 
-**Trois choses restent des gestes humains, et ce n'est pas un manque** :
+Sur un compte conforme à sa déclaration, la mise en place ne propose rien.
 
-- **la mise en production**, parce qu'elle est une décision ;
-- **la valeur des secrets** : un mécanisme capable de les reconstituer seul
-  serait un mécanisme qui les détient ;
-- **l'identifiant qui met à jour le domaine** : l'adopter demanderait de le
-  recréer, donc d'en changer le mot de passe, et la session en cours perdrait
-  sa mise à jour au passage.
+Rien ne se pose sur le compte sans le consentement de l'exploitant, donné geste
+par geste après lecture de ce qui manque et de ce que le geste fait.
+
+Une mise en place interrompue ou refusée en partie se signale comme partielle.
+
+Trois gestes restent humains : la mise en production, la saisie de la valeur des
+secrets, et la création de l'identifiant qui met à jour le domaine.
 
 ## Rebuilding the account
 
-**Beacon se réinstalle sur un compte vide par une suite de gestes écrits, en un
-temps connu.** Pas pour changer de compte — il n'y en a qu'un —, mais parce que
-c'est le seul énoncé qui se vérifie : une déclaration qui décrit un compte déjà
-conforme ne prouve rien, la même sur un compte vide prouve tout.
+Beacon se réinstalle sur un compte vide par une suite de gestes écrits, en un
+temps connu.
 
-**Tout ce que le compte porte est déclaré dans le dépôt**, hormis les gestes
-humains de la section précédente. Un geste de console ne laisse aucune trace
-rejouable, et le jour où il est fait de travers, personne ne s'en aperçoit.
+Tout ce que le compte porte est déclaré dans le dépôt. Exception : la valeur des
+secrets et l'identifiant qui met à jour le domaine.
 
 ## Putting into production
 
-**Mettre en production, c'est fusionner une pull request dans `main`.** Ce n'est
-jamais déclencher quoi que ce soit d'autre. `main` est donc égal à ce qui tourne
-pour tout ce qui se déploie, et personne ne peut oublier de déployer. Il n'y a
-qu'un environnement : ce qui part en production touche directement ce dont les
-joueurs se servent.
+Mettre en production, c'est fusionner une pull request dans `main`. Exceptions :
+un déploiement lancé depuis un poste, qui échappe à la revue, et la publication
+de l'image que Beacon construit pour ses serveurs de jeu, qui se fait par un
+geste explicite.
 
-> [!NOTE]
-> Rien n'empêche un déploiement lancé depuis un poste. C'est un chemin sans
-> revue qu'on sait exister, pas une seconde voie de mise en production.
+`main` est égal à ce qui tourne, pour tout ce qui se déploie.
 
-**`main` n'accepte rien qui ne soit passé par une pull request vérifiée** : pas
-de poussée directe, pas de fusion dont les vérifications sont rouges. Sans cela,
-tout ce qui garde la mise en production se contourne d'une poussée.
+Il n'existe qu'un environnement.
 
-**Ce qui part en production est vérifié tel quel.** Deux branches vertes
-séparément peuvent produire une fusion rouge : c'est le résultat de la fusion
-qui est vérifié avant de partir, pas seulement la pull request.
+`main` n'accepte ni poussée directe, ni fusion dont les vérifications ont échoué.
 
-**La mise en production s'arrête au premier échec**, et les règles d'accès ne
-partent jamais si leurs refus ne sont pas vérifiés.
+Toute pull request est vérifiée, qu'elle ait quelque chose à publier ou non.
 
-**Une fusion qui n'a rien à publier ne met rien en production.** La publier
-republierait l'identique, et ferait recharger tous les onglets ouverts pour une
-virgule dans un document. `main` peut donc porter une documentation plus récente
-que ce qui tourne. Ce que ça coûte : une telle fusion ne répare pas une mise en
-production précédente qui aurait échoué.
+Le résultat de la fusion est vérifié avant de partir en production.
 
-**Toute pull request est vérifiée, documentaire comprise.** Le filtre porte sur
-la mise en production, jamais sur la vérification.
+La mise en production s'arrête au premier échec.
 
-**Une pull request ne touche aucun compte réel.** Ce qui s'éprouve contre le
-compte d'hébergement se lance depuis le poste d'un développeur, jamais depuis
-l'environnement qui vérifie une pull request.
+Les règles d'accès ne partent en production qu'une fois leurs refus vérifiés.
 
-**Le système n'a aucun paramètre d'installation.** La première mise en
-production donne un système déployé et sans aucun membre, et c'est un état
-normal, pas une panne.
+Une fusion qui n'a rien à publier ne met rien en production.
 
-**Une mise en production pose les réglages d'un système qui n'en a aucun, et ne
-modifie jamais ceux qui existent**, sauf les valeurs qu'elle est seule à
-connaître.
+La vérification d'une pull request ne touche aucun compte réel.
+
+Le système n'a aucun paramètre d'installation.
+
+La première mise en production donne un système sans aucun utilisateur.
+
+Une mise en production pose les réglages d'un système qui n'en a aucun, et ne
+modifie jamais un réglage existant. Exception : la version en production et
+l'adresse à laquelle un serveur de jeu rapporte, qu'elle réécrit à chaque fois.
 
 ## What runs is what was verified
 
-**Toute image de conteneur que le système fait tourner est désignée par une
-référence immuable** : celles que Beacon construit comme celles qu'il emprunte.
-Changer de version est un commit, jamais un effet de bord, et on sait toujours
-dire après coup quelle version a tourné.
+Toute image de conteneur que le système fait tourner, construite par Beacon ou
+empruntée, est désignée par une référence immuable.
 
-**L'image que Beacon construit pour ses serveurs de jeu se publie par un geste
-explicite, jamais par une fusion**, et ne se publie que si elle a démarré avant.
+Changer de version d'image est un commit.
+
+L'image que Beacon construit pour ses serveurs de jeu ne se publie qu'après avoir
+démarré.
 
 ## Credentials
 
-**Aucun identifiant d'hébergeur n'est confié à l'hébergement du code** — ni au
-dépôt, ni à ce qui y vérifie ou y déploie. Il vit dans le plan de contrôle, lu
-par ce qui en a besoin. Une copie ailleurs serait un second coffre à protéger,
-avec un modèle de menace différent et une surface plus large.
+Aucun identifiant d'hébergeur n'est confié à l'hébergement du code : ni au dépôt,
+ni à la vérification des pull requests, ni à la mise en production.
 
-**La mise en production ne détient aucune clé de longue durée.** Elle prouve son
-identité à chaque fois.
+La mise en production ne détient aucune clé de longue durée.
 
-**La valeur d'un secret du compte est saisie par un humain, et rien ne la
-retient au passage** : ni un fichier, ni une ligne de commande, ni l'état d'un
-outil.
+La valeur d'un secret du compte est saisie par un humain, et ne passe ni par un
+fichier, ni par une ligne de commande, ni par l'état d'un outil.
 
 ## Open tabs follow production
 
-**Un onglet ouvert ne reste pas sur un code plus ancien que celui qui tourne.**
 Quand une mise en production change le code, tout onglet ouvert se recharge de
-lui-même, sans que personne ait à le faire, au plus tard quand la mise en
-production s'achève. Sinon un onglet ouvert la veille
-calcule avec les règles d'hier contre le système d'aujourd'hui, et le joueur
-voit un bouton qui marche puis un effet qui s'évapore.
-
-**La règle vaut pour tout ce que le navigateur calcule**, quel que soit le
-module dont la règle a changé.
-
-**Seule la mise en production écrit la version en production, et l'adresse à
-laquelle un serveur de jeu rapporte.** Personne d'autre, quel que soit son rôle
-dans Beacon : écrire la première désynchroniserait tous les onglets, écrire la
-seconde redirigerait l'endroit où les serveurs rapportent.
+lui-même, au plus tard quand la mise en production s'achève.
 
 ## Warning the operator
 
-**Quand ce qui tient les garanties d'une session sans attendre personne cesse
-de tourner, l'exploitant est prévenu au plus tard une heure après.** Une
-alerte de dépense mesure le dégât une fois qu'il est fait ; celle-ci mesure la
-panne. Une heure, c'est au pire une heure de serveur facturée de plus pour
-chaque session que plus rien ne ferme.
+Quand ce qui tient les garanties d'une session sans attendre personne cesse de
+tourner, l'exploitant est prévenu au plus tard une heure après.
 
-**Une dépense du mois chez l'hébergeur qui dépasse 5 € prévient
-l'exploitant.** C'est le garde-fou de dernier recours, quand tout le reste a
-manqué. Le seuil laisse de la marge sous les 7,90 € du serveur dédié que Beacon
-remplace, au-delà desquels le produit ne tient plus sa promesse.
+Une dépense du mois chez l'hébergeur qui dépasse 5 € prévient l'exploitant.
 
-**Ces alertes vont à l'exploitant, hors de l'application, et jamais aux
-joueurs.** Un bandeau « le système ne se surveille plus » sur l'écran des
-joueurs n'apprendrait rien d'actionnable à quelqu'un qui veut juste jouer.
+Ces alertes parviennent à l'exploitant, hors de l'application, et à personne
+d'autre.
+
+## Who may do what
+
+Seul l'exploitant agit sur le compte. Aucun rôle dans Beacon n'y donne accès.
+
+Seule la mise en production écrit la version en production et l'adresse à
+laquelle un serveur de jeu rapporte.
 
 ## Changelog
 

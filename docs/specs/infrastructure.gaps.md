@@ -94,10 +94,11 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   bucket » sans distinguer leurs deux moitiés. L'identité que la mise en
   production emprunte porte un rôle d'administration des secrets, qui lui permet
   de lire tous les secrets d'hébergeur (`tools/deploy-setup/src/lib/wanted.ts`).
-- **Open tabs follow production** — seul l'onglet d'un membre suit la version en
-  production. Un onglet déconnecté ou de visiteur reste sur l'ancien code
-  jusqu'à ce qu'un membre s'y connecte (`apps/web/src/app/records.ts`).
-- **Open tabs follow production** — après un échec de mise en production, le
+- **Open tabs follow production** — seul un onglet connecté et autorisé suit la
+  version en production. Un onglet déconnecté, ou connecté sans être autorisé,
+  reste sur l'ancien code (`apps/web/src/app/records.ts`, où seul le cas
+  `member` s'abonne).
+- **Who may do what** — après un échec de mise en production, le
   workflow prescrit à un humain d'écrire la version en production et l'adresse
   de rapport depuis son poste (`.github/workflows/deploy.yml`, le résumé
   d'échec). La spec réserve ces deux valeurs à la mise en production.
