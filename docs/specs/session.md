@@ -12,7 +12,7 @@ et ce qu'il faut pour le lancer, ce que le système garantit quand elle échoue,
 qui a le droit d'agir dessus, et ce qu'elle laisse voir aux autres.
 
 **Ce qui survit aux sessions n'est pas à lui** : le monde et tout ce qui dure
-avec lui, les personnes autorisées, ce qui se déclare une fois et reste. **Une
+avec lui, les utilisateurs, ce qui se déclare une fois et reste. **Une
 seule exception : ce qu'il faut pour qu'un jeu tourne**, parce que tout ce qu'on
 en exige se voit depuis une session.
 
@@ -49,9 +49,9 @@ modèle est faux, pas que la traduction est difficile.
 | dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne, et que chaque serveur reprend |
 | mettre à disposition | `push` | déposer ce qu'un jeu exige pour tourner |
 | rafraîchir | `update` | remplacer le dépôt d'un jeu par sa version courante |
-| l'ouvrant | `startedBy` | le joueur qui a ouvert la session |
+| l'ouvrant | `startedBy` | le membre qui a ouvert la session |
 | heure d'ouverture | `startedAt`, affiché `Opened at` | l'instant où la session a été ouverte |
-| point de jonction | `JoinInfo`, affiché `How to join` | ce que le joueur copie pour rejoindre |
+| point de jonction | `JoinInfo`, affiché `How to join` | ce que le membre copie pour rejoindre |
 | fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait être joignable |
 | réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
 | hors service | `IDLE`, affiché `Out of service` | aucun serveur ; on peut ouvrir une session |
@@ -69,14 +69,14 @@ session, au lieu de l'apprendre par une panne.
 
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
-| `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et l'ensemble de ses joueurs. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
+| `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et ses membres. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
 | `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
-| `Player` (`docs/specs/monde.md`) | un membre qui joue dans ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
-| `Member` (`docs/specs/membre.md`) | une personne autorisée. Une session ne distingue que membre, administrateur, et ni l'un ni l'autre |
+| membre, `Player` (`docs/specs/monde.md`) | un utilisateur qui appartient à ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
+| `User` (`docs/specs/utilisateur.md`) | une personne qui s'est connectée à Beacon. Une session ne distingue que l'administrateur des autres utilisateurs |
 
 ## Opening a session
 
-**N'importe quel joueur du monde ouvre une session dessus.** Aucune action de jeu
+**N'importe quel membre du monde ouvre une session dessus.** Aucune action de jeu
 ne dépend de la disponibilité d'un administrateur.
 
 **Le jeu ne se choisit pas** : c'est celui du monde. On choisit un monde, le jeu
@@ -87,7 +87,7 @@ une dès son ouverture : quatre heures plus tard. C'est le mécanisme central du
 produit — ce n'est pas une limite de durée, c'est l'obligation qu'un humain
 éveillé reclique pour que la session continue.
 
-**À aucun instant un monde ne fait tourner deux sessions.** Deux joueurs qui
+**À aucun instant un monde ne fait tourner deux sessions.** Deux membres qui
 ouvrent au même moment ouvrent une seule session, et le second apprend que la
 première existe. Il n'existe pas de fenêtre, même brève, pendant laquelle les
 deux coexistent.
@@ -114,10 +114,10 @@ mondes.** Une ouverture qui n'en nomme aucun prend le gabarit en vigueur.
 jamais : il le transporte, et l'écran le rend lisible et copiable. Un jeu de plus
 apporte sa forme sans que rien ici ne change.
 
-**Tout jeu offre au joueur un moyen principal de rejoindre et un recours.**
+**Tout jeu offre au membre un moyen principal de rejoindre et un recours.**
 Quand le premier fait défaut, le second suffit.
 
-**Une session est *en service* quand un joueur peut rejoindre le monde dans le
+**Une session est *en service* quand un membre peut rejoindre le monde dans le
 jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni un
 serveur qui répond.
 
@@ -142,13 +142,13 @@ la porter à 1 h ; entre 0 h 30 et 1 h, à 2 h ; et ainsi de suite.
 donc toujours dans l'heure, quel que soit le nombre de prolongations déjà
 accordées.
 
-**Prolonger est un acte collectif sur une ressource commune.** Deux joueurs qui
+**Prolonger est un acte collectif sur une ressource commune.** Deux membres qui
 prolongent au même moment gagnent une heure, pas deux.
 
 ## Closing a session
 
 **Une session se ferme à son heure.** Personne n'a besoin d'être là : le serveur
-disparaît de lui-même. N'importe quel joueur du monde peut aussi la fermer avant.
+disparaît de lui-même. N'importe quel membre du monde peut aussi la fermer avant.
 
 **Une session terminée ne coûte plus rien.** Ce qu'elle a fait naître chez
 l'hébergeur cesse d'être facturé, et il n'existe donc pas de « serveur en
@@ -165,7 +165,7 @@ pause » — ni dans le produit, ni à l'écran.
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE : le monde existe, aucune session
-    IDLE --> PROVISIONING : un joueur du monde ouvre une session
+    IDLE --> PROVISIONING : un membre du monde ouvre une session
     PROVISIONING --> RUNNING : on peut rejoindre le monde dans le jeu
     RUNNING --> STOPPING : le bouton, ou l'heure de fermeture
     STOPPING --> IDLE : le serveur a disparu
@@ -177,8 +177,8 @@ stateDiagram-v2
     FAILED --> IDLE : plus rien ne subsiste
 ```
 
-**Un joueur demande, le système constate.** Ouvrir et fermer sont des intentions,
-qu'un joueur exprime. *En service*, *hors service* et *bloqué* sont des constats
+**Un membre demande, le système constate.** Ouvrir et fermer sont des intentions,
+qu'un membre exprime. *En service*, *hors service* et *bloqué* sont des constats
 sur le monde réel — un serveur joignable, un serveur disparu, un nettoyage
 incertain — et personne ne peut les déclarer à la place du système.
 
@@ -211,7 +211,7 @@ son heure de fermeture : sans elles, cette heure ne serait qu'une intention.
 
 **Les deux colonnes ne disent pas la même chose.** *Pas avant* protège ce qui va bien : une mise en place lente n'est pas
 abandonnée comme si elle avait échoué, et une session ne meurt pas à la seconde
-où son heure sonne. *Au plus tard* est ce qu'un joueur ou une facture
+où son heure sonne. *Au plus tard* est ce qu'un membre ou une facture
 constatent. Une garantie n'a de valeur pour eux que par sa seconde colonne.
 
 **Aucun plafond n'a jamais été décidé, et le tiret est un aveu.** En inventer un
@@ -253,21 +253,20 @@ et c'est lui qu'on rafraîchit quand le jeu change.
 
 | Qui | Ce qu'il peut faire sur une session |
 |---|---|
-| un joueur du monde | ouvrir, prolonger, fermer, tout voir de la session en cours |
+| un membre du monde | ouvrir, prolonger, fermer, tout voir de la session en cours |
 | un administrateur | la même chose, plus le gabarit |
-| un membre qui n'est pas joueur du monde | rien, et il ne sait pas que cette session existe |
-| un visiteur | rien du tout |
+| un utilisateur qui n'est pas membre du monde | rien, et il ne sait pas que cette session existe |
 
-**Aucun joueur n'a d'autorité sur un autre.** Chacun peut fermer la session qu'un
+**Aucun membre n'a d'autorité sur un autre.** Chacun peut fermer la session qu'un
 autre a ouverte : c'est délibéré, la ressource est commune à ceux qui la
 partagent.
 
 **La durée d'une session, le pas et la fenêtre de prolongation, et le gabarit
 sont les mêmes pour tous les mondes.** Seul un administrateur les change.
 
-**Un administrateur met un jeu à disposition et le rafraîchit ; un joueur et un
-visiteur, rien.** Aucun geste sur un jeu ne passe par l'interface que les
-joueurs consultent.
+**Un administrateur met un jeu à disposition et le rafraîchit ; aucun autre
+utilisateur ne le peut.** Aucun geste sur un jeu ne passe par l'interface que
+les utilisateurs consultent.
 
 **Aucun geste sur une session n'est anonyme.** Personne n'ouvre une session au
 nom d'un autre, et qui a fermé la session de quelqu'un reste su. C'est la

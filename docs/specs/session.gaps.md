@@ -82,7 +82,7 @@ ci-dessous sont établis par lecture.
   rattrapage n'a de plafond décidé.** Les valeurs connues sont toutes des
   planchers — on n'abandonne pas une mise en place avant vingt-cinq minutes, on
   ne ferme pas une session avant deux minutes de dépassement — et un plancher ne
-  dit rien de ce qu'un joueur ou une facture constatent. Le plafond réel dépend
+  dit rien de ce qu'un membre ou une facture constatent. Le plafond réel dépend
   aujourd'hui de la période à laquelle le système repasse : une heure de
   fermeture qui tombe juste après un passage attend le suivant, et le repos
   porte cette période à trente minutes. **Ces chiffres sont ceux du balayage,
