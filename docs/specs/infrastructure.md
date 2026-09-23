@@ -192,7 +192,8 @@ outil.
 
 **Un onglet ouvert ne reste pas sur un code plus ancien que celui qui tourne.**
 Quand une mise en production change le code, tout onglet ouvert se recharge de
-lui-même, sans que personne ait à le faire. Sinon un onglet ouvert la veille
+lui-même, sans que personne ait à le faire, au plus tard quand la mise en
+production s'achève. Sinon un onglet ouvert la veille
 calcule avec les règles d'hier contre le système d'aujourd'hui, et le joueur
 voit un bouton qui marche puis un effet qui s'évapore.
 

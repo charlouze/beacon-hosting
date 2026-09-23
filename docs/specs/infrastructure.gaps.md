@@ -153,9 +153,9 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   compte vivent dans un fichier local et sont recopiées dans un second
   (`tools/dev-secrets.mjs`), et le rendu de la configuration d'une machine passe
   son mot de passe par la ligne de commande (`deploy/README.md`).
-- **Open tabs follow production** — au bout de combien de temps un onglet se
-  recharge n'a jamais été décidé. Le mécanisme compare en temps réel la version
-  compilée dans l'application à celle que la mise en production a écrite.
+- **Open tabs follow production** — l'application compare en temps réel la
+  version compilée dans son code à celle que la mise en production a écrite, et
+  se recharge quand elles diffèrent.
   `docs/archive/specs/2026-09-02-game-hosting-design.md` §4 le prescrit.
 - **Warning the administrator** — l'alerte sur l'arrêt du rattrapage surveille
   l'échec ou l'absence d'exécution de la tâche planifiée. Elle détecte un arrêt,
