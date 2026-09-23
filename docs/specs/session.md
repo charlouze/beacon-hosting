@@ -273,6 +273,5 @@ contrepartie de « chacun peut fermer la session d'un autre ».
 
 | batch | date | change |
 |---|---|---|
-| out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne chacun d'eux |
 | out-of-batch | 2026-09-23 | le jeu entre dans session : ce qu'on exige de lui pour rejoindre, pour le lancer et pour le mettre à disposition |
 | out-of-batch | 2026-09-23 | un seul mot, serveur, désigne ce que la session fait naître chez l'hébergeur et ce qu'on y rejoint |
