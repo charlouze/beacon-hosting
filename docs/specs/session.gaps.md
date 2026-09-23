@@ -76,12 +76,12 @@ ci-dessous sont établis par lecture.
   planchers — on n'abandonne pas une mise en place avant vingt-cinq minutes, on
   ne ferme pas une session avant deux minutes de dépassement — et un plancher ne
   dit rien de ce qu'un joueur ou une facture constatent. Le plafond réel dépend
-  aujourd'hui de la période à laquelle le système repasse : une échéance qui
-  tombe juste après un passage attend le suivant, et le repos porte cette période
-  à trente minutes. **Ces chiffres sont ceux du balayage, jamais une exigence**,
-  et tant qu'aucun plafond n'est décidé l'écart du code n'enfreint rien. La
-  question la plus chère se pose en euros : au bout de combien de temps une
-  ressource orpheline coûte-t-elle trop cher ?
+  aujourd'hui de la période à laquelle le système repasse : une heure de
+  fermeture qui tombe juste après un passage attend le suivant, et le repos
+  porte cette période à trente minutes. **Ces chiffres sont ceux du balayage,
+  jamais une exigence**, et tant qu'aucun plafond n'est décidé l'écart du code
+  n'enfreint rien. La question la plus chère se pose en euros : au bout de
+  combien de temps une ressource orpheline coûte-t-elle trop cher ?
 
 - **Aucune section** — l'écran d'un monde au repos annonce la durée d'une
   session sous le libellé `Next session`, qui se lit « la session suivante » et
