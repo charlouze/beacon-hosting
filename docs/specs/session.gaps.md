@@ -36,10 +36,10 @@ ci-dessous sont établis par lecture.
 
 - **What the system guarantees when things go wrong** — ce dont le système ne
   sait plus dire à quelle session il appartenait est **signalé et jamais
-  détruit**, alors que la spec exige que rien de ce qu'une session a fait naître
-  ne lui survive, « y compris ce dont il ne sait plus dire à quelle session il
-  appartenait ». Un test épingle explicitement le comportement actuel — *destroys
-  nothing*. C'est une facture qui court tant qu'un humain ne regarde pas.
+  détruit**, alors que la spec exige que tout ce qui existe chez l'hébergeur et
+  qu'aucune session en cours n'explique soit détruit. Un test épingle
+  explicitement le comportement actuel — *destroys nothing*. C'est une facture
+  qui court tant qu'un humain ne regarde pas.
 
 - **Extending a session** — le système fait respecter une autre règle que celle
   qu'énonce la spec. Il ne conserve que l'heure d'ouverture et l'heure de

@@ -2,163 +2,118 @@
 
 ## Boundary
 
-Ce module porte **ce qui naît et meurt avec une partie** : une session s'ouvre
-sur un monde, porte une heure de fermeture, se prolonge, s'arrête, et le serveur
+Ce module porte ce qui naît et meurt avec une session : elle s'ouvre sur un
+monde, porte une heure de fermeture, se prolonge, se ferme, et le serveur
 qu'elle a fait naître disparaît avec elle.
 
 Il couvre l'ouverture, la prolongation et la fermeture d'une session, ce qu'il
-faut pour rejoindre le serveur qu'elle fait tourner, le jeu que ce serveur lance
-et ce qu'il faut pour le lancer, ce que le système garantit quand elle échoue,
-qui a le droit d'agir dessus, et ce qu'elle laisse voir aux autres.
+faut pour rejoindre son serveur, les jeux que ce serveur fait tourner et ce
+qu'il faut pour les lancer, ce que le système garantit quand une session
+échoue, qui a le droit d'agir dessus, et ce qu'elle laisse voir.
 
-**Ce qui survit aux sessions n'est pas à lui** : le monde et tout ce qui dure
-avec lui, les utilisateurs, ce qui se déclare une fois et reste. **Une
-seule exception : ce qu'il faut pour qu'un jeu tourne**, parce que tout ce qu'on
-en exige se voit depuis une session.
+Ce qui survit aux sessions n'est pas à lui : le monde et ce qui dure avec lui
+(`monde`), les utilisateurs (`utilisateur`), ce qui se déclare une fois et reste
+(`infrastructure`). Exception : ce qu'il faut pour qu'un jeu tourne est à lui.
 
-La forme de l'interface appartient à `.impeccable/DIRECTION.md`. Ce qu'un écran
-de session doit **dire** est ci-dessous, dans la section que ça concerne.
+La forme de l'interface appartient à `.impeccable/DIRECTION.md`.
 
 ## Ubiquitous language
 
-Les noms de code sont en anglais alors que la langue métier est le français :
-l'expert du domaine lit lui-même le code, donc il n'y a pas de fossé de
-traduction à combler.
-
-**Ce tableau nomme les concepts du domaine, et rien d'autre.** Un libellé de
-bouton, un titre d'écran ou un message ne sont pas des concepts : ils habillent
-un concept déjà nommé ici, ou ils n'en portent aucun. La colonne du milieu ne se
-remplit que là où le mot affiché **diffère réellement** du nom de code.
-
-Un concept qu'on peine à nommer dans les deux colonnes est le signe que le
-modèle est faux, pas que la traduction est difficile.
-
 | Métier | Code, et libellé s'il diffère | Ce que c'est |
 |---|---|---|
-| session | `Session` | une partie ouverte, de son démarrage à la disparition de son serveur |
-| serveur | `HostedServer` | ce qu'une session fait naître chez l'hébergeur, qui fait tourner le jeu et qu'on rejoint. Il est facturé, et disparaît avec elle |
-| heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel le serveur s'arrête |
-| ouvrir une session | `opening` | la faire naître sur un monde, son heure de fermeture déjà fixée |
-| prolonger | `extend` | repousser l'heure de fermeture d'un pas |
-| fermer | `requestStop` | demander l'arrêt. La disparition du serveur, elle, se constate |
-| durée d'une session | `sessionDurationMs` | quatre heures : ce qui sépare l'ouverture de la première heure de fermeture |
-| pas de prolongation | `extensionStepMs` | une heure : ce qu'une prolongation ajoute |
-| fenêtre de prolongation | `extensionWindowMs` | les trente dernières minutes, seul moment où prolonger est possible |
+| session | `Session` | une partie ouverte sur un monde, de son ouverture à la disparition de son serveur |
+| serveur | `HostedServer` | ce qu'une session fait naître chez l'hébergeur, qui fait tourner le jeu et qu'on rejoint |
+| heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel une session se ferme |
+| ouvrir une session | `opening` | la faire naître sur un monde |
+| prolonger | `extend` | repousser l'heure de fermeture d'une session |
+| fermer | `requestStop` | demander qu'une session se ferme avant son heure de fermeture |
+| durée d'une session | `sessionDurationMs` | ce qui sépare l'ouverture d'une session de sa première heure de fermeture |
+| pas de prolongation | `extensionStepMs` | ce dont une prolongation repousse l'heure de fermeture |
+| fenêtre de prolongation | `extensionWindowMs` | le temps, avant l'heure de fermeture, pendant lequel prolonger est possible |
 | gabarit | `InstanceSize` | le calibre du serveur |
-| jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité. Celui d'une session est celui de son monde, et ne se choisit pas |
-| dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne, et que chaque serveur reprend |
+| jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité |
+| dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne |
 | mettre à disposition | `push` | déposer ce qu'un jeu exige pour tourner |
 | rafraîchir | `update` | remplacer le dépôt d'un jeu par sa version courante |
 | l'ouvrant | `startedBy` | le membre qui a ouvert la session |
 | heure d'ouverture | `startedAt`, affiché `Opened at` | l'instant où la session a été ouverte |
-| point de jonction | `JoinInfo`, affiché `How to join` | ce que le membre copie pour rejoindre |
-| fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait être joignable |
+| point de jonction | `JoinInfo`, affiché `How to join` | ce qu'un membre copie pour rejoindre le serveur |
+| fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait devenir joignable |
 | réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
-| hors service | `IDLE`, affiché `Out of service` | aucun serveur ; on peut ouvrir une session |
+| hors service | `IDLE`, affiché `Out of service` | le monde n'a aucun serveur |
 | en préparation | `PROVISIONING`, affiché `Preparing` | le serveur se met en place |
-| en service | `RUNNING`, affiché `In service` | on peut rejoindre le monde dans le jeu |
-| en fermeture | `STOPPING`, affiché `Closing` | la session est finie, le serveur n'a pas encore disparu |
-| bloqué | `FAILED`, affiché `Not cleared` | le système n'a pas pu garantir que tout a disparu |
+| en service | `RUNNING`, affiché `In service` | un membre peut rejoindre le monde dans le jeu |
+| en fermeture | `STOPPING`, affiché `Closing` | la session est fermée, et son serveur n'a pas encore disparu |
+| bloqué | `FAILED`, affiché `Not cleared` | le système n'a pas pu garantir que rien ne subsiste de la session |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
 
-D'autres modules portent des objets qu'une session manipule. **Ce contexte en a
-son propre modèle, réduit à ce dont il se sert** — et c'est délibéré : si leur
-définition bouge ailleurs, c'est ici qu'on verra si elle bouge aussi pour une
-session, au lieu de l'apprendre par une panne.
-
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
-| `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et ses membres. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
-| `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
-| membre, `Player` (`docs/specs/monde.md`) | un utilisateur qui appartient à ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
-| `User` (`docs/specs/utilisateur.md`) | une personne qui s'est connectée à Beacon. Une session ne distingue que l'administrateur des autres utilisateurs |
+| `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité, un jeu, un nom et des membres |
+| `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit à sa fermeture |
+| membre, `Player` (`docs/specs/monde.md`) | un utilisateur qui appartient à un monde |
+| `User` (`docs/specs/utilisateur.md`) | une personne qui s'est connectée à Beacon, administrateur ou non |
 
 ## Opening a session
 
-**N'importe quel membre du monde ouvre une session dessus.** Aucune action de jeu
-ne dépend de la disponibilité d'un administrateur.
+Le jeu d'une session est celui de son monde, et ne se choisit pas.
 
-**Le jeu ne se choisit pas** : c'est celui du monde. On choisit un monde, le jeu
-vient avec.
+Une session a une heure de fermeture dès son ouverture : quatre heures plus
+tard.
 
-**Une session a, à tout instant, une heure de fermeture connue**, et elle en a
-une dès son ouverture : quatre heures plus tard. C'est le mécanisme central du
-produit — ce n'est pas une limite de durée, c'est l'obligation qu'un humain
-éveillé reclique pour que la session continue.
+Un monde ne fait jamais tourner deux sessions à la fois.
 
-**À aucun instant un monde ne fait tourner deux sessions.** Deux membres qui
-ouvrent au même moment ouvrent une seule session, et le second apprend que la
-première existe. Il n'existe pas de fenêtre, même brève, pendant laquelle les
-deux coexistent.
+Un membre qui ouvre une session sur un monde qui en a déjà une apprend qu'elle
+existe.
 
-**Plusieurs mondes tournent en même temps, et rien ne les plafonne.** L'heure
-de fermeture est le seul garde-fou : trois mondes ouverts en même temps font
-trois sessions facturées, et chacune s'éteint seule.
+Le nombre de mondes qui tournent en même temps n'a aucun plafond.
 
-**Une session ouvre le monde dans l'état où la précédente l'a laissé**, quelle
-qu'ait été la cause de sa fermeture. C'est la seule donnée irremplaçable du
-système.
+Une session ouvre le monde dans l'état où la précédente l'a laissé, quelle
+qu'ait été la cause de sa fermeture.
 
-**Le serveur se met en place à chaque ouverture, et l'attente est
-incompressible.** Sa durée varie d'une session à l'autre. L'écran annonce donc
-**une fourchette d'heures de disponibilité, jamais une heure unique ni une durée
-promise.**
+Chaque ouverture met un nouveau serveur en place.
 
-**Le gabarit est choisi par l'administrateur, et il est le même pour tous les
-mondes.** Une ouverture qui n'en nomme aucun prend le gabarit en vigueur.
+Pendant la mise en place, l'écran annonce une fourchette d'heures de
+disponibilité, jamais une heure unique ni une durée.
+
+Une ouverture qui ne nomme aucun gabarit prend le gabarit en vigueur.
 
 ## Joining
 
-**Ce qu'il faut pour rejoindre dépend du jeu**, et le système ne l'interprète
-jamais : il le transporte, et l'écran le rend lisible et copiable. Un jeu de plus
-apporte sa forme sans que rien ici ne change.
+Le point de jonction prend la forme que lui donne le jeu, et le système le
+transporte sans l'interpréter.
 
-**Tout jeu offre au membre un moyen principal de rejoindre et un recours.**
-Quand le premier fait défaut, le second suffit.
+L'écran rend le point de jonction lisible et copiable.
 
-**Une session est *en service* quand un membre peut rejoindre le monde dans le
-jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni un
-serveur qui répond.
+Tout jeu offre au membre un moyen principal de rejoindre et un recours. Quand le
+premier fait défaut, le second suffit.
 
-**Un échec de publication n'interrompt jamais une session.** Ce qui n'a pas pu
-être publié manque à l'écran ; la session continue avec ce qui reste.
+Une partie du point de jonction qui n'a pas pu être publiée manque à l'écran, et
+la session continue.
 
 ## Extending a session
 
-**L'heure de fermeture vaut quatre heures après l'ouverture, plus une heure par
-prolongation.**
+Une prolongation repousse l'heure de fermeture d'une heure, et rien d'autre ne
+la déplace.
 
-**Une prolongation n'est possible que dans les trente minutes qui précèdent
-l'heure de fermeture courante.** En dehors de cette fenêtre, le bouton est fermé
-et dit pourquoi, en clair. L'instant où la fenêtre s'ouvre est annoncé à
-l'avance, pour qu'on sache quand revenir.
+Une prolongation n'est possible que dans les trente minutes qui précèdent
+l'heure de fermeture.
 
-Une session ouverte à 20 h ferme donc à minuit ; entre 23 h 30 et minuit on peut
-la porter à 1 h ; entre 0 h 30 et 1 h, à 2 h ; et ainsi de suite.
+Hors de cette fenêtre, l'écran dit pourquoi prolonger est impossible.
 
-**Il n'y a aucun plafond**, et c'est le cœur du produit : le garde-fou n'a jamais
-été une durée maximale mais l'obligation de recliquer. Un serveur oublié s'arrête
-donc toujours dans l'heure, quel que soit le nombre de prolongations déjà
-accordées.
+L'écran annonce à l'avance l'instant où la fenêtre de prolongation s'ouvre.
 
-**Prolonger est un acte collectif sur une ressource commune.** Deux membres qui
-prolongent au même moment gagnent une heure, pas deux.
+Le nombre de prolongations d'une session n'a aucun plafond.
+
+Deux membres qui prolongent au même moment repoussent l'heure de fermeture d'une
+heure, pas de deux.
 
 ## Closing a session
 
-**Une session se ferme à son heure.** Personne n'a besoin d'être là : le serveur
-disparaît de lui-même. N'importe quel membre du monde peut aussi la fermer avant.
+Rien de ce qu'une session a fait naître ne lui survit.
 
-**Une session terminée ne coûte plus rien.** Ce qu'elle a fait naître chez
-l'hébergeur cesse d'être facturé, et il n'existe donc pas de « serveur en
-pause » — ni dans le produit, ni à l'écran.
-
-> [!NOTE]
-> **Le système ne promet pas que tout est sauvegardé.** La sauvegarde suit une
-> cadence propre au jeu, et rien ne permet toujours de la provoquer : selon le
-> jeu, les dernières minutes d'une session peuvent manquer. L'interface ne doit
-> jamais affirmer le contraire.
+Aucun écran ne présente un serveur en pause.
 
 ## The life of a session
 
@@ -167,7 +122,7 @@ stateDiagram-v2
     [*] --> IDLE : le monde existe, aucune session
     IDLE --> PROVISIONING : un membre du monde ouvre une session
     PROVISIONING --> RUNNING : on peut rejoindre le monde dans le jeu
-    RUNNING --> STOPPING : le bouton, ou l'heure de fermeture
+    RUNNING --> STOPPING : un membre la ferme, ou son heure de fermeture passe
     STOPPING --> IDLE : le serveur a disparu
     PROVISIONING --> IDLE : la mise en place a échoué, mais rien ne subsiste
     RUNNING --> IDLE : le serveur a disparu chez l'hébergeur
@@ -177,77 +132,56 @@ stateDiagram-v2
     FAILED --> IDLE : plus rien ne subsiste
 ```
 
-**Un membre demande, le système constate.** Ouvrir et fermer sont des intentions,
-qu'un membre exprime. *En service*, *hors service* et *bloqué* sont des constats
-sur le monde réel — un serveur joignable, un serveur disparu, un nettoyage
-incertain — et personne ne peut les déclarer à la place du système.
+Seul le système fait passer une session en service, hors service ou bloquée, sur
+ce qu'il constate.
 
-**Un échec ordinaire ne bloque rien.** Une mise en place refusée par l'hébergeur
-est un incident banal : l'écran dit ce que l'hébergeur a répondu, et le bouton
-redevient immédiatement cliquable.
+Quand l'hébergeur refuse une mise en place, l'écran dit ce qu'il a répondu, et
+une session peut s'ouvrir aussitôt.
 
-**« Bloqué » est un état d'attente, jamais un mur.** Il ne signifie qu'une chose :
-le système n'a pas pu garantir que tout a disparu. Il y revient, et en sort dès
-que plus rien ne subsiste.
+Une session bloquée redevient hors service dès que plus rien ne subsiste.
 
-**Aucun état d'une session n'est sans issue.** Sans cette garantie, un refus de
-l'hébergeur un vendredi soir laisserait le produit mort jusqu'à une
-intervention d'administrateur — exactement la dépendance que le produit refuse
-avec « personne n'est jamais bloqué ».
+Aucun état d'une session n'est sans issue.
 
 ## What the system guarantees when things go wrong
 
-**Aucune de ces garanties n'attend qui que ce soit.** Elles tiennent sans que
-personne soit devant l'écran, et c'est ce qui permet à une session de naître avec
-son heure de fermeture : sans elles, cette heure ne serait qu'une intention.
+Ces garanties tiennent sans que personne soit devant un écran.
 
-| Garantie | Pas avant | Au plus tard |
-|---|---|---|
-| Une session dont l'heure de fermeture est passée se ferme | 2 minutes après l'heure | — |
-| Une mise en place qui n'aboutit pas est abandonnée, et le monde redevient ouvrable | 25 minutes | — |
-| Une fermeture dont le serveur ne dit rien se termine quand même | 10 minutes | — |
-| Une session dont l'état ne correspond plus à la réalité de l'hébergeur est remise d'équerre | — | — |
-| Un nettoyage refusé est retenté jusqu'à aboutir | — | — |
+| Garantie | Pas avant |
+|---|---|
+| Une session dont l'heure de fermeture est passée se ferme | 2 minutes après l'heure |
+| Une mise en place qui n'aboutit pas est abandonnée, et le monde redevient ouvrable | 25 minutes |
+| Une fermeture dont le serveur ne dit rien se termine quand même | 10 minutes |
+| Une session dont l'état ne correspond plus à la réalité de l'hébergeur est remise d'équerre | — |
+| Un nettoyage refusé est retenté jusqu'à aboutir | — |
 
-**Les deux colonnes ne disent pas la même chose.** *Pas avant* protège ce qui va bien : une mise en place lente n'est pas
-abandonnée comme si elle avait échoué, et une session ne meurt pas à la seconde
-où son heure sonne. *Au plus tard* est ce qu'un membre ou une facture
-constatent. Une garantie n'a de valeur pour eux que par sa seconde colonne.
-
-**Aucun plafond n'a jamais été décidé, et le tiret est un aveu.** En inventer un
-reviendrait à promettre ce que le code fait plutôt que ce que le produit veut.
-
-**Rien de ce qu'une session a fait naître ne lui survit** — **y compris ce dont
-le système a perdu la trace**, et y compris ce dont il ne sait plus dire à quelle
-session il appartenait. Tout ce qui existe chez l'hébergeur et qu'aucune session
-en cours n'explique est détruit. Il n'y a pas de ressource en sursis : le compte
-d'hébergement ne sert qu'à ce produit, et ce qui y traîne est une facture que
-personne n'a demandée. **Au bout de combien de temps elle coûte trop cher n'est
-pas encore décidé**, et c'est une question d'argent, pas de surveillance.
+Tout ce qui existe chez l'hébergeur et qu'aucune session en cours n'explique est
+détruit.
 
 ## Running a game
 
-**Beacon ne modifie aucun jeu.** Il le lance tel qu'il est publié, et n'y
-ajoute que ce qu'il faut pour le démarrer et le relier au reste du produit. Le
-jeu n'est pas la valeur du produit, et le refaire priverait chaque jeu des
-corrections de ceux qui le publient.
+Beacon lance chaque jeu tel qu'il est publié, et n'y ajoute que ce qu'il faut
+pour le démarrer et le relier au reste du produit.
 
-**Aucun serveur de jeu ne détient le compte qui possède un jeu.** Ce qu'un
-serveur reçoit pour lancer un jeu ne lui permet jamais d'agir au nom de ce
-compte.
+Rien de ce qu'un serveur de jeu reçoit ne lui permet d'agir au nom du compte qui
+possède un jeu.
 
-**Un serveur de jeu ne peut rien toucher d'autre que les sauvegardes de son
-monde, en écriture, et le dépôt des jeux, en lecture.** Un serveur compromis ne
-donne rien de plus à qui le tient.
+Un serveur de jeu ne peut rien toucher d'autre que les sauvegardes de son monde,
+en écriture, et le dépôt des jeux, en lecture.
 
 ## Making a game available
 
-**Un jeu que chacun peut obtenir, le serveur le prend lui-même.** Rien n'est
-mis à disposition pour lui, et rien de lui n'est gardé entre deux sessions.
+Un serveur prend lui-même un jeu que chacun peut obtenir, et rien de ce jeu
+n'est gardé entre deux sessions.
 
-**Un jeu que seul son propriétaire peut obtenir est mis à disposition une fois,
-et chaque serveur le reprend de là.** C'est ce dépôt qui fait tourner le jeu,
-et c'est lui qu'on rafraîchit quand le jeu change.
+Un jeu que seul son propriétaire peut obtenir est mis à disposition une fois, et
+chaque serveur le reprend de ce dépôt.
+
+Le dépôt d'un jeu se rafraîchit quand le jeu change.
+
+Un administrateur met un jeu à disposition et le rafraîchit. Aucun autre
+utilisateur ne le peut.
+
+Aucun geste sur un jeu ne passe par l'interface que les utilisateurs consultent.
 
 ## Who may do what
 
@@ -257,20 +191,14 @@ et c'est lui qu'on rafraîchit quand le jeu change.
 | un administrateur | la même chose, plus le gabarit |
 | un utilisateur qui n'est pas membre du monde | rien, et il ne sait pas que cette session existe |
 
-**Aucun membre n'a d'autorité sur un autre.** Chacun peut fermer la session qu'un
-autre a ouverte : c'est délibéré, la ressource est commune à ceux qui la
-partagent.
+L'ouvrant n'a aucun droit de plus que les autres membres du monde.
 
-**La durée d'une session, le pas et la fenêtre de prolongation, et le gabarit
-sont les mêmes pour tous les mondes.** Seul un administrateur les change.
+La durée d'une session, le pas et la fenêtre de prolongation, et le gabarit sont
+les mêmes pour tous les mondes. Seul un administrateur les change.
 
-**Un administrateur met un jeu à disposition et le rafraîchit ; aucun autre
-utilisateur ne le peut.** Aucun geste sur un jeu ne passe par l'interface que
-les utilisateurs consultent.
+Personne n'ouvre une session au nom d'un autre.
 
-**Aucun geste sur une session n'est anonyme.** Personne n'ouvre une session au
-nom d'un autre, et qui a fermé la session de quelqu'un reste su. C'est la
-contrepartie de « chacun peut fermer la session d'un autre ».
+Qui a ouvert, prolongé ou fermé une session reste su.
 
 ## Changelog
 
