@@ -63,7 +63,7 @@ session, au lieu de l'apprendre par une panne.
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
 | `World` (`docs/specs/monde.md`) | ce sur quoi une session s'ouvre : une identité qui ne change jamais, un jeu, un nom affiché, et l'ensemble de ses joueurs. Une session ignore comment un monde naît, comment on y entre et ce qu'il devient quand personne n'y joue |
-| `Game` (`docs/specs/jeu.md`) | l'identité du jeu d'un monde, figée. Une session ne sait ni comment on se connecte à ce jeu, ni comment il se sauvegarde, ni ce qu'il coûte à mettre en place |
+| `Game` | l'identité du jeu d'un monde, figée. Une session ne sait ni comment on se connecte à ce jeu, ni comment il se sauvegarde, ni ce qu'il coûte à mettre en place |
 | `Save` (`docs/specs/monde.md`) | l'état d'un monde à un instant. Une session en consomme un à son ouverture et en produit un à sa fermeture ; elle ne sait ni où il est rangé, ni combien il en existe, ni lequel est le bon |
 | `Player` (`docs/specs/monde.md`) | un membre qui joue dans ce monde. C'est la seule chose qui donne le droit d'agir sur une session |
 | `Member` (`docs/specs/membre.md`) | une personne autorisée. Une session ne distingue que membre, administrateur, et ni l'un ni l'autre |
@@ -79,7 +79,7 @@ vient avec.
 **Une session a, à tout instant, une heure de fermeture connue**, et elle en a
 une dès son ouverture : quatre heures plus tard. C'est le mécanisme central du
 produit — ce n'est pas une limite de durée, c'est l'obligation qu'un humain
-éveillé reclique pour que la soirée continue.
+éveillé reclique pour que la session continue.
 
 **À aucun instant un monde ne fait tourner deux sessions.** Deux joueurs qui
 ouvrent au même moment ouvrent une seule session, et le second apprend que la
@@ -87,8 +87,8 @@ première existe. Il n'existe pas de fenêtre, même brève, pendant laquelle le
 deux coexistent.
 
 **Plusieurs mondes tournent en même temps, et rien ne les plafonne.** L'heure
-de fermeture est le seul garde-fou : trois mondes lancés le même soir font trois
-soirées facturées, et chacune s'éteint seule.
+de fermeture est le seul garde-fou : trois mondes ouverts en même temps font
+trois sessions facturées, et chacune s'éteint seule.
 
 **Une session ouvre le monde dans l'état où la précédente l'a laissé**, quelle
 qu'ait été la cause de sa fermeture. C'est la seule donnée irremplaçable du
@@ -113,7 +113,7 @@ jeu**, et rien d'autre ne donne cet état : ni la mise en place terminée, ni un
 serveur qui répond.
 
 **Un échec de publication n'interrompt jamais une session.** Ce qui n'a pas pu
-être publié manque à l'écran ; la soirée continue avec ce qui reste.
+être publié manque à l'écran ; la session continue avec ce qui reste.
 
 ## Extending a session
 
@@ -233,11 +233,11 @@ partagent.
 sont les mêmes pour tous les mondes.** Seul un administrateur les change.
 
 **Aucun geste sur une session n'est anonyme.** Personne n'ouvre une session au
-nom d'un autre, et qui a fermé la soirée de quelqu'un reste su. C'est la
+nom d'un autre, et qui a fermé la session de quelqu'un reste su. C'est la
 contrepartie de « chacun peut fermer la session d'un autre ».
 
 ## Changelog
 
 | batch | date | change |
 |---|---|---|
-| out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne l'heure de fermeture |
+| out-of-batch | 2026-09-22 | le glossaire nomme les concepts du domaine, et un seul mot désigne chacun d'eux |

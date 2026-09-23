@@ -42,7 +42,7 @@ ci-dessous sont établis par lecture.
   garde, et rien ne peut le vérifier. Ce qu'il applique à la place est une borne
   glissante — l'heure de fermeture est ramenée à *maintenant + 4 h* quand elle la
   dépasse —, qui accepte des heures que la formule ne produit jamais : dans une
-  soirée conforme, la fermeture n'est jamais à plus d'une heure et demie de
+  session conforme, la fermeture n'est jamais à plus d'une heure et demie de
   l'instant présent. **Deux sorties, et c'est un choix à faire** — soit l'heure
   de fermeture se déduit de l'ouverture et du nombre de prolongations, et la
   borne disparaît avec le problème qu'elle rattrapait ; soit la spec adopte la
