@@ -44,7 +44,7 @@ modèle est faux, pas que la traduction est difficile.
 | pas de prolongation | `extensionStepMs` | une heure : ce qu'une prolongation ajoute |
 | fenêtre de prolongation | `extensionWindowMs` | les trente dernières minutes, seul moment où prolonger est possible |
 | gabarit | `InstanceSize` | le calibre du serveur |
-| jeu | `Game` | ce que le serveur d'une session fait tourner. Il vient du monde, et ne se choisit pas |
+| jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité. Celui d'une session est celui de son monde, et ne se choisit pas |
 | dépôt d'un jeu | `game-depot` | ce qui est mis à disposition pour qu'un jeu tourne, et que chaque machine reprend |
 | mettre à disposition | `push` | déposer ce qu'un jeu exige pour tourner |
 | rafraîchir | `update` | remplacer le dépôt d'un jeu par sa version courante |
