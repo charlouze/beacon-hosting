@@ -3,8 +3,8 @@
 ## Coverage
 
 **Audité** : le cœur de décision du module et tout ce qui porte la vérification
-périodique, l'expurgation des messages d'erreur et les gardes du rapport de la
-machine, les droits de lecture, les libellés des écrans qui montrent une session,
+périodique, l'expurgation des messages d'erreur et les gardes du rapport du
+serveur, les droits de lecture, les libellés des écrans qui montrent une session,
 et le chemin par lequel une demande de fermeture part de l'écran.
 
 **Audité aussi, sans violation trouvée** : le catalogue des jeux et les deux
@@ -19,7 +19,7 @@ n'a été trouvé » :
 - **Les trois adapters vers les fournisseurs** — c'est le plus gros angle mort :
   tout ce que la spec promet sur la disparition des ressources n'est éprouvé que
   du côté qui le décide, jamais du côté qui l'exécute.
-- **Ce qui tourne sur la machine de jeu** — la remise en place du monde avant
+- **Ce qui tourne sur le serveur de jeu** — la remise en place du monde avant
   toute connexion, l'arrêt du jeu, la dernière sauvegarde. Trois garanties de la
   spec en dépendent et ne sont connues ici que par ce que les documents en
   disent.
@@ -57,8 +57,8 @@ ci-dessous sont établis par lecture.
 - **`CLAUDE.md`, « Rien de ce qu'un membre peut lire ne révèle un secret du
   système »** — ce qui vient d'un échec d'hébergeur est expurgé avant d'atteindre
   l'écran d'une session, mais recopié tel quel dans la trace que tout membre peut
-  lire. Ce qui a échoué portait ce que le système confie à la machine au moment
-  de sa mise en place. **Cette entrée désigne une décision de projet et non une
+  lire. Ce qui a échoué portait ce que le système confie au serveur au moment de
+  sa mise en place. **Cette entrée désigne une décision de projet et non une
   section de spec**, parce que la règle vaut pour tous les modules et ne peut donc
   vivre dans aucun ; la fuite, elle, est dans le code de celui-ci.
 
@@ -68,15 +68,6 @@ ci-dessous sont établis par lecture.
   a raison** — fermer une session pendant sa mise en place est un geste que le
   produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
   requalifie.
-
-- **Ubiquitous language** — le code appelle *server* ce que le glossaire appelle
-  *machine* : le port qui en ouvre et en ferme une (`ServerHost`), ce qu'il en
-  rend (`OpenedServer`, `HostedServer`) et ce qu'on lui demande
-  (`OpenServerRequest`). Ses commentaires disent pourtant *the machine* pour ce
-  qui démarre et porte une adresse, si bien que le même objet y a déjà deux
-  noms. Le *serveur* du glossaire, le jeu qu'on rejoint, n'a aucun nom de code.
-  Aucun des deux concepts n'a encore de nom fixé : c'est le lot correctif qui
-  les choisit, et le glossaire les reçoit avec lui.
 
 ## Gaps
 
@@ -125,12 +116,12 @@ ci-dessous sont établis par lecture.
   laquelle il écrit, et la reprise de son gestionnaire d'arrêt `STACK.md`.
 
 - **Making a game available** — le jeu que chacun peut obtenir est repris par
-  l'outil de sa plateforme à chaque démarrage de la machine, ce qui évite
+  l'outil de sa plateforme à chaque démarrage du serveur, ce qui évite
   plusieurs gigaoctets de stockage permanent
   `docs/archive/specs/2026-09-02-game-hosting-design.md`.
 
 - **Making a game available** — le dépôt vit dans un seau distinct de celui des
-  sauvegardes, la machine de jeu n'en a que la lecture, et ce qui tient
+  sauvegardes, le serveur de jeu n'en a que la lecture, et ce qui tient
   réellement cette frontière est une politique de seau en liste blanche posée
   chez le fournisseur `docs/archive/specs/2026-09-02-game-hosting-design.md`.
 
