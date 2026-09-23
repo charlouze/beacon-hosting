@@ -273,4 +273,3 @@ contrepartie de « chacun peut fermer la session d'un autre ».
 
 | batch | date | change |
 |---|---|---|
-| out-of-batch | 2026-09-23 | un seul mot, serveur, désigne ce que la session fait naître chez l'hébergeur et ce qu'on y rejoint |
