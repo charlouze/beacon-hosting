@@ -207,8 +207,10 @@ seconde redirigerait l'endroit où les serveurs rapportent.
 ## Warning the administrator
 
 **Quand ce qui tient les garanties d'une session sans attendre personne cesse
-de tourner, l'administrateur est prévenu.** Une alerte de dépense mesure le
-dégât une fois qu'il est fait ; celle-ci mesure la panne.
+de tourner, l'administrateur est prévenu au plus tard une heure après.** Une
+alerte de dépense mesure le dégât une fois qu'il est fait ; celle-ci mesure la
+panne. Une heure, c'est au pire une heure de serveur facturée de plus pour
+chaque session que plus rien ne ferme.
 
 **Une dépense chez l'hébergeur qui dépasse ce qu'on attend prévient
 l'administrateur.** C'est le garde-fou de dernier recours, quand tout le reste a

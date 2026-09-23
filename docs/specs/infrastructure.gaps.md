@@ -162,10 +162,6 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   jamais une absence de départ, d'où une première exécution constatée à la main,
   une fois, à la pose. `docs/archive/specs/2026-09-02-game-hosting-design.md` §6
   (« Qui surveille le watchdog ») et `probe/RESULTS.md` §F la prescrivent.
-- **Warning the administrator** — au bout de combien de temps l'administrateur
-  est prévenu que le rattrapage s'est arrêté n'a jamais été décidé ; le
-  mécanisme accepte une fenêtre allant jusqu'à 23,5 h.
-  `docs/archive/specs/2026-09-02-game-hosting-design.md` §6.
 - **Warning the administrator** — le seuil de dépense qui prévient
   l'administrateur n'a jamais été décidé.
   `docs/archive/specs/2026-09-02-game-hosting-design.md` §7.
