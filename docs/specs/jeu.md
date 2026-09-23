@@ -4,17 +4,13 @@
 
 Ce module porte **le jeu comme actif que l'administrateur entretient**, et qui
 survit à tous les mondes qu'on y joue. Un jeu n'a ni ouverture ni fermeture : il
-est déposé une fois, rafraîchi quand l'éditeur le fait bouger, et chaque monde
-s'y adosse sans rien lui ajouter.
+est mis à disposition une fois, rafraîchi quand l'éditeur le fait bouger, et
+chaque monde s'y adosse sans rien lui ajouter.
 
-Il couvre ce que tout jeu doit apporter pour être hébergé : comment les fichiers
-dont son serveur a besoin arrivent à une machine, comment ils sont rafraîchis,
-la forme qu'il donne à ce que le joueur copie pour rejoindre, et la façon dont
-il écrit ce qui doit survivre à la soirée.
-
-**Aucun jeu n'est nommé ici, et aucune règle ne se décide jeu par jeu.** Ce que
-chacun fait de ces concepts est une implémentation, qui bouge avec le jeu ; ce
-qui est écrit ici vaut pour celui qu'on ajoutera.
+Il couvre ce que tout jeu doit tenir pour qu'on y joue un soir : comment on
+rejoint une partie de ce jeu, ce que l'administrateur fait pour le rendre
+jouable et le garder à jour, et ce qu'une soirée peut perdre quand elle
+s'arrête.
 
 **Ce qui meurt avec un monde ou avec une soirée n'est pas à lui** : le monde,
 ses sauvegardes et les pouvoirs qu'un joueur y détient sont à
@@ -33,115 +29,93 @@ que les joueurs lisent.
 
 | Métier | Code, et libellé s'il diffère | Ce que c'est |
 |---|---|---|
-| jeu | `Game` | l'identité d'un jeu hébergé, et rien d'autre |
-| dépôt des fichiers de jeu | `game-depot` | ce dont un serveur de jeu a besoin pour démarrer, déposé une fois et relu à chaque session |
-| rafraîchissement | `update` | remplacer ce qui est déposé par la version courante du jeu |
-| forme du point de jonction | — | quels champs un jeu donne à ce que le joueur copie pour rejoindre |
-| moyen principal | — | le champ par lequel on rejoint quand tout va bien |
-| recours | — | le champ par lequel on rejoint quand le moyen principal échoue |
-| cadence de sauvegarde | — | le temps qui sépare deux écritures du monde par le serveur de jeu |
+| jeu | `Game` | un jeu que Beacon sait héberger |
+| dépôt d'un jeu | `game-depot` | ce que l'administrateur a mis à disposition pour qu'un jeu soit jouable, et que chaque soirée retrouve |
+| rafraîchir | `update` | remplacer le dépôt d'un jeu par la version que les joueurs ont déjà |
+| moyen principal | — | ce par quoi un joueur rejoint une partie quand tout va bien |
+| recours | — | ce par quoi il la rejoint quand le moyen principal lui fait défaut |
+| cadence de sauvegarde | — | l'écart entre deux sauvegardes que le jeu fait de lui-même, donc ce qu'une soirée qui s'arrête peut perdre au plus |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
 
 | Terme | Ce que ce contexte en connaît, et rien de plus |
 |---|---|
 | `World` | un monde adossé à ce jeu. Ce module ignore comment un monde naît, ce qu'il devient, qui y joue, et combien il en existe par jeu |
-| `Save` | ce que le serveur de jeu écrit de lui-même. Ce module sait ce qu'une sauvegarde contient et quand elle est produite ; il ignore où elle est rangée et laquelle est reprise |
-| `JoinInfo` | ce que le joueur copie pour rejoindre. Ce module décide de sa forme ; il ignore ce qu'on en fait ensuite — qui la transporte, qui l'affiche, et à partir de quand une session est joignable |
+| `Save` | ce que le jeu écrit de lui-même pour qu'un monde survive à la soirée. Ce module sait ce qu'une sauvegarde contient et quand elle est écrite ; il ignore où elle est rangée et laquelle est reprise |
+| `JoinInfo` | ce que le joueur copie pour rejoindre. Ce module en exige un moyen principal et un recours ; il ignore qui le transporte, qui l'affiche, et à partir de quand une session est joignable |
+| `Member` | une personne autorisée. Ce module ne distingue que l'administrateur, qui entretient les jeux, de tous les autres |
 
-## Ce qu'un jeu est
+## How a game is joined
 
-**Un jeu est une identité, et rien d'autre.** Ce que le système sait faire d'un
-jeu — le démarrer, restaurer son monde, publier ce qu'il faut pour le rejoindre
-— ne vit jamais dans cette identité. Un monde et une session la lisent sans rien
-pouvoir en déduire.
+**Tout jeu offre au joueur un moyen principal de rejoindre et un recours.** Quand
+le premier fait défaut, le second suffit, et la soirée ne dépend d'aucun des
+deux seul. C'est une exigence faite à chaque jeu, pas une précaution d'écran.
 
-**Un jeu de plus apporte une forme de point de jonction de plus, et c'est le
-coût annoncé.** Il ne retire rien aux autres et ne change rien à ce qui les
-manipule.
+## Making a game available
 
-## La forme du point de jonction
+**Un jeu que seul son propriétaire peut obtenir est mis à disposition par
+l'administrateur**, depuis sa propre machine, et c'est ce dépôt que chaque
+soirée retrouve. Un jeu que chacun peut obtenir ne demande rien : la soirée le
+prend elle-même.
 
-**Chaque jeu décide de ce que le joueur copie pour rejoindre : quels champs, et
-sous quels libellés.** Deux jeux ne se rejoignent pas de la même façon, et rien
-ne ramène leurs formes à une liste commune d'étiquettes et de valeurs.
+**Le compte qui possède un jeu reste chez son administrateur.** Rien dans le
+système ne le détient, et rien de ce qui tourne pendant une soirée ne le voit
+passer.
 
-**Une forme n'est pas toujours une adresse.** Un jeu peut se rejoindre par un
-nom, par une adresse brute, par un identifiant que son serveur produit à chaque
-démarrage, ou par le nom sous lequel le monde apparaît dans sa propre liste de
-serveurs. Rien ne garantit qu'un jeu se rejoigne par une adresse, et supposer le
-contraire est ce qui a fait naître cette notion.
+**Ce que l'administrateur a mis à disposition, rien dans le système ne l'efface
+ni ne l'altère.** Cela ne se redépose que depuis une machine qui possède le jeu,
+et le perdre coûterait au mieux une soirée.
 
-**Toute forme porte un moyen principal et un recours**, et c'est une règle de
-forme, pas une précaution d'écran : une forme qui n'offrirait qu'un seul chemin
-laisserait la soirée dépendre de lui.
+**Entretenir un jeu ne peut jamais atteindre un monde.** Mettre un jeu à
+disposition ou le rafraîchir ne touche aucune sauvegarde, quelle que soit
+l'erreur commise en le faisant : le monde est la seule donnée irremplaçable du
+produit.
 
-## Les fichiers d'un jeu
+## Keeping a game up to date
 
-**Aucun identifiant qui vaut possession d'un jeu n'atteint jamais une machine de
-jeu.** C'est ce qui décide par où passent ses fichiers, et rien d'autre.
+**Un jeu mis à disposition ne suit pas l'éditeur de lui-même.** Les joueurs ont
+une nouvelle version dès sa sortie ; le serveur, seulement quand l'administrateur
+rafraîchit le dépôt.
 
-**Un jeu dont les fichiers s'obtiennent librement les laisse prendre par la
-machine à chaque session** ; ils n'ont alors rien à faire dans un dépôt, et rien
-n'est stocké entre deux soirées.
+**Le système ne garantit pas qu'un jeu hébergé soit à jour.** Un serveur en
+retard sur les joueurs ne peut pas les accueillir, et cela se découvre la soirée
+ouverte, en tentant de rejoindre. C'est un risque accepté, pas un oubli.
 
-**Un jeu dont les fichiers exigent un compte qui le possède est déposé par un
-administrateur, depuis sa machine**, et la machine de jeu ne fait que les lire.
-
-**Le dépôt d'un jeu est en lecture seule pour tout ce qui tourne pendant une
-session.** Rien de ce qu'une session fabrique n'a vocation à y entrer, et ce qui
-peut y écrire peut l'abîmer.
-
-**Rien dans le système n'efface les fichiers d'un jeu.** L'outil qui les dépose
-n'a aucun verbe qui détruit, et il ne connaît pas l'adresse des sauvegardes —
-par construction et non par prudence : ce qu'on ne peut pas nommer, on ne peut
-pas l'effacer par erreur. Des fichiers sous licence ne se redéposent que depuis
-une machine qui possède le jeu, et une suppression se paierait au mieux en une
-soirée perdue.
-
-## La mise à jour d'un jeu
-
-**Un jeu bouge, et son dépôt ne bouge pas tout seul.** Les clients se mettent à
-jour d'eux-mêmes ; ce qui est déposé attend qu'un administrateur le rafraîchisse.
-
-**Un dépôt en retard ne se découvre qu'en tentant de rejoindre**, la session déjà
-ouverte et la machine déjà facturée. Rien ne l'annonce avant.
-
-**Rafraîchir est un geste d'administrateur, et seulement le sien.** Il faut le
-compte qui possède le jeu, que rien dans le système ne détient. Aucun joueur ne
-peut y suppléer.
+**Rafraîchir est un geste de l'administrateur, et de lui seul.** Il demande le
+compte qui possède le jeu, et aucun joueur ne peut y suppléer.
 
 > [!NOTE]
 > Cette dépendance est la contrepartie de « personne n'est jamais bloqué » :
 > elle ne coûte pas une soirée à qui sait la faire, mais elle ne se délègue pas.
 
-## Ce qu'un jeu sauvegarde, et à quelle cadence
+## What an evening can lose
 
-**Le système ne provoque jamais une sauvegarde : il prend ce que le jeu a écrit
-de lui-même.** Aucun jeu n'est tenu de savoir écrire à la demande, et le système
-ne compte sur aucun pour le faire.
+**Beacon ne provoque jamais une sauvegarde.** Fermer la soirée, ou la laisser
+arriver à son heure, n'écrit rien de plus que ce que le jeu a déjà écrit de
+lui-même.
 
-**Quand un jeu laisse régler sa cadence, elle est réglée pour qu'au plus cinq
-minutes de jeu se perdent.** C'est ce qu'un joueur accepte de rejouer, et c'est
-dans cette unité que la valeur se décide — jamais dans celle d'un réglage.
+**Quand un jeu laisse choisir sa cadence, une soirée qui s'arrête perd au plus
+cinq minutes de jeu.** C'est ce qu'un joueur accepte de rejouer, et c'est dans
+cette unité que la valeur se décide.
 
-**Une sauvegarde ne contient que ce que le serveur du jeu détient.** Un jeu peut
-garder chez chaque joueur une part de ce qu'il a bâti — sa progression, son
-inventaire, sa position — et cette part est hors d'atteinte du système. Ce que
-le produit protège s'arrête là où s'arrête ce que le serveur écrit, et rien ne
-doit laisser entendre le contraire.
+**Une sauvegarde ne garde que ce que le serveur du jeu détient.** Un jeu peut
+conserver chez chaque joueur une part de ce qu'il a bâti — sa progression, son
+inventaire, sa position — et cette part échappe au produit. Ce que Beacon
+protège s'arrête là où s'arrête ce que le serveur écrit, et rien ne doit
+laisser entendre le contraire.
 
 ## Who may do what
 
 | Qui | Ce qu'il peut faire sur un jeu |
 |---|---|
-| un administrateur de Beacon | déposer les fichiers d'un jeu et les rafraîchir, depuis sa machine |
-| un joueur | rien, et rien de tout cela ne lui est offert dans l'interface |
+| un administrateur | mettre un jeu à disposition et le rafraîchir |
+| un joueur | rien |
 | un visiteur | rien du tout |
 
 **Aucun geste sur un jeu ne passe par l'interface.** Ce qui touche un actif
-partagé par tous les mondes se fait depuis la machine d'un administrateur, et ne
-se déclenche pas d'un écran que quelqu'un consulte depuis son canapé.
+partagé par tous les mondes se fait depuis la machine d'un administrateur, là où
+réside le compte qui possède le jeu, et jamais depuis l'écran que les joueurs
+consultent.
 
 ## Changelog
 
