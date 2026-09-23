@@ -69,6 +69,13 @@ ci-dessous sont établis par lecture.
   produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
   requalifie.
 
+- **Running a game** — rien ne borne un serveur de jeu aux sauvegardes de son
+  monde. La clé qu'il reçoit opère sur tout le projet, puisque l'IAM de
+  l'hébergeur ne descend pas plus bas, et seul le seau des jeux porte une
+  politique, celle qui le met en lecture seule. Le seau des sauvegardes n'en
+  déclare aucune : un serveur compromis y atteint les sauvegardes de tous les
+  mondes. Établi par lecture de `deploy/scaleway/`, sans relevé du compte réel.
+
 ## Gaps
 
 - **What the system guarantees when things go wrong** — **aucune garantie de

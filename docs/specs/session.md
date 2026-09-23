@@ -236,6 +236,10 @@ corrections de ceux qui le publient.
 serveur reçoit pour lancer un jeu ne lui permet jamais d'agir au nom de ce
 compte.
 
+**Un serveur de jeu ne peut rien toucher d'autre que les sauvegardes de son
+monde, en écriture, et le dépôt des jeux, en lecture.** Un serveur compromis ne
+donne rien de plus à qui le tient.
+
 ## Making a game available
 
 **Un jeu que chacun peut obtenir, le serveur le prend lui-même.** Rien n'est
