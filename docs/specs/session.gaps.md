@@ -76,6 +76,12 @@ ci-dessous sont établis par lecture.
   déclare aucune : un serveur compromis y atteint les sauvegardes de tous les
   mondes. Établi par lecture de `deploy/scaleway/`, sans relevé du compte réel.
 
+- **Ubiquitous language** — le modèle de monde que tient `libs/session` appelle
+  ses membres `players`, et une session vérifie qu'on a le droit de l'ouvrir par
+  `hasPlayer`. Le concept emprunté s'appelle `Member`, et ce nom ne peut être
+  repris qu'une fois que l'utilisateur, aujourd'hui `Member` dans le code,
+  s'appelle `User`.
+
 ## Gaps
 
 - **What the system guarantees when things go wrong** — **aucune garantie de
