@@ -69,9 +69,6 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   une sauvegarde toutes les dix minutes
   (`deploy/cloud-init/src/lib/enshrouded.ts`, `BEACON_PUSH_INTERVAL_MS`), et
   personne n'a arrêté ce nombre.
-- **Belonging to a world** — le registre des membres d'un monde porte aussi le
-  code d'invitation dans chaque document, et les règles ouvrent ces documents à
-  tous les membres du monde.
 - **Depositing a save** — le plancher de taille sous lequel une archive est
   refusée est un nombre du code, et rien ne dit qu'il ait été décidé.
 - **A world's identity and lifetime** — un monde créé n'est joignable qu'après
