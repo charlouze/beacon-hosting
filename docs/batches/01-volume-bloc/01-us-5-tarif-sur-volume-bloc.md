@@ -354,4 +354,16 @@ Co-Authored-By: Charlouze <me@charlouze.com>"
 
 ## Rulings log
 
+Ruling: la story est qualifiée technique — la spec de session ne porte aucune règle sur le coût, et un `config/settings` existant l'emporte sur ces taux, donc rien ne change là où des réglages existent — si c'est faux, un système sans réglages affiche un devis d'un centime plus bas sans qu'aucun bloc ne l'ait annoncé.
+
+Ruling: le lien entre les taux et le disque le plus grand du catalogue est un commentaire du semis, et non un test — `libs/session` ne peut pas lire `deploy/cloud-init`, et le lot donne les taux comme des constantes — si c'est faux, un disque plus grand au catalogue laisse les taux trop bas sans qu'un test le dise.
+
+Ruling: les commentaires récrits disent que chaque ressource se facture à l'heure entamée, et non que les trois se facturent ensemble — le lot relève que le fournisseur facture chaque ressource à part — si c'est faux, deux commentaires sont à reprendre.
+
+Ruling: les maquettes de `.impeccable/` gardent `€0.22` — elles se régénèrent par leur skill et ne s'éditent pas à la main — si c'est faux, les maquettes affichent un centime de plus que l'écran d'un système sans réglages.
+
+Ruling: le commentaire de `tariffPerHour` dit qu'aucun disque de jeu ne rend un taux trop bas, et non, comme la tâche 1 l'écrivait, qu'un taux ne tombe jamais sous ce qu'une session coûte — le lot relève qu'un taux par heure de serveur sous-estime une session courte — si c'est faux, une phrase de commentaire est à reprendre, et `settings.ts` change encore l'empreinte du compagnon.
+
+Ruling: la branche est poussée sans pull request — `libs/session/src/lib/settings.ts` entre dans l'image du compagnon, donc `companion:test` échoue sur `names an image built from the sources in the tree` tant qu'une image n'est pas publiée puis épinglée, ce que seul le commanditaire fait — si c'est faux, la pull request de la story s'ouvre un tour plus tard.
+
 ## Observed drift
