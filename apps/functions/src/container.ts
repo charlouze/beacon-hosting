@@ -15,9 +15,11 @@ import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
+import * as logger from 'firebase-functions/logger';
 import { agentTokens } from './agent-tokens.js';
 import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
+import type { PlatformJournal } from './platform-journal.js';
 import type { ProvisionDeps } from './provisioning.js';
 import type { WatchdogDeps } from './watchdog.js';
 import { watchdogHealth } from './watchdog-health.js';
@@ -41,6 +43,11 @@ export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_S
 export const SAVES_BUCKET: ReturnType<typeof defineString> = defineString('SAVES_BUCKET');
 export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES_BUCKET');
 
+/** Cloud Logging, through the Functions logger: only the operator reads it. */
+const platformJournal: PlatformJournal = {
+  failure: (entry) => logger.error(`${entry.source} failed`, entry),
+};
+
 /**
  * The Firestore half of `buildShared` — no Scaleway client, no zone to
  * validate. What the watchdog needs on top of it, and nothing more.
@@ -54,6 +61,7 @@ function buildFirestoreDeps() {
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),
     settings: settingsStore(db),
+    journal: platformJournal,
   };
 }
 
@@ -110,6 +118,7 @@ export function buildProvisionDeps(): ProvisionDeps {
     host: shared.host,
     states: worldStateStores(db),
     settings: shared.settings,
+    journal: shared.journal,
     ledger: shared.ledger,
     worlds: adminWorldRecord(db),
     serverPassword: () => SERVER_PASSWORD.value(),
@@ -145,5 +154,6 @@ export function buildAgentReportDeps(): AgentReportDeps {
       password: DYNHOST_PASSWORD.value(),
     }),
     host: shared.host,
+    journal: shared.journal,
   };
 }

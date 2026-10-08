@@ -20,6 +20,7 @@ import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { provisioningLedger, type ProvisioningLedger } from './provisioning-ledger.js';
+import type { JournalledFailure } from './platform-journal.js';
 import { runWatchdog, type WatchdogDeps } from './watchdog.js';
 import { watchdogHealth } from './watchdog-health.js';
 
@@ -72,6 +73,7 @@ const hosted = (sessionId: string): HostedServer => ({ sessionId, summary: `held
 let app: ReturnType<typeof initializeApp>;
 let db: Firestore;
 let host: FakeServerHost;
+let journalled: JournalledFailure[];
 let ledger: ProvisioningLedger;
 
 beforeAll(() => {
@@ -89,6 +91,7 @@ beforeEach(async () => {
   await db.recursiveDelete(db.collection('worlds'));
   await db.doc('health/watchdog').delete();
   host = new FakeServerHost();
+  journalled = [];
   ledger = provisioningLedger(db);
 });
 
@@ -143,6 +146,7 @@ const deps = (): WatchdogDeps => ({
   health: watchdogHealth(db),
   settings: settingsStore(db),
   limits: DEFAULT_LIMITS,
+  journal: { failure: (entry) => journalled.push(entry) },
 });
 
 const eventTypes = async () =>
@@ -193,6 +197,7 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
   },
   settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
   limits: DEFAULT_LIMITS,
+  journal: { failure: vi.fn() },
 });
 
 describe('runWatchdog', () => {
@@ -256,6 +261,94 @@ describe('runWatchdog', () => {
 
     expect(host.closed).toEqual(['sess2']);
     expect(await eventTypes()).toEqual(['CleanupFailed', 'SessionReclaimed']);
+  });
+
+  // An event detail and `lastError` are read by every member, and what the
+  // provider answers can carry what the system entrusted to it.
+  describe('what a member reads of a failure', () => {
+    const SECRET = 'a'.repeat(64);
+    const details = async () =>
+      (await db.collection('events').get()).docs.map((d) => d.data()['detail'] as string);
+
+    it('keeps a refused close out of the event and of lastError, and whole in the platform journal', async () => {
+      host.hosted = [hosted('sess1')];
+      host.close = async () => {
+        throw new Error(`refused: SCW_SECRET_KEY=${SECRET}`);
+      };
+      await db.doc('provisioning/sess1').set({ closedAt: null });
+      await seedWorld('w1', {
+        state: 'STOPPING',
+        sessionId: 'sess1',
+        stateSince: minutesAgo(11),
+        instanceId: 'i-1',
+      });
+
+      await runWatchdog(deps());
+
+      expect(await eventTypes()).toEqual(['CleanupFailed']);
+      const [detail] = await details();
+      expect(detail).not.toContain(SECRET);
+      expect(detail).toContain('[redacted]');
+      const current = (await db.doc('worlds/w1/server/current').get()).data();
+      expect(current?.['state']).toBe('FAILED');
+      expect(current?.['lastError']).not.toContain(SECRET);
+      expect(current?.['lastError']).toContain('[redacted]');
+      expect(journalled).toEqual([
+        { source: 'watchdog.close', sessionId: 'sess1', error: `Error: refused: SCW_SECRET_KEY=${SECRET}` },
+      ]);
+    });
+
+    it('keeps a refused close of a session no world claims out of the event', async () => {
+      host.hosted = [hosted('ghost')];
+      host.close = async () => {
+        throw new Error(`refused: SCW_SECRET_KEY=${SECRET}`);
+      };
+
+      await runWatchdog(deps());
+
+      const [detail] = await details();
+      expect(detail).not.toContain(SECRET);
+      expect(journalled.map((entry) => entry.sessionId)).toEqual(['ghost']);
+    });
+
+    it('keeps a refused sweep out of the event, and whole in the platform journal', async () => {
+      host.sweepUnclaimed = async () => {
+        throw new Error(`listing refused: X-Auth-Token ${SECRET}`);
+      };
+
+      await runWatchdog(deps());
+
+      expect(await eventTypes()).toEqual(['CleanupFailed']);
+      expect((await details())[0]).not.toContain(SECRET);
+      expect(journalled).toEqual([
+        { source: 'watchdog.sweep', sessionId: null, error: `Error: listing refused: X-Auth-Token ${SECRET}` },
+      ]);
+    });
+
+    it('expunges every refusal a sweep hands back, one journal line each', async () => {
+      const refusals = [`ip 51.15.0.1: refused ${SECRET}`, `server s-2: refused ${SECRET}`];
+      host.sweep = { ...QUIET, errors: refusals };
+
+      await runWatchdog(deps());
+
+      const written = await details();
+      expect(written).toHaveLength(2);
+      for (const detail of written) expect(detail).not.toContain(SECRET);
+      expect(journalled.map((entry) => entry.error)).toEqual(refusals);
+      expect(journalled.every((entry) => entry.source === 'watchdog.sweep')).toBe(true);
+    });
+
+    // The adapter composes these two itself: they carry no provider answer.
+    it('leaves what a sweep destroyed and stranded as the adapter wrote it', async () => {
+      const destroyed = 'ip 0a1b2c3d-0000-4000-8000-123456789abc';
+      const stranded = 'volume 9f8e7d6c-0000-4000-8000-abcdef012345 (80 GB)';
+      host.sweep = { destroyed: [destroyed], stranded: [stranded], errors: [] };
+
+      await runWatchdog(deps());
+
+      expect((await details()).sort()).toEqual([destroyed, stranded].sort());
+      expect(journalled).toEqual([]);
+    });
   });
 
   it('records the sweep of what carries no session tag', async () => {

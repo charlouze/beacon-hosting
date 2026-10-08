@@ -96,6 +96,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
       read: vi.fn(async () => options.world ?? defaultWorld()),
       create: vi.fn(async () => undefined),
     },
+    journal: { failure: vi.fn() },
   };
 };
 
@@ -349,13 +350,44 @@ describe('provisioning', () => {
       expect(applied.lastError).toContain('[redacted]');
     });
 
-    it('keeps the full detail in the journalled event', async () => {
+    it('keeps the secret out of the journalled event, and the whole failure in the platform journal', async () => {
       deps.host.open = vi.fn(async () => {
         throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
       });
       await runStateChange(deps, WORLD_ID, provisioning());
       const applied = (deps.states.for(WORLD_ID).apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(applied.events[0].detail).toContain(secret);
+      expect(applied.events[0].type).toBe('ProvisioningFailed');
+      expect(applied.events[0].detail).not.toContain(secret);
+      expect(applied.events[0].detail).toContain('[redacted]');
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'provisioning.setup',
+        sessionId: 's1',
+        error: `Error: user data rejected: BEACON_TOKEN=${secret}`,
+      });
+    });
+
+    it('keeps a refused cleanup out of both events and of lastError', async () => {
+      deps.host.open = vi.fn(async () => {
+        throw new Error(`user data rejected: BEACON_TOKEN=${secret}`);
+      });
+      deps.host.close = vi.fn(async () => {
+        throw new Error(`could not destroy: SCW_SECRET_KEY=${secret}`);
+      });
+      await runStateChange(deps, WORLD_ID, provisioning());
+      const applied = (deps.states.for(WORLD_ID).apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(applied.state).toBe('FAILED');
+      expect(applied.lastError).not.toContain(secret);
+      expect(applied.events.map((event: { type: string }) => event.type)).toEqual([
+        'ProvisioningFailed',
+        'CleanupFailed',
+      ]);
+      for (const event of applied.events) expect(event.detail).not.toContain(secret);
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'provisioning.cleanup',
+        sessionId: 's1',
+        error: `Error: could not destroy: SCW_SECRET_KEY=${secret}`,
+      });
+      expect(deps.journal.failure).toHaveBeenCalledTimes(2);
     });
 
     it('truncates a very long lastError', async () => {

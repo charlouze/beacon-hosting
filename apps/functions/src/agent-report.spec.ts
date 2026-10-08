@@ -114,6 +114,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
     },
     saves: { record: vi.fn(async () => undefined) },
     dns: { point: vi.fn(async () => undefined) },
+    journal: { failure: vi.fn() },
     host: {
       open: vi.fn(),
       close: vi.fn(async () => undefined),
@@ -554,28 +555,144 @@ describe('agentReport', () => {
     expect(deps.saves.record).toHaveBeenCalled();
   });
 
-  // Moved here with the destruction it guards: `server/current.lastError` is
-  // read by every member's browser, live, and nothing proves the provider's
-  // SDK keeps a secret out of an error's text.
-  it('sanitises lastError when the destruction itself is refused', async () => {
-    deps = fakeDeps({ session: stoppingSession('s1') });
+  // An event detail and `lastError` are read by every member, and what a
+  // provider or a game server answers can carry what the system entrusted to
+  // it.
+  describe('what a member reads of a failure', () => {
     const secret = 'a'.repeat(64);
-    deps.host.close = vi.fn(async () => {
-      throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
+
+    it('keeps a refused destruction out of the event and of lastError', async () => {
+      deps = fakeDeps({ session: stoppingSession('s1') });
+      deps.host.close = vi.fn(async () => {
+        throw new Error(`could not destroy: BEACON_TOKEN=${secret}`);
+      });
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'saved',
+        save: { objectKey: key('pre-shutdown', 's1'), sizeBytes: 50_000, origin: 'pre-shutdown' },
+      });
+      const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(correction.state).toBe('FAILED');
+      expect(correction.lastError).not.toContain(secret);
+      expect(correction.lastError).toContain('[redacted]');
+      expect(correction.events[0].type).toBe('CleanupFailed');
+      expect(correction.events[0].detail).not.toContain(secret);
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.cleanup',
+        sessionId: 's1',
+        error: `Error: could not destroy: BEACON_TOKEN=${secret}`,
+      });
     });
-    await runAgentReport(deps, TOKEN, {
-      sessionId: 's1',
-      phase: 'saved',
-      save: {
-        objectKey: key('pre-shutdown', 's1'),
-        sizeBytes: 50_000,
-        origin: 'pre-shutdown',
-      },
+
+    it('keeps a refused dns update out of the event', async () => {
+      deps.dns.point = vi.fn(async () => {
+        throw new Error(`http 401 for https://user:${secret}@www.ovh.com/nic/update`);
+      });
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+      const [event] = filed(deps);
+      expect(event.type).toBe('DnsUpdateFailed');
+      expect(event.detail).not.toContain(secret);
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.dns',
+        sessionId: 's1',
+        error: `Error: http 401 for https://user:${secret}@www.ovh.com/nic/update`,
+      });
     });
-    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.state).toBe('FAILED');
-    expect(correction.lastError).not.toContain(secret);
+
+    it('keeps the key of a refused save out of the event', async () => {
+      const foreignKey = `auto/another-world/2026-09-15T20-10-00Z-${secret}.tar.gz`;
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'saved',
+        save: { objectKey: foreignKey, sizeBytes: 50_000, origin: 'auto' },
+      });
+      const [event] = filed(deps);
+      expect(event.type).toBe('SaveRefused');
+      expect(event.detail).not.toContain(secret);
+      expect(deps.journal.failure).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'agentReport.save', sessionId: 's1' }),
+      );
+      const [[entry]] = (deps.journal.failure as ReturnType<typeof vi.fn>).mock.calls;
+      expect(entry.error).toContain(foreignKey);
+    });
+
+    it('keeps what a game server reports of its own failure out of the event', async () => {
+      const reported = `restore refused: AWS_SECRET_ACCESS_KEY=${secret}`;
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'failed', detail: reported });
+      const [event] = filed(deps);
+      expect(event.type).toBe('ProvisioningFailed');
+      expect(event.detail).not.toContain(secret);
+      expect(event.detail).toContain('[redacted]');
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.machine',
+        sessionId: 's1',
+        error: reported,
+      });
+    });
+
+    it('keeps what a running game server reports out of the event too', async () => {
+      deps = fakeDeps({ session: runningSession('s1') });
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'failed',
+        detail: `push refused: ${secret}`,
+      });
+      const [event] = filed(deps);
+      expect(event.type).toBe('AgentReportedFailure');
+      expect(event.detail).not.toContain(secret);
+      expect(event.detail).toContain('[redacted]');
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.machine',
+        sessionId: 's1',
+        error: `push refused: ${secret}`,
+      });
+    });
+
+    it('keeps a forged address out of the event, and leaves an honest one as it is', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready', ip: `10.0.0.1 ${secret}` });
+      const [forged] = filed(deps);
+      expect(forged.type).toBe('AgentContradicted');
+      expect(forged.detail).not.toContain(secret);
+      expect(forged.detail).toBe('reported ip 10.0.0.1 [redacted], reserved 51.15.42.7');
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.machine',
+        sessionId: 's1',
+        error: `10.0.0.1 ${secret}`,
+      });
+
+      deps = fakeDeps({ session: provisioningSession('s1') });
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready', ip: '2001:0db8:85a3:0000:0000:8a2e:0370:7334' });
+      expect(filed(deps)[0].detail).toBe(
+        'reported ip 2001:0db8:85a3:0000:0000:8a2e:0370:7334, reserved 51.15.42.7',
+      );
+    });
+
+    it('keeps a refused server id out of the event', async () => {
+      deps = fakeDeps({ session: provisioningSession('s1', 'sunkenland') });
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready', serverId: secret });
+      const [event] = filed(deps);
+      expect(event.type).toBe('AgentContradicted');
+      expect(event.detail).not.toContain(secret);
+      expect(event.detail).toBe('declared server id [redacted], refused by the catalogue');
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.machine',
+        sessionId: 's1',
+        error: secret,
+      });
+    });
+
+    it('journals nothing when the game server declares no server id', async () => {
+      deps = fakeDeps({ session: provisioningSession('s1', 'sunkenland') });
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+      expect(filed(deps)[0].detail).toBe('declared server id none, refused by the catalogue');
+      expect(deps.journal.failure).not.toHaveBeenCalled();
+    });
+
+    it('journals nothing when the game server says nothing of its failure', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'failed' });
+      expect(filed(deps)[0].detail).toBe('the machine reported a failure without saying which');
+      expect(deps.journal.failure).not.toHaveBeenCalled();
+    });
   });
 
   // As stale as any other report about a session that has moved on — the

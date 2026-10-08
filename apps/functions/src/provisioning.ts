@@ -6,7 +6,7 @@ import type { AdminWorldRecord, SettingsStore, WorldStateStores } from '@beacon/
 import { sessionTag } from '@beacon/scaleway-compute';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
-import { sanitizeLastError } from './sanitize-last-error.js';
+import { expunged, type PlatformJournal } from './platform-journal.js';
 
 export interface ProvisionDeps {
   readonly clock: Clock;
@@ -30,6 +30,7 @@ export interface ProvisionDeps {
   readonly agentEndpoint: () => Promise<string>;
   /** From Secret Manager. It never leaves this process except in a cloud-init. */
   readonly saveKeys: () => SaveAccess;
+  readonly journal: PlatformJournal;
 }
 
 /**
@@ -131,7 +132,7 @@ async function failed(
   now: Date,
   cause: unknown,
 ): Promise<void> {
-  const detail = String(cause);
+  const detail = expunged(deps.journal, 'provisioning.setup', sessionId, cause);
   const state = deps.states.for(worldId);
   try {
     await deps.host.close(sessionId);
@@ -139,13 +140,17 @@ async function failed(
     await state.apply(
       {
         state: 'FAILED',
-        lastError: sanitizeLastError(detail),
+        lastError: detail,
         clearFacts: false,
         deadline: null,
         closeIntents: [],
         events: [
           { type: 'ProvisioningFailed', sessionId, detail },
-          { type: 'CleanupFailed', sessionId, detail: String(cleanupError) },
+          {
+            type: 'CleanupFailed',
+            sessionId,
+            detail: expunged(deps.journal, 'provisioning.cleanup', sessionId, cleanupError),
+          },
         ],
       },
       now,
@@ -158,7 +163,7 @@ async function failed(
   await state.apply(
     {
       state: 'IDLE',
-      lastError: sanitizeLastError(detail),
+      lastError: detail,
       clearFacts: true,
       deadline: null,
       closeIntents: [],
