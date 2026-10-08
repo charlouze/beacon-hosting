@@ -180,6 +180,8 @@ export const enshrouded: GameCatalogEntry = {
   // fresh world rather than refusing — the first session of a world nobody
   // adopted an archive for is exactly that generation.
   generatesWorlds: true,
+  // Measured at 15 GB occupied, on a 40 GB volume.
+  diskGb: 30,
 
   hostname: hostnameFor,
 

@@ -470,6 +470,9 @@ export const sunkenland: GameCatalogEntry = {
   // `<name>~<guid>` folder already on disk (§8) — this game never lays one
   // down on its own, so `world-depot adopt` cannot skip `--from` for it.
   generatesWorlds: false,
+  // Measured at 26 GB occupied, at the peak as at rest: a 20 GB volume fills
+  // up before the download ends.
+  diskGb: 40,
 
   /**
    * Nothing to point a record at: discovery goes through the game's own

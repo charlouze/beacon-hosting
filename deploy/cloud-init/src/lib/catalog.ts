@@ -94,6 +94,13 @@ export interface GameCatalogEntry {
    */
   readonly generatesWorlds: boolean;
   /**
+   * The disk a server of this game boots on, in gigabytes: what the system,
+   * the containers, the game and its archive occupy together, with room to
+   * spare. A constant — a game that outgrows it stalls its own restore.
+   * Measured in `probe/RESULTS.md`, section B.
+   */
+  readonly diskGb: number;
+  /**
    * The name a dns record points at, derived from the world so that two
    * worlds of the same game never contend for one hostname — or null when
    * nothing does. Null is not a missing value: one of the two games announces
