@@ -7,10 +7,12 @@ prolongeable d'une heure autant de fois qu'on veut mais seulement dans les
 trente dernières minutes. Ce n'est pas une limite de durée, c'est l'obligation
 qu'un humain éveillé reclique — et c'est tout le produit.
 
-**Aucun jeu n'est nommé ici.** Lesquels sont hébergés est une décision
-d'implémentation, qui vit dans le spec et bouge avec lui — ce fichier a déjà été
-périmé une fois par un changement d'hébergeur et une seconde par l'arrivée d'un
-deuxième jeu. Il ne porte que ce qui reste vrai toute la vie du projet.
+**Aucun jeu n'est nommé ici, ni dans une spec.** Lesquels sont hébergés est
+une décision d'implémentation, qui vit dans le code et bouge avec lui ; une spec
+porte ce que tout jeu doit apporter, jamais une règle écrite pour l'un d'eux. Ce
+fichier a déjà été périmé une fois par un changement d'hébergeur et une seconde
+par l'arrivée d'un deuxième jeu. Il ne porte que ce qui reste vrai toute la vie
+du projet.
 
 App : `beacon.charlouze.com` · serveurs de jeu : `<monde>.beacon.charlouze.com`
 
