@@ -53,14 +53,6 @@ ci-dessous sont établis par lecture.
   borne disparaît avec le problème qu'elle rattrapait ; soit la spec adopte la
   borne, et le lot correctif se requalifie.
 
-- **`CLAUDE.md`, « Rien de ce qu'un membre peut lire ne révèle un secret du
-  système »** — ce qui vient d'un échec d'hébergeur est expurgé avant d'atteindre
-  l'écran d'une session, mais recopié tel quel dans la trace que tout membre peut
-  lire. Ce qui a échoué portait ce que le système confie au serveur au moment de
-  sa mise en place. **Cette entrée désigne une décision de projet et non une
-  section de spec**, parce que la règle vaut pour tous les modules et ne peut donc
-  vivre dans aucun ; la fuite, elle, est dans le code de celui-ci. `reserved by batch-01`
-
 - **The life of a session** — une session peut passer de *en préparation* à *en
   fermeture*, transition que le diagramme ne porte pas. L'écran ne l'offre pas,
   mais le cœur de décision l'accepte et un chemin y mène. **Si c'est le code qui
