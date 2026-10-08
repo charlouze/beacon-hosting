@@ -25,10 +25,10 @@ c'est la raison pour laquelle leurs tests de refus sont une barrière de
 déploiement.
 
 **Serveur de jeu** — **Scaleway**, région `fr-par` (Paris), zone `fr-par-1` :
-Instances pour le calcul, Object Storage pour les sauvegardes. Le gabarit est
-libre et réservé à l'admin ; `DEV1-L` est le défaut, et **il n'a pas de repli** —
-c'est le seul calibre à 8 Gio de la zone à la fois disponible et livré avec son
-disque local, tout substitut demandant un volume bloc. Le `PRO2-XXS` que ce
+Instances pour le calcul, Block Storage pour le disque de chaque serveur de jeu,
+Object Storage pour les sauvegardes. Le gabarit est libre et réservé à l'admin ;
+`DEV1-L` est le défaut. Tout serveur démarre sur un volume bloc, donc un gabarit
+livré sans disque local se commande comme un autre. Le `PRO2-XXS` que ce
 fichier nommait n'est commandable dans aucune zone parisienne. Le **DNS reste
 chez OVH**, en DynHost : le domaine y est, et un enregistrement A pointe où l'on
 veut.
@@ -37,7 +37,8 @@ Trois services, trois protocoles, trois jeux d'identifiants — donc trois
 adapters, `scaleway-compute`, `scaleway-storage`, `ovh-dns`. Ils sont nommés par
 port et non par fournisseur, et la bascule du 2026-09-03 l'a démontré : le
 calcul a changé d'hébergeur, le stockage l'a suivi pour une raison qui lui est
-propre, le DNS n'a pas bougé.
+propre, le DNS n'a pas bougé. Le stockage bloc passe par `scaleway-compute`,
+avec les identifiants du calcul.
 
 L'arborescence du monorepo et le rôle de chaque `libs/*` sont au §4 du spec.
 

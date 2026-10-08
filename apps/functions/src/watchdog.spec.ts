@@ -532,7 +532,7 @@ describe('runWatchdog', () => {
       host: new ScalewayServerHost(api, new FakeBlockApi(), { resolve: async () => null }, {
         budgetMs: 30_000,
         pause: async () => undefined,
-      }),
+      }, () => 40),
       ledger,
     });
 
@@ -560,7 +560,7 @@ describe('runWatchdog', () => {
       host: new ScalewayServerHost(new FakeInstanceApi(), block, { resolve: async () => null }, {
         budgetMs: 30_000,
         pause: async () => undefined,
-      }),
+      }, () => 40),
       ledger,
     });
 
@@ -581,7 +581,7 @@ describe('runWatchdog', () => {
       host: new ScalewayServerHost(new FakeInstanceApi(), block, { resolve: async () => null }, {
         budgetMs: 30_000,
         pause: async () => undefined,
-      }),
+      }, () => 40),
       ledger,
     });
 

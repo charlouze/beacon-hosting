@@ -1,4 +1,5 @@
 import type {
+  Game,
   HostedServer,
   OpenedServer,
   OpenServerRequest,
@@ -9,6 +10,7 @@ import type {
 import type { ImageResolver } from './images.js';
 import { isDetached, type BlockApi, type ScwBlockVolume } from './block-api.js';
 import { BLOCK_VOLUME_TYPE, type InstanceApi, type ScwIp, type ScwServer } from './instance-api.js';
+import { serverCreation } from './server-creation.js';
 import { OWNERSHIP_TAG, readSessionTag, sessionTag } from './tags.js';
 
 /** How long one close() may wait for the volumes of its session to detach. */
@@ -21,6 +23,9 @@ export interface DetachmentWait {
   readonly budgetMs: number;
   readonly pause: (ms: number) => Promise<void>;
 }
+
+/** The disk a server of that game boots on, in gigabytes. */
+export type DiskSizing = (game: Game) => number;
 
 /** A block volume detaches 1 to 13 s after its server dies — measured on 2026-10-08. */
 const POLL_MS = 1_000;
@@ -55,6 +60,7 @@ export class ScalewayServerHost implements ServerHost {
     private readonly block: BlockApi,
     private readonly images: ImageResolver,
     private readonly wait: DetachmentWait,
+    private readonly diskGbFor: DiskSizing,
   ) {}
 
   async open(request: OpenServerRequest): Promise<OpenedServer> {
@@ -63,12 +69,21 @@ export class ScalewayServerHost implements ServerHost {
     // answer; the session one is what pairs a resource with its intent.
     const tags = [OWNERSHIP_TAG, sessionTag(request.sessionId)];
 
-    // Before anything is created: an unmatched size must cost nothing, and
-    // `DEV1-L` has no fallback — it is the only 8 GiB type of the zone both
-    // available and shipped with its disk (§2).
-    const image = await this.images.resolve(request.size);
-    if (image === null) {
-      throw new Error(`no ubuntu image for ${request.size}`);
+    // Before anything is created: a game without a disk, or a size without an
+    // image, must cost nothing.
+    const { game } = request.world;
+    const diskGb = this.diskGbFor(game);
+    if (!Number.isInteger(diskGb) || diskGb <= 0) {
+      throw new Error(`no disk size for ${game}`);
+    }
+    const creation = await serverCreation(this.images, {
+      name: `beacon-${request.sessionId}`,
+      commercialType: request.size,
+      diskGb,
+      tags,
+    });
+    if (creation === null) {
+      throw new Error(`no ubuntu image for ${request.size} on a block volume`);
     }
 
     const { ip } = await this.api.createIp({ tags });
@@ -82,14 +97,7 @@ export class ScalewayServerHost implements ServerHost {
     // after it. The watchdog reaps all of it within five minutes regardless,
     // which the message does not have to enumerate.
     const created = await this.failing(
-      () =>
-        this.api.createServer({
-          name: `beacon-${request.sessionId}`,
-          commercialType: request.size,
-          image,
-          publicIps: [ip.id],
-          tags,
-        }),
+      () => this.api.createServer({ ...creation, publicIps: [ip.id] }),
       ip,
       request,
     );
@@ -99,6 +107,8 @@ export class ScalewayServerHost implements ServerHost {
         `createServer returned no server, and ip ${ip.id} is tagged ${sessionTag(request.sessionId)}`,
       );
     }
+
+    await this.tagRootVolume(server, tags, ip, request);
 
     // The cloud-init lands before the boot: there is no second chance at
     // first boot, and user data posted after poweron is read by nothing.
@@ -261,9 +271,9 @@ export class ScalewayServerHost implements ServerHost {
    * Re-throws naming the ip, not necessarily everything that exists by the
    * time the call failed — the ip is created first and carries both tags, so
    * it alone is enough to find the attempt. Nothing is destroyed here: the
-   * resources carry both tags, and destroying is the watchdog's single
-   * responsibility — a second component that reaps is a second component that
-   * can reap the wrong thing.
+   * ip and the server carry both tags, the volume is held by the server, and
+   * destroying is the watchdog's single responsibility — a second component
+   * that reaps is a second component that can reap the wrong thing.
    */
   private async failing<T>(
     call: () => Promise<T>,
@@ -276,6 +286,30 @@ export class ScalewayServerHost implements ServerHost {
       throw new Error(
         `failed to open ${request.sessionId}: ip ${ip.id} is tagged ${sessionTag(request.sessionId)} — ${String(error)}`,
       );
+    }
+  }
+
+  /**
+   * The volume is born of the server and born untagged: the sdk offers no tag
+   * on the volume of a creation. Until the tags land, only its attachment to
+   * the server reaches it — which is how close() finds it if they never do.
+   */
+  private async tagRootVolume(
+    server: ScwServer,
+    tags: string[],
+    ip: ScwIp,
+    request: OpenServerRequest,
+  ): Promise<void> {
+    const volumeIds = blockVolumeIdsOf(server);
+    // A server on a local disk would boot all the same, and nothing downstream
+    // would notice.
+    if (volumeIds.length === 0) {
+      throw new Error(
+        `createServer returned no block volume, and ip ${ip.id} is tagged ${sessionTag(request.sessionId)}`,
+      );
+    }
+    for (const volumeId of volumeIds) {
+      await this.failing(() => this.block.setVolumeTags({ volumeId, tags }), ip, request);
     }
   }
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { World } from '@beacon/session';
+import type { Game } from '@beacon/session';
 import type { UnclaimedSweep } from '@beacon/session';
 import { FakeBlockApi, scwBlockVolume, volumeInUse, volumeNotFound } from './fake-block-api.js';
 import { FakeInstanceApi, scwIp, scwServer, scwVolume } from './fake-instance-api.js';
@@ -10,6 +11,7 @@ const owned = (sessionId?: string) =>
   sessionId === undefined ? [OWNERSHIP_TAG] : [OWNERSHIP_TAG, sessionTag(sessionId)];
 
 const images = { resolve: async () => 'img-1' };
+const diskGbFor = (game: Game) => (game === 'sunkenland' ? 40 : 30);
 
 let api: FakeInstanceApi;
 let block: FakeBlockApi;
@@ -31,7 +33,7 @@ beforeEach(() => {
       duringPause(pauses.length);
     },
   };
-  host = new ScalewayServerHost(api, block, images, wait);
+  host = new ScalewayServerHost(api, block, images, wait, diskGbFor);
 });
 
 describe('list', () => {
@@ -205,13 +207,13 @@ describe('closing something the provider no longer holds', () => {
   it('treats an ip that is already gone as closed', async () => {
     const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
     api.failWith = { call: 'deleteIp', error: notFound() };
-    await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).resolves.toBeUndefined();
+    await expect(new ScalewayServerHost(api, block, images, wait, diskGbFor).close('s1')).resolves.toBeUndefined();
   });
 
   it('treats a server that is already gone as closed', async () => {
     const api = new FakeInstanceApi([scwServer('srv-1', ['beacon', 'session:s1'])]);
     api.failWith = { call: 'terminate', error: notFound() };
-    await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).resolves.toBeUndefined();
+    await expect(new ScalewayServerHost(api, block, images, wait, diskGbFor).close('s1')).resolves.toBeUndefined();
   });
 
   // The distinction that matters: a refusal is still a refusal. Swallowing
@@ -220,7 +222,7 @@ describe('closing something the provider no longer holds', () => {
   it('still refuses when the provider says something else', async () => {
     const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
     api.failWith = { call: 'deleteIp', error: new Error('quota exceeded') };
-    await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).rejects.toThrow(/quota/);
+    await expect(new ScalewayServerHost(api, block, images, wait, diskGbFor).close('s1')).rejects.toThrow(/quota/);
   });
 
   // The status decides, never the prose: a 403 "project not found" leaves the
@@ -228,7 +230,7 @@ describe('closing something the provider no longer holds', () => {
   it('still refuses a refusal whose message says not found without a 404', async () => {
     const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
     api.failWith = { call: 'deleteIp', error: projectNotFound() };
-    await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).rejects.toThrow('ip-1');
+    await expect(new ScalewayServerHost(api, block, images, wait, diskGbFor).close('s1')).rejects.toThrow('ip-1');
   });
 
   it('records in the sweep a refusal whose message says not found without a 404', async () => {
@@ -336,10 +338,24 @@ describe('open', () => {
     size: 'DEV1-L',
     bootstrap: '#cloud-config\n',
   };
+  const SUNKENLAND = {
+    ...REQUEST,
+    sessionId: 's2',
+    world: World.from({
+      worldId: 'les-naufrages',
+      game: 'sunkenland' as const,
+      name: 'Les naufrages',
+      inviteCode: 'c0de',
+      players: [],
+    }),
+  };
+
+  beforeEach(() => {
+    api.block = block;
+  });
 
   it('carries both tags on the ip and on the server, from creation', async () => {
-    const api = new FakeInstanceApi();
-    await new ScalewayServerHost(api, block, images, wait).open(REQUEST);
+    await host.open(REQUEST);
     expect(api.ips[0].tags).toEqual(owned('s1'));
     expect(api.servers[0].tags).toEqual(owned('s1'));
   });
@@ -349,19 +365,61 @@ describe('open', () => {
   // announced. It is also what makes the resource reapable if the next call
   // fails — an untagged ip created after a tagged server would be invisible.
   it('reserves the ip before it creates the server', async () => {
-    const api = new FakeInstanceApi();
-    await new ScalewayServerHost(api, block, images, wait).open(REQUEST);
+    await host.open(REQUEST);
     expect(api.calls.filter((c) => c.startsWith('create'))).toEqual([
       'createIp beacon+session:s1',
       'createServer beacon+session:s1',
     ]);
   });
 
+  it('creates the server from the resolved image, on the ip it reserved', async () => {
+    await host.open(REQUEST);
+    expect(api.created).toHaveLength(1);
+    expect(api.created[0]).toMatchObject({
+      name: 'beacon-s1',
+      commercialType: 'DEV1-L',
+      image: 'img-1',
+      publicIps: ['ip-1'],
+      tags: owned('s1'),
+    });
+  });
+
+  it('gives the server a block root volume of the size its game asks for', async () => {
+    await host.open(REQUEST);
+    await host.open(SUNKENLAND);
+    expect(api.created.map((creation) => creation.volumes)).toEqual([
+      { '0': { size: 30_000_000_000, volumeType: 'sbs_volume' } },
+      { '0': { size: 40_000_000_000, volumeType: 'sbs_volume' } },
+    ]);
+  });
+
+  // The volume is born of the server, and born without a tag: until these
+  // land, nothing but its attachment says whose it is.
+  it('puts both tags on the root volume', async () => {
+    await host.open(REQUEST);
+    expect(block.volumes).toEqual([
+      { id: 'vol-1', size: 30_000_000_000, tags: owned('s1'), references: [{ id: 'ref-vol-1' }] },
+    ]);
+  });
+
+  it('tags the volume once the server exists, and before the cloud-init and the boot', async () => {
+    const setVolumeTags = block.setVolumeTags.bind(block);
+    let before: string[] = [];
+    block.setVolumeTags = async (request) => {
+      before = [...api.calls];
+      return setVolumeTags(request);
+    };
+
+    await host.open(REQUEST);
+
+    expect(before).toEqual(['createIp beacon+session:s1', 'createServer beacon+session:s1']);
+    expect(api.calls.slice(before.length)).toEqual(['setServerUserData srv-1', 'powerOn srv-1']);
+  });
+
   // There is no second chance at first boot: user data posted after poweron
   // is read by nothing, and the machine sits there billed and empty.
   it('posts the cloud-init before it powers the machine on', async () => {
-    const api = new FakeInstanceApi();
-    await new ScalewayServerHost(api, block, images, wait).open(REQUEST);
+    await host.open(REQUEST);
     expect(api.userData.get('srv-1')).toBe(REQUEST.bootstrap);
     // `indexOf` answers -1 for an absent call, and -1 is less than any real
     // index — a bare `toBeLessThan` would pass if `setServerUserData` were
@@ -374,8 +432,7 @@ describe('open', () => {
   });
 
   it('answers with the address and the provider references', async () => {
-    const api = new FakeInstanceApi();
-    const opened = await new ScalewayServerHost(api, block, images, wait).open(REQUEST);
+    const opened = await host.open(REQUEST);
     expect(opened.address).toBe('51.15.0.1');
     expect(opened.size).toBe('DEV1-L');
     expect(opened.references).toEqual({ instanceId: 'srv-1', ipId: 'ip-1' });
@@ -385,21 +442,72 @@ describe('open', () => {
   // billing, and carries the tags that would let the watchdog find it — so the
   // honest thing is to say what exists, not to hide it behind a bare throw.
   it('names the ip it already created when the server refuses', async () => {
-    const api = new FakeInstanceApi();
     api.failOn = 'createServer';
-    await expect(new ScalewayServerHost(api, block, images, wait).open(REQUEST)).rejects.toThrow(
-      /ip ip-1 is tagged session:s1/,
+    await expect(host.open(REQUEST)).rejects.toThrow(/ip ip-1 is tagged session:s1/);
+  });
+
+  it('fails the same way when the tags do not land, and destroys nothing', async () => {
+    block.failOn = 'setVolumeTags';
+
+    await expect(host.open(REQUEST)).rejects.toThrow(
+      /failed to open s1: ip ip-1 is tagged session:s1 — .*setVolumeTags/,
     );
+
+    expect(api.calls).toEqual(['createIp beacon+session:s1', 'createServer beacon+session:s1']);
+    expect(block.calls).toEqual(['setVolumeTags vol-1 beacon+session:s1']);
+    expect(api.ips).toHaveLength(1);
+    expect(api.servers).toHaveLength(1);
+    expect(block.volumes).toHaveLength(1);
+  });
+
+  // What is left of that failure is a tagged server holding an untagged
+  // volume, and close() reaches the volume through the server.
+  it('leaves a volume whose tags never landed within reach of close()', async () => {
+    block.failOn = 'setVolumeTags';
+    await expect(host.open(REQUEST)).rejects.toThrow();
+    block.failOn = null;
+    duringPause = () => block.detach('vol-1');
+
+    await host.close('s1');
+
+    expect(api.ips).toEqual([]);
+    expect(api.servers).toEqual([]);
+    expect(block.volumes).toEqual([]);
+  });
+
+  // A server on a local disk would boot, untagged volume and all: nothing
+  // downstream would notice, so the opening says so.
+  it('fails when the provider returns a server without a block volume', async () => {
+    api.createServer = async (request) => {
+      api.calls.push(`createServer ${request.tags.join('+')}`);
+      return { server: scwServer('srv-9', request.tags, 'stopped', ['v-l']) };
+    };
+
+    await expect(host.open(REQUEST)).rejects.toThrow(
+      /no block volume.*ip ip-1 is tagged session:s1/,
+    );
+
+    expect(block.calls).toEqual([]);
+    expect(api.calls).toEqual(['createIp beacon+session:s1', 'createServer beacon+session:s1']);
   });
 
   it('refuses to open when no image matches the size', async () => {
-    const api = new FakeInstanceApi();
     const none = { resolve: async () => null };
-    await expect(new ScalewayServerHost(api, block, none, wait).open(REQUEST)).rejects.toThrow(
-      /no ubuntu image/,
-    );
+    await expect(
+      new ScalewayServerHost(api, block, none, wait, diskGbFor).open(REQUEST),
+    ).rejects.toThrow(/no ubuntu image/);
     expect(api.calls).toEqual([]);
   });
+
+  it.each([0, -40, 12.5, Number.NaN])(
+    'refuses to open a game whose disk size is %s, before anything is created',
+    async (diskGb) => {
+      await expect(
+        new ScalewayServerHost(api, block, images, wait, () => diskGb).open(REQUEST),
+      ).rejects.toThrow(/no disk size for enshrouded/);
+      expect(api.calls).toEqual([]);
+    },
+  );
 });
 
 describe('closing the block volumes of a session', () => {
@@ -526,7 +634,7 @@ describe('closing the block volumes of a session', () => {
 
   it('never pauses past a budget that is not a whole number of polls', async () => {
     block.volumes = [scwBlockVolume('v-1', owned('sess1'), true)];
-    host = new ScalewayServerHost(api, block, images, { ...wait, budgetMs: 2_500 });
+    host = new ScalewayServerHost(api, block, images, { ...wait, budgetMs: 2_500 }, diskGbFor);
 
     await expect(host.close('sess1')).rejects.toThrow('still attached after 2.5 s');
 

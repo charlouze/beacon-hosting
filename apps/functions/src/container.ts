@@ -7,6 +7,7 @@ import {
   systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
+import { catalogFor } from '@beacon/cloud-init';
 import {
   blockFromSdk,
   fromSdk,
@@ -121,6 +122,9 @@ function buildShared() {
       blockFromSdk(new Blockv1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
       VOLUME_DETACHMENT,
+      // The catalogue knows what a game occupies; the adapter only knows it
+      // needs a number.
+      (game) => catalogFor(game).diskGb,
     ),
   };
 }

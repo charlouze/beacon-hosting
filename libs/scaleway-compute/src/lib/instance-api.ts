@@ -45,6 +45,21 @@ export interface ScwVolume {
   readonly server?: { readonly id?: string } | null;
 }
 
+/** What a server is created from. `serverCreation` composes it. */
+export interface ServerCreation {
+  readonly name: string;
+  readonly commercialType: string;
+  readonly image: string;
+  readonly tags: string[];
+  /** Absent when the server gets no flexible ip. */
+  readonly publicIps?: string[];
+  /**
+   * The root volume, under the key the provider boots from, its size in bytes.
+   * It takes no tag: the sdk offers none on the volume of a creation.
+   */
+  readonly volumes: { readonly '0': { readonly size: number; readonly volumeType: string } };
+}
+
 export interface InstanceApi {
   listServers(request: { tags: string[] }): Promise<{ servers: ScwServer[] }>;
   listIps(request: { tags: string[] }): Promise<{ ips: ScwIp[] }>;
@@ -55,13 +70,7 @@ export interface InstanceApi {
   deleteVolume(request: { volumeId: string }): Promise<void>;
   deleteIp(request: { ip: string }): Promise<void>;
   createIp(request: { tags: string[] }): Promise<{ ip?: ScwIp }>;
-  createServer(request: {
-    name: string;
-    commercialType: string;
-    image: string;
-    publicIps: string[];
-    tags: string[];
-  }): Promise<{ server?: ScwServer }>;
+  createServer(request: ServerCreation): Promise<{ server?: ScwServer }>;
   /** cloud-init travels as user data, in a call of its own. */
   setServerUserData(request: { serverId: string; content: string }): Promise<void>;
   powerOn(request: { serverId: string }): Promise<void>;

@@ -36,6 +36,7 @@ describe('a pass fired right after a provisioning', () => {
   // side: what is under test is the agreement between the document, the intent
   // and the inventory, and only one of the three is worth faking.
   let api: FakeInstanceApi;
+  let block: FakeBlockApi;
   let host: ServerHost;
 
   beforeEach(async () => {
@@ -48,11 +49,13 @@ describe('a pass fired right after a provisioning', () => {
     await db.doc('health/watchdog').delete();
     await adminWorldRecord(db).create(world(), new Date());
     await db.doc(serverDocPath(WORLD_ID)).set(openingDocument());
+    block = new FakeBlockApi();
     api = new FakeInstanceApi();
-    host = new ScalewayServerHost(api, new FakeBlockApi(), { resolve: async () => 'img-1' }, {
+    api.block = block;
+    host = new ScalewayServerHost(api, block, { resolve: async () => 'img-1' }, {
       budgetMs: 30_000,
       pause: async () => undefined,
-    });
+    }, () => 40);
   });
 
   it('leaves the machine it just created alone', async () => {
@@ -69,6 +72,11 @@ describe('a pass fired right after a provisioning', () => {
 
     expect(api.servers).toHaveLength(1);
     expect(api.ips).toHaveLength(1);
+    // Attached and tagged: the sweep neither destroys nor reports it.
+    expect(block.volumes).toHaveLength(1);
+    expect(block.volumes[0].tags).toEqual(api.servers[0].tags);
+    expect(block.calls.filter((call) => call.startsWith('deleteVolume'))).toEqual([]);
+    expect((await db.doc('health/watchdog').get()).get('stranded')).toEqual([]);
     // §6: RUNNING is now the agent's report, not this pass's — an immediate
     // watchdog pass must leave a session it just created alone, in
     // PROVISIONING, rather than reclaim or advance it.
