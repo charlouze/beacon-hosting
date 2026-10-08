@@ -55,9 +55,6 @@ règles qui ont été auditées.
 - **Becoming a user** — rien ne dit si un utilisateur peut cesser de l'être, ni
   ce que deviennent alors son profil et ses mondes. Le code sait effacer un
   enregistrement (`firestore.rules`, `match /members/{uid}`, `allow delete`).
-- **Administrators** — le rôle se relit à chaque décision au lieu de voyager
-  avec la connexion, et c'est ce qui rend le retrait immédiat
-  (`docs/archive/specs/2026-09-02-game-hosting-design.md`, §5).
 - **Administrators** — le rôle d'un utilisateur qui n'est pas administrateur
   porte dans le code la valeur `player` (`libs/membership-record/src/lib/viewer.ts`,
   `Role`), alors que la spec ne connaît aucun autre rôle.
