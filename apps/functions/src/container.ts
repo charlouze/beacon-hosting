@@ -7,11 +7,16 @@ import {
   systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
-import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
+import {
+  blockFromSdk,
+  fromSdk,
+  marketplaceImages,
+  ScalewayServerHost,
+} from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
 import { adminMembershipRecord } from '@beacon/membership-record/admin';
 import { createClient, type Zone } from '@scaleway/sdk-client';
-import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
+import { Blockv1, Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
@@ -46,6 +51,18 @@ export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES
 /** Cloud Logging, through the Functions logger: only the operator reads it. */
 const platformJournal: PlatformJournal = {
   failure: (entry) => logger.error(`${entry.source} failed`, entry),
+};
+
+/**
+ * How long a `close()` waits for the volumes of its session to detach. One
+ * adapter serves the three Functions that close, so the bound is set against
+ * the shortest-lived of them: `agentReport`, killed at 60 s. It counts the
+ * pauses only; the other 30 s are what is left for the provider calls around
+ * them.
+ */
+const VOLUME_DETACHMENT = {
+  budgetMs: 30_000,
+  pause: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 };
 
 /**
@@ -101,7 +118,9 @@ function buildShared() {
     region,
     host: new ScalewayServerHost(
       fromSdk(new Instancev1.API(client), zone as Zone),
+      blockFromSdk(new Blockv1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
+      VOLUME_DETACHMENT,
     ),
   };
 }

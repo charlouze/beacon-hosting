@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
-import { FakeInstanceApi, ScalewayServerHost } from '@beacon/scaleway-compute';
+import { FakeBlockApi, FakeInstanceApi, ScalewayServerHost } from '@beacon/scaleway-compute';
 import { DEFAULT_LIMITS, World, type ServerHost, type Session } from '@beacon/session';
 import {
   adminWorldRecord,
@@ -49,7 +49,10 @@ describe('a pass fired right after a provisioning', () => {
     await adminWorldRecord(db).create(world(), new Date());
     await db.doc(serverDocPath(WORLD_ID)).set(openingDocument());
     api = new FakeInstanceApi();
-    host = new ScalewayServerHost(api, { resolve: async () => 'img-1' });
+    host = new ScalewayServerHost(api, new FakeBlockApi(), { resolve: async () => 'img-1' }, {
+      budgetMs: 30_000,
+      pause: async () => undefined,
+    });
   });
 
   it('leaves the machine it just created alone', async () => {

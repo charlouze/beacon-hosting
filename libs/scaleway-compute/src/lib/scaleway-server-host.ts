@@ -7,8 +7,30 @@ import type {
   UnclaimedSweep,
 } from '@beacon/session';
 import type { ImageResolver } from './images.js';
-import type { InstanceApi, ScwIp, ScwServer } from './instance-api.js';
+import { isDetached, type BlockApi } from './block-api.js';
+import { BLOCK_VOLUME_TYPE, type InstanceApi, type ScwIp, type ScwServer } from './instance-api.js';
 import { OWNERSHIP_TAG, readSessionTag, sessionTag } from './tags.js';
+
+/** How long one close() may wait for the volumes of its session to detach. */
+export interface DetachmentWait {
+  /**
+   * The most one close() spends pausing, in total. It counts the pauses, not
+   * the calls between them: the caller's own deadline has to leave room for
+   * those.
+   */
+  readonly budgetMs: number;
+  readonly pause: (ms: number) => Promise<void>;
+}
+
+/** A block volume detaches 1 to 13 s after its server dies — measured on 2026-10-08. */
+const POLL_MS = 1_000;
+
+/** What one round of the wait leaves behind. */
+interface VolumeRound {
+  /** Refusals that waiting will not cure. */
+  readonly refusals: string[];
+  readonly stillAttached: string[];
+}
 
 interface OwnedResource {
   readonly sessionId: SessionId | null;
@@ -30,7 +52,9 @@ const carrying =
 export class ScalewayServerHost implements ServerHost {
   constructor(
     private readonly api: InstanceApi,
+    private readonly block: BlockApi,
     private readonly images: ImageResolver,
+    private readonly wait: DetachmentWait,
   ) {}
 
   async open(request: OpenServerRequest): Promise<OpenedServer> {
@@ -127,7 +151,12 @@ export class ScalewayServerHost implements ServerHost {
         failures.push(`ip ${ip.id}: ${String(error)}`);
       }
     }
+
+    // Noted before the server dies, and whether or not it does: once it is
+    // gone, nothing else ties an untagged block volume to this session.
+    const attached: string[] = [];
     for (const server of servers.filter(carrying(tag))) {
+      attached.push(...blockVolumeIdsOf(server));
       try {
         await this.destroyServer(server);
       } catch (error) {
@@ -135,6 +164,8 @@ export class ScalewayServerHost implements ServerHost {
         failures.push(`server ${server.id}: ${String(error)}`);
       }
     }
+
+    failures.push(...(await this.destroyBlockVolumes(tag, attached)));
 
     // Aggregated, and it still throws: a rejection is how the watchdog learns
     // the cleanup could not be guaranteed and files CleanupFailed.
@@ -228,9 +259,84 @@ export class ScalewayServerHost implements ServerHost {
     }
   }
 
+  /**
+   * Deletes the block volumes of a session — those carrying its tag, and
+   * those its servers held — and returns what could not be deleted.
+   *
+   * A block volume outlives its server and stays attached for a few seconds
+   * after it, during which the provider refuses the deletion. So this polls:
+   * a volume still attached waits for the next round, any other refusal ends
+   * the wait, and so does the budget.
+   */
+  private async destroyBlockVolumes(tag: string, attached: readonly string[]): Promise<string[]> {
+    const byAttachment = new Set(attached);
+    let paused = 0;
+
+    for (;;) {
+      let round: VolumeRound;
+      try {
+        round = await this.deleteDetachedVolumes(tag, byAttachment);
+      } catch (error) {
+        return [`volumes: ${String(error)}`];
+      }
+      if (round.refusals.length > 0) return round.refusals;
+      if (round.stillAttached.length === 0) return [];
+
+      const left = this.wait.budgetMs - paused;
+      if (left <= 0) {
+        return round.stillAttached.map(
+          (volumeId) =>
+            `volume ${volumeId}: still attached after ${this.wait.budgetMs / 1_000} s`,
+        );
+      }
+      const pause = Math.min(POLL_MS, left);
+      await this.wait.pause(pause);
+      paused += pause;
+    }
+  }
+
+  /**
+   * One round of the wait: lists, then tries every volume that may be
+   * detached. Throws only when the listing is refused. A volume of
+   * `byAttachment` that is gone leaves the set, so the next round does not ask
+   * for it again.
+   */
+  private async deleteDetachedVolumes(tag: string, byAttachment: Set<string>): Promise<VolumeRound> {
+    // One tag, re-checked on what came back, as for an ip and a server.
+    const tagged = (await this.block.listVolumes({ tag })).volumes.filter(carrying(tag));
+
+    // An untagged volume is not in the listing, so nothing says whether it is
+    // detached: the deletion is the question, and a 412 is the answer.
+    const deletable = new Set(byAttachment);
+    const stillAttached: string[] = [];
+    for (const volume of tagged) {
+      if (isDetached(volume)) {
+        deletable.add(volume.id);
+      } else {
+        deletable.delete(volume.id);
+        stillAttached.push(volume.id);
+      }
+    }
+
+    // One try per volume: a refusal on the first must not abandon the second.
+    const refusals: string[] = [];
+    for (const volumeId of deletable) {
+      try {
+        await this.block.deleteVolume({ volumeId });
+        byAttachment.delete(volumeId);
+      } catch (error) {
+        if (isAlreadyGone(error)) byAttachment.delete(volumeId);
+        else if (isStillAttached(error)) stillAttached.push(volumeId);
+        else refusals.push(`volume ${volumeId}: ${String(error)}`);
+      }
+    }
+    return { refusals, stillAttached };
+  }
+
   private async destroyServer(server: ScwServer): Promise<void> {
     if (server.state === 'running') {
-      // One call, and it takes the attached volumes with it. Deliberately not
+      // One call, and it takes the local volumes with it — not the block ones,
+      // which close() deletes once they detach. Deliberately not
       // serverActionAndWait: that helper polls a server terminate has just
       // deleted, gets a 404, and throws after a successful destruction —
       // measured on 2026-09-03, on one server. On two, the throw ends the loop
@@ -241,10 +347,12 @@ export class ScalewayServerHost implements ServerHost {
     }
 
     // A server that never booted refuses terminate outright: "invalid state
-    // 'stopped' for the action 'terminate'". Deleting it leaves the disks
-    // behind — billed, detached, absent from the server list, and carrying no
-    // tag that would let anyone claim them afterwards.
-    const volumeIds = volumeIdsOf(server);
+    // 'stopped' for the action 'terminate'". Deleting it leaves its local
+    // disks behind — billed, detached, absent from the server list, and
+    // carrying no tag that would let anyone claim them afterwards. The block
+    // ones are not asked of this api, which answers 404 for them: that would
+    // read as a deletion.
+    const volumeIds = localVolumeIdsOf(server);
     await this.api.deleteServer({ serverId: server.id });
 
     // One try per volume: a refusal on the first must not abandon the second.
@@ -266,9 +374,16 @@ export class ScalewayServerHost implements ServerHost {
   }
 }
 
-/** Kept next to its only caller: the two death paths of close() need it. */
-export function volumeIdsOf(server: ScwServer): string[] {
-  return Object.values(server.volumes).map((volume) => volume.id);
+function blockVolumeIdsOf(server: ScwServer): string[] {
+  return Object.values(server.volumes)
+    .filter((volume) => volume.volumeType === BLOCK_VOLUME_TYPE)
+    .map((volume) => volume.id);
+}
+
+function localVolumeIdsOf(server: ScwServer): string[] {
+  return Object.values(server.volumes)
+    .filter((volume) => volume.volumeType !== BLOCK_VOLUME_TYPE)
+    .map((volume) => volume.id);
 }
 
 /**
@@ -288,4 +403,14 @@ function isAlreadyGone(error: unknown): boolean {
   if (candidate?.status === 404) return true;
   if (candidate?.type === 'not_found') return true;
   return /not found|does not exist/i.test(candidate?.message ?? '');
+}
+
+/**
+ * The Block API's refusal to delete a volume something still holds: a 412,
+ * measured on 2026-10-08. Read off the error's shape for the reason
+ * `isAlreadyGone` gives.
+ */
+function isStillAttached(error: unknown): boolean {
+  const candidate = error as { status?: number; type?: string } | null;
+  return candidate?.status === 412 || candidate?.type === 'precondition_failed';
 }

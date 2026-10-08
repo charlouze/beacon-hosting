@@ -1,8 +1,8 @@
 import { config as loadEnv } from 'dotenv';
-import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
+import { Blockv1, Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { createClient, type Zone } from '@scaleway/sdk-client';
 import { afterAll, describe, expect, it } from 'vitest';
-import { fromSdk } from './from-sdk.js';
+import { blockFromSdk, fromSdk } from './from-sdk.js';
 import { marketplaceImages } from './images.js';
 import { ScalewayServerHost } from './scaleway-server-host.js';
 import { OWNERSHIP_TAG, sessionTag } from './tags.js';
@@ -47,7 +47,12 @@ const marketplace = new Marketplacev2.API(client);
 // point: this test answers "does InstanceApi describe the sdk", and it could
 // not answer it about a second translation nobody deploys.
 const api = fromSdk(sdk, zone);
-const host = new ScalewayServerHost(api, marketplaceImages(marketplace, zone));
+const host = new ScalewayServerHost(
+  api,
+  blockFromSdk(new Blockv1.API(client), zone),
+  marketplaceImages(marketplace, zone),
+  { budgetMs: 30_000, pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) },
+);
 const tags = [OWNERSHIP_TAG, sessionTag(SESSION)];
 
 afterAll(async () => {

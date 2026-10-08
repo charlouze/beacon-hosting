@@ -9,9 +9,11 @@ import {
   type UnclaimedSweep,
 } from '@beacon/session';
 import {
+  FakeBlockApi,
   FakeInstanceApi,
   OWNERSHIP_TAG,
   ScalewayServerHost,
+  scwBlockVolume,
   scwServer,
   sessionTag,
 } from '@beacon/scaleway-compute';
@@ -527,7 +529,10 @@ describe('runWatchdog', () => {
 
     await runWatchdog({
       ...deps(),
-      host: new ScalewayServerHost(api, { resolve: async () => null }),
+      host: new ScalewayServerHost(api, new FakeBlockApi(), { resolve: async () => null }, {
+        budgetMs: 30_000,
+        pause: async () => undefined,
+      }),
       ledger,
     });
 
@@ -537,6 +542,33 @@ describe('runWatchdog', () => {
     expect((await db.doc('worlds/w1/server/current').get()).data()?.['state']).toBe('FAILED');
     expect(await ledger.openSessions()).toEqual(['sess1']);
     expect(api.servers).toHaveLength(1);
+  });
+
+  it('turns a block volume that never detaches into CleanupFailed', async () => {
+    const tags = [OWNERSHIP_TAG, sessionTag('sess1')];
+    const block = new FakeBlockApi([scwBlockVolume('v-1', tags, true)]);
+    await db.doc('provisioning/sess1').set({ closedAt: null });
+    await seedWorld('w1', {
+      state: 'STOPPING',
+      sessionId: 'sess1',
+      stateSince: minutesAgo(11),
+      instanceId: 'i-1',
+    });
+
+    await runWatchdog({
+      ...deps(),
+      host: new ScalewayServerHost(new FakeInstanceApi(), block, { resolve: async () => null }, {
+        budgetMs: 30_000,
+        pause: async () => undefined,
+      }),
+      ledger,
+    });
+
+    const [event] = (await db.collection('events').get()).docs;
+    expect(event.data()['type']).toBe('CleanupFailed');
+    expect(event.data()['detail']).toContain('v-1');
+    expect((await db.doc('worlds/w1/server/current').get()).data()?.['state']).toBe('FAILED');
+    expect(await ledger.openSessions()).toEqual(['sess1']);
   });
 
   it('sends a record to FAILED when the cleanup could not be guaranteed', async () => {
