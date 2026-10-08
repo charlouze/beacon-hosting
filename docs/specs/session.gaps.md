@@ -34,12 +34,6 @@ ci-dessous sont établis par lecture.
 
 ## Violations
 
-- **Closing a session** — ce dont le système ne sait plus dire à quelle session
-  il appartenait est **signalé et jamais détruit**, alors que la spec exige
-  qu'aucun serveur de jeu ne coûte hors d'une session en cours. Un test
-  épingle explicitement le comportement actuel — *destroys nothing*. C'est une
-  facture qui court tant qu'un humain ne regarde pas. `reserved by batch-01`
-
 - **Extending a session** — le système fait respecter une autre règle que celle
   qu'énonce la spec. Il ne conserve que l'heure d'ouverture et l'heure de
   fermeture, **sans jamais compter les prolongations** : `ouverture + 4 h +
