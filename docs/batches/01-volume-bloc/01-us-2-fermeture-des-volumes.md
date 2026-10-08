@@ -1060,4 +1060,22 @@ bash ~/.config/github-app/as-agent.sh git commit -m "feat(scaleway-compute): dé
 
 ## Rulings log
 
+Ruling: `sweepUnclaimed()` cesse de demander à l'API instance la suppression d'un volume bloc d'un serveur sans session, par `destroyServer` qu'il partage avec `close()` — l'API instance répond 404 à cette demande, que `isAlreadyGone` lit comme une réussite, et aucun serveur n'attache de volume bloc avant la story qui change `open()` — si c'est faux, le volume bloc d'un serveur sans session reste jusqu'à ce que le balayage par tag le détruise.
+
+Ruling: un volume bloc jamais tagué dont l'attente expire n'est plus atteint par le `close()` suivant, une fois son serveur disparu, et le code reste tel quel — le `Scope` du lot le prévoit : ce volume reste signalé et n'est pas détruit — si c'est faux, il faut retenir l'identifiant du volume d'une fermeture à l'autre, ce qu'aucun enregistrement ne porte.
+
+Ruling: quand un tour porte un refus franc et des volumes encore attachés, l'erreur de `close()` ne nomme que le refus — la conception du lot dit que c'est lui que l'erreur porte — si c'est faux, une ligne ajoute les volumes encore attachés au message.
+
+Ruling: un serveur qui refuse de mourir laisse `close()` attendre 30 s ses volumes — la conception fait suivre la destruction des serveurs par l'attente sans condition, et un volume tagué serait attendu de toute façon — si c'est faux, chaque passage du watchdog perd 30 s par session dont le serveur refuse de mourir.
+
+Technical design ruling: les 30 s comptent les pauses de `close()`, pas les appels au fournisseur entre elles — l'adapter ne reçoit qu'une borne et une fonction d'attente, sans horloge, et le test du terme reste exact — si c'est faux, un `close()` dont le volume ne se détache jamais dure 30 s plus une trentaine de listes, et peut approcher les 60 s de `agentReport`.
+
+Technical design ruling: tout refus 412 de l'API bloc se lit comme un volume encore attaché — la sonde a relevé `412 precondition_failed` sans la forme exacte de l'erreur que le SDK lève — si c'est faux, un autre refus 412 se retente jusqu'au terme au lieu de mettre fin à l'attente, et `close()` échoue 30 s plus tard avec « still attached ».
+
+Technical design ruling: un autre refus met fin à l'attente à la fin du tour, après un essai sur chaque volume — un refus sur le premier volume n'abandonne pas le second, comme pour les IP et les serveurs — si c'est faux, `close()` fait quelques suppressions de plus avant d'échouer.
+
+Technical design ruling: un refus de la liste de l'API bloc fait échouer `close()`, IP et serveurs déjà détruits — sans liste, rien ne dit qu'aucun volume ne porte le tag de la session — si c'est faux, une clé sans droit sur l'API bloc fait passer chaque fermeture par `CleanupFailed`.
+
+Technical design ruling: `BlockApi.listVolumes` ne prend qu'un tag — la sonde a mesuré que deux tags s'y lisent « ou », et la signature l'interdit — si c'est faux, le port gagne une liste de tags.
+
 ## Observed drift
