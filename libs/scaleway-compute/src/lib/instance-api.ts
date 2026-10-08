@@ -9,16 +9,19 @@
  * them chooses. The translation closes over it once.
  */
 
+/** `volumeType` of a volume the Block Storage API owns. Anything else is local. */
+export const BLOCK_VOLUME_TYPE = 'sbs_volume';
+
 export interface ScwServer {
   readonly id: string;
   readonly name: string;
   readonly state: string;
   readonly tags: string[];
   /**
-   * Its disks. They carry no tag of ours — a volume is created by the server,
-   * not by us — so this map is the only thing tying one to a session.
+   * Its disks, and which api each one answers to. A local one dies by the
+   * Instance API; a block one is unknown to it and dies by the Block API.
    */
-  readonly volumes: Record<string, { readonly id: string }>;
+  readonly volumes: Record<string, { readonly id: string; readonly volumeType: string }>;
 }
 
 export interface ScwIp {

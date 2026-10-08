@@ -1,3 +1,4 @@
+import { BLOCK_VOLUME_TYPE } from './instance-api.js';
 import type { InstanceApi, ScwIp, ScwServer, ScwVolume } from './instance-api.js';
 
 /**
@@ -116,12 +117,18 @@ export const scwServer = (
   tags: string[],
   state = 'running',
   volumeIds: string[] = [],
+  blockVolumeIds: string[] = [],
 ): ScwServer => ({
   id,
   name: `beacon-${id}`,
   state,
   tags,
-  volumes: Object.fromEntries(volumeIds.map((v, index) => [String(index), { id: v }])),
+  volumes: Object.fromEntries(
+    [
+      ...volumeIds.map((volumeId) => ({ id: volumeId, volumeType: 'l_ssd' })),
+      ...blockVolumeIds.map((volumeId) => ({ id: volumeId, volumeType: BLOCK_VOLUME_TYPE })),
+    ].map((volume, index) => [String(index), volume]),
+  ),
 });
 
 export const scwIp = (id: string, address: string, tags: string[]): ScwIp => ({
