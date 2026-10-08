@@ -25,6 +25,26 @@ describe('FakeBlockApi', () => {
     expect(volumes.map((volume) => volume.id)).toEqual(['v-1']);
   });
 
+  it('answers a listing without a tag with every volume', async () => {
+    const api = new FakeBlockApi([
+      scwBlockVolume('v-1', ['beacon']),
+      scwBlockVolume('v-2', ['someone-else']),
+      scwBlockVolume('v-3'),
+    ]);
+
+    const { volumes } = await api.listVolumes({});
+
+    expect(volumes.map((volume) => volume.id)).toEqual(['v-1', 'v-2', 'v-3']);
+    expect(api.calls).toEqual(['listVolumes']);
+  });
+
+  it('refuses a listing without a tag on the call a test names', async () => {
+    const api = new FakeBlockApi();
+    api.failOn = 'listVolumes';
+
+    await expect(api.listVolumes({})).rejects.toThrow('scaleway refused listVolumes');
+  });
+
   it('refuses to delete an attached volume with a 412', async () => {
     const api = new FakeBlockApi([scwBlockVolume('v-1', [], true)]);
 

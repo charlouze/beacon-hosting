@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { World } from '@beacon/session';
+import type { UnclaimedSweep } from '@beacon/session';
 import { FakeBlockApi, scwBlockVolume, volumeInUse, volumeNotFound } from './fake-block-api.js';
 import { FakeInstanceApi, scwIp, scwServer, scwVolume } from './fake-instance-api.js';
 import { ScalewayServerHost, type DetachmentWait } from './scaleway-server-host.js';
@@ -271,9 +272,9 @@ describe('sweepUnclaimed', () => {
     expect(sweep.errors[0]).toContain('ip-1');
   });
 
-  // §6, the third list: signalé, jamais détruit. A volume carries no tag, so
-  // nothing proves it is ours, and deleting someone else's disk is the one
-  // mistake this component may not make.
+  // A local volume carries no tag of ours, so nothing proves where it comes
+  // from, and deleting someone else's disk is the one mistake this component
+  // may not make.
   it('reports a detached volume without touching it', async () => {
     api.volumes = [scwVolume('v-1')];
 
@@ -568,13 +569,176 @@ describe('closing the block volumes of a session', () => {
   });
 });
 
-describe('sweepUnclaimed and a block volume', () => {
-  it('never asks the instance api to delete the block volume of a stray server', async () => {
-    api.servers = [scwServer('s-1', owned(), 'stopped', ['v-l'], ['v-b'])];
+describe('sweeping the block volumes', () => {
+  it('destroys a detached volume carrying both tags, and names its session', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'))];
 
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep).toEqual({ destroyed: ['volume v-1 of session sess1'], stranded: [], errors: [] });
+    expect(block.volumes).toEqual([]);
+  });
+
+  it('destroys a detached volume carrying the ownership tag alone', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned())];
+
+    expect((await host.sweepUnclaimed()).destroyed).toEqual(['volume v-1']);
+    expect(block.volumes).toEqual([]);
+  });
+
+  // Two sessions claimed is no session known: the volume is still ours, and
+  // still detached, so it dies without a name.
+  it('destroys a volume claimed by two sessions without naming either', async () => {
+    block.volumes = [scwBlockVolume('v-1', [...owned('sess1'), sessionTag('sess2')])];
+
+    expect((await host.sweepUnclaimed()).destroyed).toEqual(['volume v-1']);
+  });
+
+  it('asks for the whole listing, with no tag', async () => {
     await host.sweepUnclaimed();
 
+    expect(block.calls).toEqual(['listVolumes']);
+  });
+
+  it('leaves alone an attached volume, whatever it carries', async () => {
+    block.volumes = [
+      scwBlockVolume('v-1', owned('sess1'), true),
+      scwBlockVolume('v-2', [], true),
+    ];
+
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep).toEqual({ destroyed: [], stranded: [], errors: [] });
+    expect(block.calls).toEqual(['listVolumes']);
+  });
+
+  // Without the ownership tag nothing proves the volume is ours: a session
+  // tag alone is a word anyone can write.
+  it('reports a detached volume without the ownership tag, and never deletes it', async () => {
+    block.volumes = [
+      scwBlockVolume('v-1'),
+      scwBlockVolume('v-2', [sessionTag('sess1')]),
+      scwBlockVolume('v-3', ['beacon-probe']),
+    ];
+
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep.stranded).toEqual(['volume v-1 (40 GB)', 'volume v-2 (40 GB)', 'volume v-3 (40 GB)']);
+    expect(sweep.destroyed).toEqual([]);
+    expect(block.calls).toEqual(['listVolumes']);
+  });
+
+  it('reports the local volumes before the block ones', async () => {
+    api.volumes = [scwVolume('v-l')];
+    block.volumes = [scwBlockVolume('v-b')];
+
+    expect((await host.sweepUnclaimed()).stranded).toEqual(['volume v-l (80 GB)', 'volume v-b (40 GB)']);
+  });
+
+  it('fails when the block api refuses the listing, before anything is destroyed', async () => {
+    api.ips = [scwIp('ip-1', '51.15.0.1', owned())];
+    api.servers = [scwServer('s-1', owned())];
+    block.failOn = 'listVolumes';
+
+    await expect(host.sweepUnclaimed()).rejects.toThrow('scaleway refused listVolumes');
+    expect(api.calls.filter((c) => !c.startsWith('list'))).toEqual([]);
+  });
+
+  it('carries on past a refused deletion, and records both sides of it', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1')), scwBlockVolume('v-2', owned('sess2'))];
+    block.failOn = 'deleteVolume v-1';
+
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep.destroyed).toEqual(['volume v-2 of session sess2']);
+    expect(sweep.errors).toEqual(['volume v-1: Error: scaleway refused deleteVolume v-1']);
+  });
+
+  // The listing and the deletion disagree for a moment. The sweep does not
+  // wait: it says so, and the next pass asks again.
+  it('records a volume the listing called detached and the deletion called in use', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'))];
+    block.failWith = { call: 'deleteVolume v-1', error: volumeInUse() };
+
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep.destroyed).toEqual([]);
+    expect(sweep.errors).toHaveLength(1);
+    expect(sweep.errors[0]).toContain('v-1');
+  });
+
+  it('counts a volume that is already gone as neither destroyed nor refused', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'))];
+    block.failWith = { call: 'deleteVolume v-1', error: volumeNotFound() };
+
+    expect(await host.sweepUnclaimed()).toEqual({ destroyed: [], stranded: [], errors: [] });
+  });
+
+  it('destroys the ips and the servers before the volumes', async () => {
+    api.ips = [scwIp('ip-1', '51.15.0.1', owned())];
+    api.servers = [scwServer('s-1', owned())];
+    block.volumes = [scwBlockVolume('v-1', owned())];
+
+    expect((await host.sweepUnclaimed()).destroyed).toEqual(['ip 51.15.0.1', 'server s-1', 'volume v-1']);
+  });
+
+  // The Instance API answers 404 for a block volume, which would read as a
+  // deletion. And the sweep does not wait for a detachment: the volume of the
+  // server it has just destroyed is the next pass's.
+  it('leaves the block volume of a stray server to the pass after it detached', async () => {
+    api.servers = [scwServer('s-1', owned(), 'stopped', ['v-l'], ['v-b'])];
+    block.volumes = [scwBlockVolume('v-b', owned(), true)];
+
+    const first = await host.sweepUnclaimed();
+
     expect(api.calls.filter((c) => c.startsWith('deleteVolume'))).toEqual(['deleteVolume v-l']);
-    expect(block.calls).toEqual([]);
+    expect(block.calls).toEqual(['listVolumes']);
+    expect(first.destroyed).toEqual(['server s-1']);
+
+    block.detach('v-b');
+
+    expect((await host.sweepUnclaimed()).destroyed).toEqual(['volume v-b']);
+    expect(block.volumes).toEqual([]);
+  });
+});
+
+describe('a close() and a sweep after the same volume', () => {
+  /** Runs `rival` once, just before the next block deletion goes through. */
+  const beforeNextDeletion = (rival: () => Promise<void>) => {
+    const deleteVolume = block.deleteVolume.bind(block);
+    block.deleteVolume = async (request) => {
+      block.deleteVolume = deleteVolume;
+      await rival();
+      return deleteVolume(request);
+    };
+  };
+
+  beforeEach(() => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'))];
+  });
+
+  it('closes a session whose volume a sweep has already destroyed', async () => {
+    await host.sweepUnclaimed();
+
+    await expect(host.close('sess1')).resolves.toBeUndefined();
+    expect(pauses).toEqual([]);
+  });
+
+  it('lets close() succeed when the sweep deletes the volume between its listing and its deletion', async () => {
+    let sweep: UnclaimedSweep | undefined;
+    beforeNextDeletion(async () => {
+      sweep = await host.sweepUnclaimed();
+    });
+
+    await expect(host.close('sess1')).resolves.toBeUndefined();
+    expect(sweep).toEqual({ destroyed: ['volume v-1 of session sess1'], stranded: [], errors: [] });
+    expect(block.volumes).toEqual([]);
+  });
+
+  it('lets the sweep go on when close() deletes the volume between its listing and its deletion', async () => {
+    beforeNextDeletion(() => host.close('sess1'));
+
+    expect(await host.sweepUnclaimed()).toEqual({ destroyed: [], stranded: [], errors: [] });
+    expect(block.volumes).toEqual([]);
   });
 });

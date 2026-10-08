@@ -33,8 +33,9 @@ export interface ScwIp {
 }
 
 /**
- * A disk. It carries no tag — there is nothing to filter it by, which is the
- * entire reason §6 says a detached one is reported and never destroyed.
+ * A local disk, as the Instance API lists it. This system never tags one, so
+ * nothing says whose a detached one is: it is reported and never destroyed. A
+ * block volume is not in this listing — see `ScwBlockVolume`.
  */
 export interface ScwVolume {
   readonly id: string;
@@ -47,7 +48,7 @@ export interface ScwVolume {
 export interface InstanceApi {
   listServers(request: { tags: string[] }): Promise<{ servers: ScwServer[] }>;
   listIps(request: { tags: string[] }): Promise<{ ips: ScwIp[] }>;
-  /** No tag filter, because a volume has no tags. The whole project comes back. */
+  /** No tag filter: the whole project comes back, local volumes only. */
   listVolumes(): Promise<{ volumes: ScwVolume[] }>;
   serverAction(request: { serverId: string; action: 'terminate' }): Promise<unknown>;
   deleteServer(request: { serverId: string }): Promise<void>;

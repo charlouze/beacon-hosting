@@ -27,10 +27,11 @@ export class FakeBlockApi implements BlockApi {
     }
   }
 
-  async listVolumes(request: { tag: string }) {
-    this.record(`listVolumes ${request.tag}`);
-    if (this.ignoresTagFilter) return { volumes: this.volumes };
-    return { volumes: this.volumes.filter((volume) => volume.tags.includes(request.tag)) };
+  async listVolumes(request: { tag?: string }) {
+    const { tag } = request;
+    this.record(tag === undefined ? 'listVolumes' : `listVolumes ${tag}`);
+    if (tag === undefined || this.ignoresTagFilter) return { volumes: this.volumes };
+    return { volumes: this.volumes.filter((volume) => volume.tags.includes(tag)) };
   }
 
   async setVolumeTags(request: { volumeId: string; tags: string[] }) {

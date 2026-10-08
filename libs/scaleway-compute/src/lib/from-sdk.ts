@@ -63,7 +63,13 @@ export function fromSdk(api: Instancev1.API, zone: Zone): InstanceApi {
 export function blockFromSdk(api: Blockv1.API, zone: Zone): BlockApi {
   return {
     listVolumes: async (request) => ({
-      volumes: await drain(api.listVolumes({ zone, tags: [request.tag], includeDeleted: false })),
+      volumes: await drain(
+        api.listVolumes({
+          zone,
+          tags: request.tag === undefined ? undefined : [request.tag],
+          includeDeleted: false,
+        }),
+      ),
     }),
     setVolumeTags: async (request) => {
       await api.updateVolume({ ...request, zone });

@@ -380,8 +380,9 @@ describe('sweepEvents', () => {
     expect(types(events).sort()).toEqual(['CleanupFailed', 'SessionReclaimed']);
   });
 
-  // §6: signalé, jamais détruit. Announcing is the entire action.
-  it('announces a stranded volume on its appearance and destroys nothing', () => {
+  // A stranded volume does not carry the ownership tag: announcing it is the
+  // entire action.
+  it('announces a stranded volume on its appearance', () => {
     const events = sweepEvents({ ...quiet, stranded: ['volume v-1 (80G)'] }, []);
     expect(events).toEqual([{ type: 'ResourceStranded', sessionId: null, detail: 'volume v-1 (80G)' }]);
   });

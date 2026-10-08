@@ -17,10 +17,11 @@ export interface ScwBlockVolume {
 
 export interface BlockApi {
   /**
-   * One tag, and the signature allows no more: the filter is exact on a whole
-   * tag, and two tags are read as either, not both — measured on 2026-10-08.
+   * One tag at most, and the signature allows no more: the filter is exact on
+   * a whole tag, and two tags are read as either, not both — measured on
+   * 2026-10-08. Without a tag, the whole project comes back.
    */
-  listVolumes(request: { tag: string }): Promise<{ volumes: ScwBlockVolume[] }>;
+  listVolumes(request: { tag?: string }): Promise<{ volumes: ScwBlockVolume[] }>;
   /** Replaces the whole tag list. */
   setVolumeTags(request: { volumeId: string; tags: string[] }): Promise<void>;
   /** Refused with a 412 while the volume is attached. */

@@ -353,7 +353,7 @@ describe('runWatchdog', () => {
     });
   });
 
-  it('records the sweep of what carries no session tag', async () => {
+  it('records what the sweep destroyed under no session', async () => {
     host.sweep = { ...QUIET, destroyed: ['ip 51.15.0.1'] };
 
     await runWatchdog(deps());
@@ -569,6 +569,27 @@ describe('runWatchdog', () => {
     expect(event.data()['detail']).toContain('v-1');
     expect((await db.doc('worlds/w1/server/current').get()).data()?.['state']).toBe('FAILED');
     expect(await ledger.openSessions()).toEqual(['sess1']);
+  });
+
+  // The session is named in the detail and not in the subject: no close() of
+  // that session destroyed the volume, the sweep did.
+  it('files a volume the real adapter swept as a reclamation without a session', async () => {
+    const block = new FakeBlockApi([scwBlockVolume('v-1', [OWNERSHIP_TAG, sessionTag('sess1')])]);
+
+    await runWatchdog({
+      ...deps(),
+      host: new ScalewayServerHost(new FakeInstanceApi(), block, { resolve: async () => null }, {
+        budgetMs: 30_000,
+        pause: async () => undefined,
+      }),
+      ledger,
+    });
+
+    const [event] = (await db.collection('events').get()).docs;
+    expect(event.data()['type']).toBe('SessionReclaimed');
+    expect(event.data()['sessionId']).toBeNull();
+    expect(event.data()['detail']).toBe('volume v-1 of session sess1');
+    expect(block.volumes).toEqual([]);
   });
 
   it('sends a record to FAILED when the cleanup could not be guaranteed', async () => {

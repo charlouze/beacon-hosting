@@ -7,7 +7,7 @@ import type {
   UnclaimedSweep,
 } from '@beacon/session';
 import type { ImageResolver } from './images.js';
-import { isDetached, type BlockApi } from './block-api.js';
+import { isDetached, type BlockApi, type ScwBlockVolume } from './block-api.js';
 import { BLOCK_VOLUME_TYPE, type InstanceApi, type ScwIp, type ScwServer } from './instance-api.js';
 import { OWNERSHIP_TAG, readSessionTag, sessionTag } from './tags.js';
 
@@ -179,9 +179,18 @@ export class ScalewayServerHost implements ServerHost {
     // about to orphan is in flight, not stranded. Listing after would report it
     // as abandoned every time a server dies.
     const { volumes } = await this.api.listVolumes();
-    const stranded = volumes
-      .filter((volume) => volume.server?.id === undefined)
-      .map((volume) => `volume ${volume.id} (${Math.round(volume.size / 1e9)} GB)`);
+    // No tag asked for: what is stranded is exactly what carries no tag of
+    // ours, and no filter on a tag returns that.
+    const detached = (await this.block.listVolumes({})).volumes.filter(isDetached);
+
+    // Detached and carrying the ownership tag: what is left of a game server
+    // that is gone, whatever session it was tagged for.
+    const ours = carrying(OWNERSHIP_TAG);
+    const leftovers = detached.filter(ours);
+    const stranded = [
+      ...volumes.filter((volume) => volume.server?.id === undefined),
+      ...detached.filter((volume) => !ours(volume)),
+    ].map((volume) => `volume ${volume.id} (${Math.round(volume.size / 1e9)} GB)`);
 
     const { servers } = await this.api.listServers({ tags: [OWNERSHIP_TAG] });
     const { ips } = await this.api.listIps({ tags: [OWNERSHIP_TAG] });
@@ -215,6 +224,17 @@ export class ScalewayServerHost implements ServerHost {
       } catch (error) {
         if (isAlreadyGone(error)) continue;
         errors.push(`server ${server.id}: ${String(error)}`);
+      }
+    }
+    // No wait here, unlike close(): a volume the provider still holds is the
+    // next pass's, and already gone means a close() got there first.
+    for (const volume of leftovers) {
+      try {
+        await this.block.deleteVolume({ volumeId: volume.id });
+        destroyed.push(sweptVolume(volume));
+      } catch (error) {
+        if (isAlreadyGone(error)) continue;
+        errors.push(`volume ${volume.id}: ${String(error)}`);
       }
     }
 
@@ -336,7 +356,7 @@ export class ScalewayServerHost implements ServerHost {
   private async destroyServer(server: ScwServer): Promise<void> {
     if (server.state === 'running') {
       // One call, and it takes the local volumes with it — not the block ones,
-      // which close() deletes once they detach. Deliberately not
+      // which close() and the sweep delete once they detach. Deliberately not
       // serverActionAndWait: that helper polls a server terminate has just
       // deleted, gets a 404, and throws after a successful destruction —
       // measured on 2026-09-03, on one server. On two, the throw ends the loop
@@ -384,6 +404,12 @@ function localVolumeIdsOf(server: ScwServer): string[] {
   return Object.values(server.volumes)
     .filter((volume) => volume.volumeType !== BLOCK_VOLUME_TYPE)
     .map((volume) => volume.id);
+}
+
+/** A destroyed volume, in the audit's words: the session it was tagged for, when one is. */
+function sweptVolume(volume: ScwBlockVolume): string {
+  const sessionId = readSessionTag(volume.tags);
+  return sessionId === null ? `volume ${volume.id}` : `volume ${volume.id} of session ${sessionId}`;
 }
 
 /**
