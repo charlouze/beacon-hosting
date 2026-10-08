@@ -1888,6 +1888,30 @@ pas de seconde copie pendant l'installation.
 Serveur démarré, sans joueur, trois minutes après : 57 % d'un cœur, 1,1 Gio.
 Le volume s'est détaché 3,3 s après `terminate`.
 
+### La facture de septembre
+
+Relevée le 2026-10-08, pour la période du 3 au 22 septembre :
+
+| Ligne | Quantité | Montant | Taux déduit |
+|---|---|---|---|
+| `DEV1-L`, 24 ressources | 1 620 min, soit 27 h | 1,16 € | 0,0430 €/h |
+| IPv4 flexible, 55 ressources | 3 480 min, soit 58 h | 0,29 € | 0,0050 €/h |
+| Local SSD, 29 ressources | 3 440 Go·h | 0,17 € | 0,0000494 €/Go/h |
+
+- **L'instance** recoupe le catalogue, 0,04284 €/h.
+- **L'IP à 0,005 €/h est recoupée**, ce que la section du catalogue laissait
+  ouvert.
+- **Le disque local vaut 0,0040 €/h pour 80 Go**, et non les ~0,0067 €/h déduits
+  de la première facture, qui arrondissait au centime trois heures de machine.
+  Le taux tout compris de `DEV1-L` sur disque local est donc de 0,0518 €/h, et
+  non de 0,05454.
+- **Chaque ressource se facture à part, à l'heure entamée** : 58 h d'IP et
+  43 h de disque pour 27 h de serveur. Les sondes et la suite de contrat, qui
+  créent des IP et des disques sans serveur démarré, pèsent dans l'écart.
+- **Le volume bloc coûte plus cher au Go que le disque local** : 0,000130 contre
+  0,0000494 €/Go/h. 40 Go de bloc valent 0,0052 €/h, 80 Go de local 0,0040.
+  Le tarif du bloc est lu sur la grille publique, sans facture encore.
+
 ### Les clés
 
 - La clé de `probe/.env` n'avait pas `create compute_servers` : il lui faut
