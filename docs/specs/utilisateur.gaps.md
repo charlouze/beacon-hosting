@@ -62,8 +62,8 @@ règles qui ont été auditées.
   porte dans le code la valeur `player` (`libs/membership-record/src/lib/viewer.ts`,
   `Role`), alors que la spec ne connaît aucun autre rôle.
 - **Administrators** — le premier administrateur se nomme en créant son
-  enregistrement depuis la console de la plateforme, et le semis ne le crée
-  jamais (`docs/archive/specs/2026-09-02-game-hosting-design.md`, §5 et §14).
+  enregistrement depuis la console de la plateforme
+  (`docs/archive/specs/2026-09-02-game-hosting-design.md`, §5 et §14).
 - **User profile** — le commanditaire a acté qu'une déclinaison du profil dans
   un monde pourra être lue par les membres de ce monde, sans dire ce qu'elle
   portera ni quel module la porte.
