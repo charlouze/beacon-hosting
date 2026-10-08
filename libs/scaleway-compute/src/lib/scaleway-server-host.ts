@@ -418,17 +418,14 @@ function sweptVolume(volume: ScwBlockVolume): string {
  * to delete what the previous pass just deleted is ordinary rather than
  * exceptional.
  *
- * Read off the error's shape because the sdk exports no typed error for it —
- * so the three forms it has been seen to take are all accepted, and nothing
- * else is. Widening this to `catch (error) { return }` would make an
- * unreachable provider look like a successful destruction, which is the one
- * lie this system cannot afford.
+ * Read off the status and nothing else: the sdk raises a 404 under more than
+ * one class, and a refusal that is not one can say "not found" too. Widening
+ * this to `catch (error) { return }` would make an unreachable provider look
+ * like a successful destruction, which is the one lie this system cannot
+ * afford.
  */
 function isAlreadyGone(error: unknown): boolean {
-  const candidate = error as { status?: number; type?: string; message?: string } | null;
-  if (candidate?.status === 404) return true;
-  if (candidate?.type === 'not_found') return true;
-  return /not found|does not exist/i.test(candidate?.message ?? '');
+  return (error as { status?: number } | null)?.status === 404;
 }
 
 /**

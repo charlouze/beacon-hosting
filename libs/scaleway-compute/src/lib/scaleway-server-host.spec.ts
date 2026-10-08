@@ -222,7 +222,28 @@ describe('closing something the provider no longer holds', () => {
     api.failWith = { call: 'deleteIp', error: new Error('quota exceeded') };
     await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).rejects.toThrow(/quota/);
   });
+
+  // The status decides, never the prose: a 403 "project not found" leaves the
+  // resource alive and billed.
+  it('still refuses a refusal whose message says not found without a 404', async () => {
+    const api = new FakeInstanceApi([], [scwIp('ip-1', '1.2.3.4', ['beacon', 'session:s1'])]);
+    api.failWith = { call: 'deleteIp', error: projectNotFound() };
+    await expect(new ScalewayServerHost(api, block, images, wait).close('s1')).rejects.toThrow('ip-1');
+  });
+
+  it('records in the sweep a refusal whose message says not found without a 404', async () => {
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'))];
+    block.failWith = { call: 'deleteVolume v-1', error: projectNotFound() };
+
+    const sweep = await host.sweepUnclaimed();
+
+    expect(sweep.destroyed).toEqual([]);
+    expect(sweep.errors).toHaveLength(1);
+    expect(sweep.errors[0]).toContain('v-1');
+  });
 });
+
+const projectNotFound = () => Object.assign(new Error('project not found'), { status: 403 });
 
 /** What the sdk hands back for a resource that no longer exists. */
 const notFound = () => Object.assign(new Error('resource not found'), { status: 404 });
