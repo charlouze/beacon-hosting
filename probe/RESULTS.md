@@ -1791,3 +1791,113 @@ lui seul.
 
 Reste à vérifier avant d'écrire le plan, et pas pendant : **un nom de seau
 détruit se réutilise-t-il immédiatement chez Scaleway ?**
+
+## B · Le volume bloc, et le jeu sur le gabarit candidat
+
+Mesuré le 2026-10-08 par `scaleway/volume-probe.ts` et
+`scaleway/game-on-type-probe.ts`, sur `DEV1-L` et `PLAY2-MICRO`, zone
+`fr-par-1`. Tout portait le tag de la sonde, jamais celui de production.
+
+### Ce que Scaleway fait d'un volume racine bloc
+
+| Question | Mesure |
+|---|---|
+| Un serveur se crée-t-il sur un volume racine `sbs_volume` ? | Oui sur les deux gabarits, avec l'image de type `instance_sbs` |
+| Quelle image le résolveur de production prendrait-il ? | La première compatible : `instance_local` sur `DEV1-L`, `instance_sbs` sur `PLAY2-MICRO` |
+| Quel débit a le volume ? | 5 000 IOPS (`sbs_5k`), sans rien demander |
+| Naît-il tagué ? | Non. `updateVolume` de l'API bloc pose les tags |
+| Est-il attaché avant le premier démarrage ? | Oui : référence `attached` dès la création du serveur |
+| Le filtre `tags=` de l'API bloc | Exact sur un tag entier, aucun préfixe ; deux tags se lisent **ou** |
+| L'API bloc supprime-t-elle un volume attaché ? | Non : `412 precondition_failed`, `in_use` |
+| `deleteServer` sur un serveur arrêté | Laisse le volume, détaché en moins d'une seconde |
+| `terminate` sur un serveur démarré | **Laisse le volume**, qui passe par `detaching` |
+| Un volume détaché | `available`, et sa liste de références est vide, lue par `getVolume` |
+| L'API instance liste-t-elle un volume bloc ? | **Non** |
+| `deleteVolume` de l'API instance sur un volume bloc | **`404 not_found`** — que `isAlreadyGone` prendrait pour une réussite |
+| `deleteVolume` de l'API bloc sur un volume détaché | Accepté, disparu en 0,1 s |
+| `server.volumes` dit-il le type du volume ? | Oui : `volumeType: "sbs_volume"` |
+
+Le délai entre `terminate` et le volume détaché, sur six machines :
+
+| Machine | État | Délai |
+|---|---|---|
+| `DEV1-L` | à peine démarrée | 1,3 s |
+| `PLAY2-MICRO` | à peine démarrée | 2,5 s |
+| `PLAY2-MICRO` | 20 min, restauration échouée | 12,9 s |
+| `PLAY2-MICRO` | 10 min, disque plein | 3,3 s |
+| `PLAY2-MICRO` | Sunkenland chargé et annoncé | 3,3 s |
+| `PLAY2-MICRO` | Enshrouded démarré | 3,3 s |
+
+Rien de mesuré n'explique l'écart de un à dix.
+
+### Sunkenland sur `PLAY2-MICRO`
+
+La machine de production, rendue par `renderCloudInit`, moins l'agent du
+compagnon : elle restaure, lance le jeu, et ne pousse ni ne rapporte rien. Monde
+`tdx-sunk`, sauvegarde `manual/…/2026-09-22T22-40-54Z`.
+
+**La fenêtre de fin de chargement fait 13 s, pour un seuil entre 29 et 34 s.**
+
+| Où | `KWS/ShadowFix` → `IK APK1000` | Issue |
+|---|---|---|
+| `PLAY2-MICRO`, premier chargement | 13,0 s | prêt |
+| `PLAY2-MICRO`, après `docker restart` | 13,1 s | prêt |
+| poste du commanditaire, 2026-09-23 | 14,3 s | prêt |
+| `DEV1-L` en production, 2026-09-22 | 34,3 s | timeout |
+
+Deux passages à trois minutes d'écart sur un même hôte, un jeudi après-midi :
+la variance d'un soir chargé reste à voir à l'usage.
+
+- Processeur : `AMD EPYC 7543`. Temps volé (`st`) : 0.
+- Mémoire du jeu : 5,5 Gio sur 7,75.
+- De `poweron` à `running` : 3 à 8 s. De `running` au serveur annoncé : environ
+  huit minutes, dont trois de téléchargement et de décompression du jeu.
+
+### Le disque
+
+**L'archive du jeu pèse 9,33 Go**, et non les 2,3 Go relevés en septembre.
+
+| Ce qui occupe le disque | Taille |
+|---|---|
+| Système, à la naissance | 2,1 Go |
+| Docker et les deux images | environ 5 Go |
+| L'archive, que la restauration ne supprime pas | 9,3 Go |
+| Le jeu décompressé | 8,7 Go |
+| **Total, au pic comme au repos** | **26 Go** |
+
+Un volume de 20 Go (17 Go utiles) se remplit avant la fin du téléchargement, et
+la restauration reste bloquée sans rien écrire. Un volume de 40 Go offre 36 Go
+utiles.
+
+### Enshrouded sur `PLAY2-MICRO`
+
+Même sonde, monde `tdx-ens`, volume de 40 Go. Le disque, échantillonné toutes
+les cinq secondes :
+
+| Instant | Disque | Étape |
+|---|---|---|
+| +0 min | 3,5 Go | Docker s'installe |
+| +1 min | 5,7 Go | monde restauré, le jeu démarre |
+| +1 min 30 | 8,8 Go | SteamCMD télécharge |
+| +2 min 30 | 14,7 Go | téléchargement fini |
+| +4 min | 14,7 Go | serveur démarré, stable |
+
+**Le pic est de 14,7 Go, et c'est aussi la valeur finale** : SteamCMD ne garde
+pas de seconde copie pendant l'installation.
+
+Serveur démarré, sans joueur, trois minutes après : 57 % d'un cœur, 1,1 Gio.
+Le volume s'est détaché 3,3 s après `terminate`.
+
+### Les clés
+
+- La clé de `probe/.env` n'avait pas `create compute_servers` : il lui faut
+  `InstancesFullAccess` et `BlockStorageFullAccess`.
+- `beacon-games` ne s'ouvre qu'à la clé que les Functions confient aux serveurs
+  de jeu. Une clé qui liste `beacon-saves` n'y entre pas pour autant :
+  `--can-read` le dit sans rien démarrer.
+
+### Ce qui reste ouvert
+
+- La fenêtre de fin de chargement un soir chargé.
+- `DEV1-L` avec le jeu sur un volume bloc : seuls sa création, son démarrage et
+  sa destruction y ont été mesurés.
