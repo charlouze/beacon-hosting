@@ -115,7 +115,22 @@ describe('Session', () => {
   it('charges the started hour, never the fraction', () => {
     const session = running('2026-09-07T00:00:00Z');
     expect(session.estimatedCost(at('2026-09-06T20:01:00Z'), S)).toBeCloseTo(0.05, 2);
-    expect(session.estimatedCost(at('2026-09-06T23:30:00Z'), S)).toBeCloseTo(0.22, 2);
+    expect(session.estimatedCost(at('2026-09-06T23:30:00Z'), S)).toBeCloseTo(0.21, 2);
+  });
+
+  it('charges a session at the rate of its own size, not of the default one', () => {
+    const session = Session.from({
+      state: 'RUNNING',
+      sessionId: 's1',
+      worldId: ENSHROUDED_WORLD.worldId,
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: new Date('2026-09-06T20:00:00Z'),
+      deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
+      instanceSize: 'PLAY2-MICRO',
+      hasJoinInfo: true,
+    });
+    expect(session.estimatedCost(at('2026-09-06T23:30:00Z'), S)).toBe(0.26);
   });
 
   it('charges nothing for a size no tariff names', () => {

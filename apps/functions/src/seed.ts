@@ -34,10 +34,12 @@ export async function seed(): Promise<void> {
       extensionStepMs: 60 * 60_000,
       extensionWindowMs: 30 * 60_000,
       defaultInstanceSize: 'DEV1-L',
-      // All-inclusive per size: instance, local disk and flexible ip, which
-      // are billed together by the started hour (§11). Read from the project's
-      // own catalogue on 2026-09-03, not from a public price page.
-      tariffPerHour: { 'DEV1-L': 0.05454 },
+      // All-inclusive per size: instance, a 40 GB block volume and flexible
+      // ip, each billed by the started hour (§11). 40 GB is the largest disk
+      // a game boots on, so a larger one moves these rates. The ip rate is
+      // matched by an invoice; the block volume one, 0.000130 €/GB/h, is the
+      // public price read on 2026-10-08 and matched by none.
+      tariffPerHour: { 'DEV1-L': 0.05304, 'PLAY2-MICRO': 0.06528 },
       // Both written by the deployment at every merge — the deployed commit,
       // and the url of the function that same deployment publishes (§4, §10).
       // Null here means "no deployment has stamped it yet", which is exactly

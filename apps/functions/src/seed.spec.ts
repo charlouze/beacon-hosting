@@ -1,6 +1,7 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_SETTINGS } from '@beacon/session';
 import { seed } from './seed.js';
 
 process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
@@ -38,6 +39,16 @@ describe('seed', () => {
     const settings = (await db.doc('config/settings').get()).data();
     expect(settings?.['rulesVersion']).toBeNull();
     expect(settings?.['agentEndpoint']).toBeNull();
+  });
+
+  // Two writings of the same rates: a seeded system and one that falls back on
+  // the domain must quote the same price.
+  it('seeds the size and the rates the domain falls back on', async () => {
+    await seed();
+
+    const settings = (await db.doc('config/settings').get()).data();
+    expect(settings?.['defaultInstanceSize']).toBe(DEFAULT_SETTINGS.defaultInstanceSize);
+    expect(settings?.['tariffPerHour']).toEqual(DEFAULT_SETTINGS.tariffPerHour);
   });
 
   // The recovery path (§10): re-running after an incident must be safe.
