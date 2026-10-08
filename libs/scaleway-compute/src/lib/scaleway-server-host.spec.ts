@@ -581,6 +581,94 @@ describe('closing the block volumes of a session', () => {
     ]);
   });
 
+  describe('a volume whose tags never landed', () => {
+    beforeEach(() => {
+      api.servers = [scwServer('s-1', owned('sess1'), 'running', [], ['v-1'])];
+      block.volumes = [scwBlockVolume('v-1', [], true)];
+    });
+
+    // The server is all that ties an untagged volume to its session: once it
+    // is gone, only a tag finds the volume again.
+    it('gets both tags before its server dies', async () => {
+      const setVolumeTags = block.setVolumeTags.bind(block);
+      let before: string[] | null = null;
+      block.setVolumeTags = async (request) => {
+        before = [...api.calls];
+        return setVolumeTags(request);
+      };
+
+      await expect(host.close('sess1')).rejects.toThrow('volume v-1: still attached after 30 s');
+
+      expect(before).not.toBeNull();
+      expect(before).not.toContain('terminate s-1');
+      expect(api.servers).toEqual([]);
+      expect(block.volumes).toEqual([scwBlockVolume('v-1', owned('sess1'), true)]);
+    });
+
+    it('is destroyed by its tag on a later close(), its server gone', async () => {
+      await expect(host.close('sess1')).rejects.toThrow();
+      block.detach('v-1');
+
+      await host.close('sess1');
+
+      expect(block.volumes).toEqual([]);
+    });
+
+    it('is destroyed by the sweep instead of reported, its server gone', async () => {
+      await expect(host.close('sess1')).rejects.toThrow();
+      block.detach('v-1');
+
+      expect(await host.sweepUnclaimed()).toEqual({
+        destroyed: ['volume v-1 of session sess1'],
+        stranded: [],
+        errors: [],
+      });
+      expect(block.volumes).toEqual([]);
+    });
+
+    it('still dies with its server when the tags are refused again', async () => {
+      block.failOn = 'setVolumeTags';
+      duringPause = () => block.detach('v-1');
+
+      await host.close('sess1');
+
+      expect(api.servers).toEqual([]);
+      expect(block.volumes).toEqual([]);
+    });
+
+    // The one volume nothing will find again: the failure is the last place
+    // that names it next to its session.
+    it('is named as untagged when it outlives a close() that could not tag it', async () => {
+      block.failOn = 'setVolumeTags';
+
+      await expect(host.close('sess1')).rejects.toThrow(
+        /volume v-1: still attached after 30 s, volume v-1: left untagged — .*setVolumeTags v-1/,
+      );
+
+      expect(api.servers).toEqual([]);
+    });
+
+    it('is not mentioned once destroyed, whatever else failed', async () => {
+      api.ips = [scwIp('ip-1', '51.15.0.1', owned('sess1'))];
+      api.failOn = 'deleteIp';
+      block.failOn = 'setVolumeTags';
+      duringPause = () => block.detach('v-1');
+
+      await expect(host.close('sess1')).rejects.toThrow(/^failed to close session sess1: ip ip-1: [^,]*$/);
+    });
+  });
+
+  it('does not tag again a volume that carries the session tag', async () => {
+    api.servers = [scwServer('s-1', owned('sess1'), 'running', [], ['v-1'])];
+    block.volumes = [scwBlockVolume('v-1', owned('sess1'), true)];
+    duringPause = () => block.detach('v-1');
+
+    await host.close('sess1');
+
+    expect(block.calls.filter((c) => c.startsWith('setVolumeTags'))).toEqual([]);
+    expect(block.calls.filter((c) => c.startsWith('listVolumes'))).toHaveLength(2);
+  });
+
   // The Instance API answers 404 for a block volume, which reads as success.
   it('never asks the instance api to delete a block volume', async () => {
     api.servers = [scwServer('s-1', owned('sess1'), 'stopped', ['v-l'], ['v-b'])];

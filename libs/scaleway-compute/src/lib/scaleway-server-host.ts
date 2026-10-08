@@ -162,11 +162,29 @@ export class ScalewayServerHost implements ServerHost {
       }
     }
 
+    // Asked before the servers die, for what already carries the tag, and
+    // handed to the wait as its first listing. A refusal is the wait's to
+    // report: it asks again.
+    const listed = await this.taggedVolumes(tag).catch(() => null);
+    const tagged = new Set(listed?.map((volume) => volume.id));
+
     // Noted before the server dies, and whether or not it does: once it is
     // gone, nothing else ties an untagged block volume to this session.
-    const attached: string[] = [];
+    const attached = new Set<string>();
+    const untagged = new Map<string, string>();
     for (const server of servers.filter(carrying(tag))) {
-      attached.push(...blockVolumeIdsOf(server));
+      for (const volumeId of blockVolumeIdsOf(server)) {
+        attached.add(volumeId);
+        if (tagged.has(volumeId)) continue;
+        // The last moment a tag can still land: should the deletion below
+        // fail, the tag is what lets a later close() or the sweep find the
+        // volume. A refusal changes nothing to what follows.
+        try {
+          await this.block.setVolumeTags({ volumeId, tags: [OWNERSHIP_TAG, tag] });
+        } catch (error) {
+          untagged.set(volumeId, String(error));
+        }
+      }
       try {
         await this.destroyServer(server);
       } catch (error) {
@@ -175,7 +193,14 @@ export class ScalewayServerHost implements ServerHost {
       }
     }
 
-    failures.push(...(await this.destroyBlockVolumes(tag, attached)));
+    failures.push(...(await this.destroyBlockVolumes(tag, attached, listed)));
+
+    // Only for a volume that is still there: once its server is gone nothing
+    // finds it again, and this message is the last to name it next to its
+    // session.
+    for (const [volumeId, refusal] of untagged) {
+      if (attached.has(volumeId)) failures.push(`volume ${volumeId}: left untagged — ${refusal}`);
+    }
 
     // Aggregated, and it still throws: a rejection is how the watchdog learns
     // the cleanup could not be guaranteed and files CleanupFailed.
@@ -321,18 +346,27 @@ export class ScalewayServerHost implements ServerHost {
    * after it, during which the provider refuses the deletion. So this polls:
    * a volume still attached waits for the next round, any other refusal ends
    * the wait, and so does the budget.
+   *
+   * `listed` stands for the first listing when the caller already has one. A
+   * volume that is gone leaves `byAttachment`: what remains in it afterwards
+   * was not deleted.
    */
-  private async destroyBlockVolumes(tag: string, attached: readonly string[]): Promise<string[]> {
-    const byAttachment = new Set(attached);
+  private async destroyBlockVolumes(
+    tag: string,
+    byAttachment: Set<string>,
+    listed: ScwBlockVolume[] | null,
+  ): Promise<string[]> {
+    let tagged = listed;
     let paused = 0;
 
     for (;;) {
-      let round: VolumeRound;
       try {
-        round = await this.deleteDetachedVolumes(tag, byAttachment);
+        tagged ??= await this.taggedVolumes(tag);
       } catch (error) {
         return [`volumes: ${String(error)}`];
       }
+      const round = await this.deleteDetachedVolumes(tagged, byAttachment);
+      tagged = null;
       if (round.refusals.length > 0) return round.refusals;
       if (round.stillAttached.length === 0) return [];
 
@@ -349,16 +383,20 @@ export class ScalewayServerHost implements ServerHost {
     }
   }
 
-  /**
-   * One round of the wait: lists, then tries every volume that may be
-   * detached. Throws only when the listing is refused. A volume of
-   * `byAttachment` that is gone leaves the set, so the next round does not ask
-   * for it again.
-   */
-  private async deleteDetachedVolumes(tag: string, byAttachment: Set<string>): Promise<VolumeRound> {
-    // One tag, re-checked on what came back, as for an ip and a server.
-    const tagged = (await this.block.listVolumes({ tag })).volumes.filter(carrying(tag));
+  /** One tag, re-checked on what came back, as for an ip and a server. */
+  private async taggedVolumes(tag: string): Promise<ScwBlockVolume[]> {
+    return (await this.block.listVolumes({ tag })).volumes.filter(carrying(tag));
+  }
 
+  /**
+   * One round of the wait: tries every volume that may be detached. A volume
+   * of `byAttachment` that is gone leaves the set, so the next round does not
+   * ask for it again.
+   */
+  private async deleteDetachedVolumes(
+    tagged: readonly ScwBlockVolume[],
+    byAttachment: Set<string>,
+  ): Promise<VolumeRound> {
     // An untagged volume is not in the listing, so nothing says whether it is
     // detached: the deletion is the question, and a 412 is the answer.
     const deletable = new Set(byAttachment);
