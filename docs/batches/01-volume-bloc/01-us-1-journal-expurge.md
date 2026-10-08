@@ -837,4 +837,14 @@ bash ~/.config/github-app/as-agent.sh git commit -m "fix(functions): expurge ce 
 
 ## Rulings log
 
+Ruling: le détail `AgentContradicted` d'une adresse contredite passe par `expunged`, contre la contrainte du plan qui gelait ces détails — c'est un texte qu'un serveur de jeu a choisi, que le `Scope` du lot couvre, et une adresse légitime en sort inchangée — si c'est faux, une ligne de `agent-report.ts` et son test se retirent.
+
+Ruling: le détail `AgentContradicted` d'un identifiant de serveur refusé passe par `expunged`, et l'identifiant entier va au journal de la plateforme — le commanditaire l'a décidé en revue : c'est un texte qu'un serveur de jeu a choisi, expurgé comme le reste de ce qu'il déclare — si c'est faux, un membre ne lit plus dans la trace quel identifiant a été refusé, et seul l'exploitant le retrouve.
+
+Technical design ruling: l'adresse qu'un serveur de jeu déclare est expurgée, alors que la conception ne nomme que ce qu'il rapporte de son propre échec — le `Scope` du lot couvre tout ce qu'un serveur de jeu a répondu — si c'est faux, une adresse forgée redevient lisible entière dans la trace.
+
+Technical design ruling: le journal de la plateforme reçoit le texte de l'erreur sans sa pile d'appels — le texte est ce que le détail et `lastError` recopiaient, et une pile ajoute du volume sans rien dire de la réponse du fournisseur — si c'est faux, l'exploitant ne lit pas dans le journal d'où l'erreur est partie.
+
+Technical design ruling: un rapport d'échec sans détail n'écrit rien au journal de la plateforme — le texte écrit est alors une constante du code, qui ne porte aucune réponse — si c'est faux, le journal de la plateforme ne compte pas tous les échecs qu'un serveur de jeu rapporte.
+
 ## Observed drift
