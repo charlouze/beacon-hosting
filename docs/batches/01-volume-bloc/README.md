@@ -203,8 +203,9 @@ le plus grand du catalogue. L'écart avec le disque le plus petit est de
 | `DEV1-L` | 0,04284 | 0,0052 | 0,005 | 0,05304 €/h |
 | `PLAY2-MICRO` | 0,05508 | 0,0052 | 0,005 | 0,06528 €/h |
 
-Le volume bloc y compte pour 0,000130 €/Go/h, tarif public lu le 2026-10-08, et
-l'IP pour 0,005 €/h. Aucun des deux n'est recoupé par une facture.
+L'IP y compte pour 0,005 €/h, recoupé par la facture de septembre. Le volume
+bloc y compte pour 0,000130 €/Go/h, tarif public lu le 2026-10-08 et recoupé par
+aucune facture.
 
 `defaultInstanceSize` reste `DEV1-L`.
 
@@ -267,6 +268,10 @@ occupation mesurée sur 40.
 
 Le taux de `DEV1-L` suppose que la ligne de facture de son disque local
 disparaît sur un volume bloc. Rien ne le mesure.
+
+Le fournisseur facture chaque ressource à part, à l'heure entamée : en
+septembre, 58 h d'IP et 43 h de disque pour 27 h de serveur. Un taux par heure
+de serveur sous-estime ce que coûte une session courte.
 
 Le volume s'est détaché en 1 à 13 s sur six machines, sans cause connue à
 l'écart. Au-delà de 30 s, une session ordinaire passe par `FAILED` avant qu'une
