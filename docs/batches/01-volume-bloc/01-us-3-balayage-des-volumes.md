@@ -730,4 +730,20 @@ bash ~/.config/github-app/as-agent.sh git commit -m "fix(session): récrit le co
 
 ## Rulings log
 
+Ruling: le commentaire du champ `stranded` nomme les deux sortes de volume signalé, le volume local que le système ne tague jamais et le volume bloc sans tag du système, et les commentaires qui écrivent « sans tag du système » restent — une relecture a relevé que l'adapter signale tout volume local détaché sans lire ses tags, et la conception du lot dit « sans tag du système » des deux listes — si c'est faux, un lecteur attend sur les volumes locaux un test de tag que l'adapter ne fait pas.
+
+Ruling: le volume bloc d'un serveur sans session que le balayage détruit n'est ni attendu ni supprimé par l'attachement dans ce passage — la conception du lot ne donne au balayage ni attente ni destruction par l'attachement, et un passage du watchdog n'a pas de temps à y perdre — si c'est faux, ce volume vit jusqu'au passage suivant s'il porte le tag du système, et reste signalé sans être détruit s'il ne l'a jamais porté.
+
+Ruling: un volume que la liste dit détaché et dont la suppression répond 412 va dans `errors`, sans nouvel essai — la conception du lot range tout refus de suppression dans `errors` — si c'est faux, un détachement en cours écrit un `CleanupFailed` sans session que le passage suivant ne confirme pas.
+
+Ruling: une entrée `destroyed` s'écrit `volume <id> of session <sessionId>`, et `volume <id>` quand le volume ne porte pas un tag de session unique — la conception demande que l'entrée nomme la session, et deux tags de session distincts n'en désignent aucune — si c'est faux, le détail d'un événement sans session change de forme.
+
+Technical design ruling: le balayage lit la liste de l'API bloc sans filtre et trie lui-même ce qui revient, et `BlockApi.listVolumes` accepte de ne recevoir aucun tag — `stranded` porte les volumes sans tag du système, qu'aucun filtre sur un tag ne rend — si c'est faux, le balayage fait deux listes, l'une filtrée sur le tag du système.
+
+Technical design ruling: les commentaires de `libs/session/src/lib/ports.ts`, `events.ts` et `watchdog/reconcile.ts` ne sont pas récrits, celui du contrat de `sweepUnclaimed()` compris — ces trois fichiers entrent dans l'image du compagnon, et `companion:test` reste rouge sur tout changement de l'un d'eux tant qu'une image n'est pas publiée par `git tag companion-v<n>` puis épinglée par `nx run companion:pin -- <n>`, ce que seul le commanditaire fait — si c'est faux, le commentaire du port décrit le balayage d'avant cette story jusqu'à la prochaine publication du compagnon ; le texte récrit est dans la tâche 3 de ce plan.
+
+Ruling: `isAlreadyGone` ne lit plus le message de l'erreur ni son `type`, et seul le statut 404 dit qu'une ressource a disparu — décision du commanditaire en revue : un refus qui n'est pas un 404 et dont le texte dit « not found » passait pour une destruction réussie, pour une IP, un serveur ou un volume, sans atteindre `errors` ni l'échec de `close()`, et toute erreur HTTP du SDK porte son statut — si c'est faux, une disparition que le fournisseur annonce sans statut 404 fait échouer `close()` et écrit un `CleanupFailed` pour une ressource qui n'existe plus.
+
 ## Observed drift
+
+- `docs/specs/infrastructure.md`, `Warning the operator` : le signalement d'un volume n'atteint personne. Un volume du système peut y arriver sans tag. Il suffit que la pose du tag ait été refusée à l'ouverture puis à la fermeture, et que la fermeture ait détruit le serveur sans détruire le volume. Un volume signalé produit un événement `ResourceStranded` sans session, écrit une fois, à son apparition. Il figure ensuite dans `health/watchdog` tant qu'il existe. Aucun écran ne lit les événements ni `health/watchdog`, et aucune alerte ne porte sur l'un ou l'autre. La spec ne prévient l'exploitant que si la surveillance cesse de tourner ou si la dépense du mois dépasse 5 €.
