@@ -173,6 +173,26 @@ que l'anecdote, et elle survit à tout lot : si une sonde ou une mise en
 production invalide une hypothèse, le spec se corrige **avant** que la story
 suivante s'écrive.
 
+## On mesure avant de construire
+
+Un design qui repose sur ce qu'un fournisseur, un jeu ou une machine fait
+réellement **commence par le mesurer**. La mesure vient avant le design, jamais
+dans le lot qui en dépend : tant qu'elle manque, chaque relecture remplace une
+supposition par une autre, et aucune ne peut trancher.
+
+Ce qui se mesure : ce qu'un appel accepte, refuse ou ignore ; ce qu'une
+ressource devient quand une autre meurt, et en combien de temps ; ce qu'une
+machine met à faire ce qu'on attend d'elle. **Une documentation lue ou un type
+de SDK n'est pas une mesure.**
+
+La mesure est une sonde sous `probe/`, et son relevé va dans
+`probe/RESULTS.md`. Elle ne porte jamais le tag de production, que le système
+détruirait pendant qu'elle mesure. Dès qu'elle crée une ressource facturée, tu
+écris la commande et un humain la lance.
+
+La première mesure à proposer est la plus proche de l'usage réel, pas seulement
+celle du mécanisme.
+
 ## Les skills ne sont pas optionnelles
 
 Les skills ci-dessous ont été importées dans ce dépôt. Leurs descriptions
