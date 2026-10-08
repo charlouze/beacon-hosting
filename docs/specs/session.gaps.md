@@ -38,7 +38,7 @@ ci-dessous sont établis par lecture.
   il appartenait est **signalé et jamais détruit**, alors que la spec exige
   qu'aucun serveur de jeu ne coûte hors d'une session en cours. Un test
   épingle explicitement le comportement actuel — *destroys nothing*. C'est une
-  facture qui court tant qu'un humain ne regarde pas.
+  facture qui court tant qu'un humain ne regarde pas. `reserved by batch-01`
 
 - **Extending a session** — le système fait respecter une autre règle que celle
   qu'énonce la spec. Il ne conserve que l'heure d'ouverture et l'heure de
@@ -59,7 +59,7 @@ ci-dessous sont établis par lecture.
   lire. Ce qui a échoué portait ce que le système confie au serveur au moment de
   sa mise en place. **Cette entrée désigne une décision de projet et non une
   section de spec**, parce que la règle vaut pour tous les modules et ne peut donc
-  vivre dans aucun ; la fuite, elle, est dans le code de celui-ci.
+  vivre dans aucun ; la fuite, elle, est dans le code de celui-ci. `reserved by batch-01`
 
 - **The life of a session** — une session peut passer de *en préparation* à *en
   fermeture*, transition que le diagramme ne porte pas. L'écran ne l'offre pas,
