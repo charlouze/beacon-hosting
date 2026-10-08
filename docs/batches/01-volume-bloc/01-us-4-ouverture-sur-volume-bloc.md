@@ -1145,4 +1145,24 @@ bash ~/.config/github-app/as-agent.sh git commit -m "test(scaleway-compute): exe
 
 ## Rulings log
 
+Ruling: `open()` refuse d'ouvrir, avant toute création, quand la fonction de taille rend autre chose qu'un entier strictement positif — la conception du lot ne dit rien d'une taille invalide, et une taille nulle créerait une IP facturée avant que le fournisseur refuse le serveur — si c'est faux, un jeu dont la taille est mal déclarée échoue à l'ouverture par un message de l'adapter au lieu d'un refus du fournisseur.
+
+Ruling: `open()` échoue, en nommant l'IP et son tag, quand le fournisseur rend un serveur sans volume bloc, et ne dépose alors ni cloud-init ni allumage — la conception du lot ne dit rien de ce cas, et un serveur démarré sur un disque que rien ne tague échapperait à la destruction par tag — si c'est faux, une ouverture que le fournisseur aurait servie sur un disque local échoue, et le serveur créé attend `close()`.
+
+Ruling: une taille de disque se compte en gigaoctets décimaux, 10^9 octets — c'est l'unité de la sonde, du tarif du lot et de `stranded` — si c'est faux, un volume de 40 Go déclarés en offre 37,25 Gio.
+
+Ruling: la suite de contrat crée son volume à 40 Go, et non à la taille la plus petite du catalogue — 40 Go est la taille que la sonde a mesurée, et la suite ne sert pas à mesurer une taille nouvelle — si c'est faux, aucun volume de 30 Go n'est créé avant la première session du jeu qui le demande.
+
+Ruling: la suite de contrat épingle le refus de supprimer un volume attaché sur un statut 412, et la seconde suppression sur un statut 404 — ce sont les formes que `close()` et le balayage lisent, et la story 2 a laissé la première sans relevé — si c'est faux, la suite échoue après avoir tout détruit, et l'erreur dit la forme que le SDK rend.
+
+Ruling: le nettoyage de fin de la suite de contrat dispose de 120 s — `close()` attend jusqu'à 30 s qu'un volume se détache, et le délai par défaut de 10 s couperait le nettoyage avant la suppression — si c'est faux, une suite interrompue garde la main deux minutes au plus.
+
+Ruling: le faux de l'API instance fait naître le volume racine d'un serveur créé dans le faux de l'API bloc qu'un test lui relie, et nulle part sans ce lien — les deux faux restent indépendants pour les tests de `close()` et du balayage, qui montent eux-mêmes leurs volumes — si c'est faux, un test qui ouvre un serveur sans relier les deux faux échoue sur un volume introuvable.
+
+Ruling: la phrase de `STACK.md` sur le stockage bloc se place en fin de paragraphe, après « le DNS n'a pas bougé. » — placée où le plan la mettait, elle séparait « Ils sont nommés par port » des adapters qu'il désigne — si c'est faux, une phrase de `STACK.md` se déplace.
+
+Technical design ruling: avant de détruire un serveur, `close()` pose les deux tags sur ceux de ses volumes bloc qui ne portent pas le tag de la session, alors que la conception ne tague un volume qu'à l'ouverture et que cette story devait laisser `close()` inchangé ; un refus de cette pose n'empêche aucune destruction, et l'erreur de `close()` ne le porte que pour un volume encore là — décision du commanditaire, prise en revue : un volume sans tag dont la suppression échoue une fois le serveur disparu n'est plus relié à rien, et son signalement par le balayage n'atteint aucun écran — si c'est faux, une fermeture fait un appel de plus au fournisseur par volume sans tag, et le balayage détruit un volume qu'il aurait signalé.
+
+Technical design ruling: `close()` lit les volumes qui portent le tag de la session avant de détruire les serveurs, et cette lecture sert de premier tour à l'attente, alors que la conception place l'attente après les serveurs — c'est elle qui dit quel volume porte déjà le tag, sans appel de plus ; refusée, elle laisse `close()` poser les tags sur tous les volumes bloc des serveurs, et l'attente la redemande — si c'est faux, le volume tagué d'un serveur détruit dans ce `close()` attend toujours une pause d'une seconde avant sa suppression.
+
 ## Observed drift
