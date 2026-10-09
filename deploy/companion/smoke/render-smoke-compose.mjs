@@ -7,7 +7,8 @@
 // never heard of still reaches the stack it prints. Only three things are
 // patched, each named in task 11's brief as staying hand-written for the
 // test: the game service becomes the stub, the companion's `env_file` is
-// redirected to this harness's own values, and MinIO is appended.
+// redirected to this harness's own values, and the bucket is appended with
+// its client.
 //
 // This is why a service added to the catalogue's compose, without a line
 // changed here, changes what this harness launches: nothing below names
@@ -145,7 +146,7 @@ output = mustReplaceAll(
 );
 
 // `restore` is the one companion service with nothing upstream of it in
-// production; here it has MinIO, and only here — a future companion service
+// production; here it has the bucket, and only here — a future companion service
 // that also writes before the bucket exists would need the same line.
 output = mustReplaceAll(
   output,
@@ -163,26 +164,34 @@ output +=
   '\n' +
   '  # Not in the catalogue: what backs the companion\'s own bucket in this harness.\n' +
   '  bucket:\n' +
-  '    # quay.io and not docker.io: minio withdrew from the hub, and `minio/minio`\n' +
-  '    # there answers "repository does not exist" even for `:latest`. The digest\n' +
-  '    # is byte for byte the one that was pinned before — only the registry that\n' +
-  '    # serves it moved, so what this harness runs has not changed.\n' +
-  '    #\n' +
-  '    # A local docker cache hid this: the smoke test kept passing on a machine\n' +
-  '    # that had already pulled the image, and failed the day CI pulled it cold —\n' +
-  '    # which is the publication of the companion image, the one place a failure\n' +
-  '    # blocks production.\n' +
-  '    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e\n' +
-  '    command: ["server", "/data"]\n' +
+  '    # An S3 gateway over a folder, and no longer MinIO: its image left the hub,\n' +
+  '    # then quay.io stopped serving it anonymously, and both times it was the\n' +
+  '    # publication of the companion image that found out — the one place a\n' +
+  '    # failure blocks production. A local docker cache hides it: this harness\n' +
+  '    # stays green on a machine that already holds the image.\n' +
+  '    image: versity/versitygw@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499\n' +
+  '    # Metadata in a folder of its own rather than in extended attributes, so\n' +
+  '    # that whether this starts never depends on the filesystem under a runner.\n' +
+  '    command: ["posix", "--sidecar", "/meta", "/data"]\n' +
+  '    # The image holds neither folder and the gateway creates neither. Anonymous\n' +
+  '    # volumes, so `down -v` takes them and no run inherits the previous one.\n' +
+  '    volumes:\n' +
+  '      - /data\n' +
+  '      - /meta\n' +
   '    environment:\n' +
-  '      MINIO_ROOT_USER: smoke\n' +
-  '      MINIO_ROOT_PASSWORD: smokesmoke\n' +
-  '      # Without this, MinIO cannot tell that a `Host: beacon-saves.bucket` header\n' +
-  '      # names the beacon-saves bucket rather than an opaque hostname — every\n' +
+  '      ROOT_ACCESS_KEY: smoke\n' +
+  '      ROOT_SECRET_KEY: smokesmoke\n' +
+  '      VGW_PORT: ":9000"\n' +
+  '      # The region is part of what a request signs: this must be the\n' +
+  '      # BEACON_S3_REGION of `<game>.env`, or every request is refused.\n' +
+  '      VGW_REGION: fr-par\n' +
+  '      # Without this, a `Host: beacon-saves.bucket` header names an opaque\n' +
+  '      # hostname rather than the beacon-saves bucket — every\n' +
   '      # virtual-hosted-style request the companion sends would 404.\n' +
-  '      MINIO_DOMAIN: bucket\n' +
+  '      VGW_VIRTUAL_DOMAIN: bucket\n' +
+  '      VGW_HEALTH: /health\n' +
   '    healthcheck:\n' +
-  '      test: ["CMD", "mc", "ready", "local"]\n' +
+  '      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9000/health"]\n' +
   '      interval: 2s\n' +
   '      retries: 30\n' +
   '    # Scaleway is addressed virtual-hosted style (forcePathStyle: false,\n' +
@@ -197,7 +206,24 @@ output +=
   '      default:\n' +
   '        aliases:\n' +
   '          - beacon-saves.bucket\n' +
-  '          - beacon-games.bucket\n';
+  '          - beacon-games.bucket\n' +
+  '\n' +
+  '  # Not in the catalogue either: the client run.sh deposits and reads back\n' +
+  '  # through. The bucket image carries none, and going through S3 rather than\n' +
+  '  # through the folder behind it keeps those checks about what the companion\n' +
+  '  # itself would be served. It idles so that run.sh can `exec` into it, and\n' +
+  '  # the remote it calls `local` exists only as these variables.\n' +
+  '  s3:\n' +
+  '    image: rclone/rclone@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5\n' +
+  '    entrypoint: ["sleep", "infinity"]\n' +
+  '    environment:\n' +
+  '      RCLONE_CONFIG: /dev/null\n' +
+  '      RCLONE_CONFIG_LOCAL_TYPE: s3\n' +
+  '      RCLONE_CONFIG_LOCAL_PROVIDER: Other\n' +
+  '      RCLONE_CONFIG_LOCAL_ENDPOINT: http://bucket:9000\n' +
+  '      RCLONE_CONFIG_LOCAL_REGION: fr-par\n' +
+  '      RCLONE_CONFIG_LOCAL_ACCESS_KEY_ID: smoke\n' +
+  '      RCLONE_CONFIG_LOCAL_SECRET_ACCESS_KEY: smokesmoke\n';
 
 process.stdout.write(output);
 
