@@ -1,4 +1,6 @@
-import type { InstanceApi, ScwIp, ScwServer, ScwVolume } from './instance-api.js';
+import type { FakeBlockApi } from './fake-block-api.js';
+import { BLOCK_VOLUME_TYPE } from './instance-api.js';
+import type { InstanceApi, ScwIp, ScwServer, ScwVolume, ServerCreation } from './instance-api.js';
 
 /**
  * An in-memory Instance api that records what it was asked. Test-only, and it
@@ -12,6 +14,14 @@ export class FakeInstanceApi implements InstanceApi {
   failOn: string | null = null;
   /** A specific error on a specific call, where `failOn` only throws a string. */
   failWith: { call: string; error: unknown } | null = null;
+  /** Every creation asked for, so a test can assert what a server is built from. */
+  readonly created: ServerCreation[] = [];
+  /**
+   * Where the root volume of a created server is born. The two fakes share
+   * nothing else: a test that opens a server sets this, or the server names a
+   * volume no Block api holds.
+   */
+  block: FakeBlockApi | null = null;
   private nextId = 1;
   /**
    * Answers every listing with the whole array, tag filter ignored. Scaleway's
@@ -82,18 +92,22 @@ export class FakeInstanceApi implements InstanceApi {
     return { ip };
   }
 
-  async createServer(request: {
-    name: string;
-    commercialType: string;
-    image: string;
-    publicIps: string[];
-    tags: string[];
-  }) {
+  async createServer(request: ServerCreation) {
     this.record(`createServer ${request.tags.join('+')}`);
+    this.created.push(request);
     // `stopped`, like the real one: a server is created before it is powered
     // on, and the two death paths of §6 turn on exactly this field.
-    const server = scwServer(`srv-${this.nextId}`, request.tags, 'stopped');
+    const volumeId = `vol-${this.nextId}`;
+    const server = scwServer(`srv-${this.nextId}`, request.tags, 'stopped', [], [volumeId]);
     this.servers.push(server);
+    // Like the real one too: the root volume is born without a tag, and
+    // attached from the creation — measured on 2026-10-08.
+    this.block?.volumes.push({
+      id: volumeId,
+      size: request.volumes['0'].size,
+      tags: [],
+      references: [{ id: `ref-${volumeId}` }],
+    });
     this.nextId += 1;
     return { server };
   }
@@ -116,12 +130,18 @@ export const scwServer = (
   tags: string[],
   state = 'running',
   volumeIds: string[] = [],
+  blockVolumeIds: string[] = [],
 ): ScwServer => ({
   id,
   name: `beacon-${id}`,
   state,
   tags,
-  volumes: Object.fromEntries(volumeIds.map((v, index) => [String(index), { id: v }])),
+  volumes: Object.fromEntries(
+    [
+      ...volumeIds.map((volumeId) => ({ id: volumeId, volumeType: 'l_ssd' })),
+      ...blockVolumeIds.map((volumeId) => ({ id: volumeId, volumeType: BLOCK_VOLUME_TYPE })),
+    ].map((volume, index) => [String(index), volume]),
+  ),
 });
 
 export const scwIp = (id: string, address: string, tags: string[]): ScwIp => ({

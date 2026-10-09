@@ -15,6 +15,7 @@ import {
   type WorldView,
 } from '@beacon/session';
 import type { SettingsStore, SystemEvents, WorldStateStores } from '@beacon/session-record';
+import { expunged, type PlatformJournal } from './platform-journal.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import type { WatchdogHealth } from './watchdog-health.js';
 
@@ -27,6 +28,7 @@ export interface WatchdogDeps {
   readonly health: WatchdogHealth;
   readonly settings: SettingsStore;
   readonly limits: WatchdogLimits;
+  readonly journal: PlatformJournal;
 }
 
 /** A world with no destruction attributable to it — never a real world (§6, task 12). */
@@ -93,7 +95,11 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
       // throw that escaped would abort the pass after a successful
       // destruction and let the next resource live — measured, on the probe's
       // own reaper, on 2026-09-03.
-      outcomes.push({ reclamation, closed: false, error: String(error) });
+      outcomes.push({
+        reclamation,
+        closed: false,
+        error: expunged(deps.journal, 'watchdog.close', reclamation.sessionId, error),
+      });
     }
   }
 
@@ -103,11 +109,15 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   // actually looked is a fact only this frame holds, and the beat needs it.
   let swept = true;
   let sweep: UnclaimedSweep;
+  const expungedSweepError = (error: unknown) => expunged(deps.journal, 'watchdog.sweep', null, error);
   try {
-    sweep = await deps.host.sweepUnclaimed();
+    const answered = await deps.host.sweepUnclaimed();
+    // `destroyed` and `stranded` are the adapter's own words; `errors` is what
+    // the provider answered.
+    sweep = { ...answered, errors: answered.errors.map(expungedSweepError) };
   } catch (error) {
     swept = false;
-    sweep = { destroyed: [], stranded: [], errors: [String(error)] };
+    sweep = { destroyed: [], stranded: [], errors: [expungedSweepError(error)] };
   }
 
   // Each world's own session, and nothing that belongs to another one: the

@@ -29,7 +29,7 @@ describe('OutOfServiceComponent', () => {
     expect(text).toContain('Next session');
     expect(text).toContain('00:14');
     expect(text).toContain('Estimated cost');
-    expect(text).toContain('€0.22');
+    expect(text).toContain('€0.21');
   });
 
   /**

@@ -1,7 +1,10 @@
 /** Test-only, and exported because the app's own tests drive it too. */
+export * from './lib/block-api.js';
+export * from './lib/fake-block-api.js';
 export * from './lib/fake-instance-api.js';
 export * from './lib/from-sdk.js';
 export * from './lib/images.js';
 export * from './lib/instance-api.js';
 export * from './lib/scaleway-server-host.js';
+export * from './lib/server-creation.js';
 export * from './lib/tags.js';

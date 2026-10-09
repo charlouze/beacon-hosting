@@ -1,5 +1,6 @@
-import type { Instancev1 } from '@scaleway/sdk';
+import type { Blockv1, Instancev1 } from '@scaleway/sdk';
 import type { Zone } from '@scaleway/sdk-client';
+import type { BlockApi } from './block-api.js';
 import type { InstanceApi } from './instance-api.js';
 
 /** A listing the sdk hands back as a promise *and* as pages. */
@@ -55,5 +56,24 @@ export function fromSdk(api: Instancev1.API, zone: Zone): InstanceApi {
         { timeout: 8 * 60_000 },
       );
     },
+  };
+}
+
+/** The Block Storage half of the same translation, closed over the same zone. */
+export function blockFromSdk(api: Blockv1.API, zone: Zone): BlockApi {
+  return {
+    listVolumes: async (request) => ({
+      volumes: await drain(
+        api.listVolumes({
+          zone,
+          tags: request.tag === undefined ? undefined : [request.tag],
+          includeDeleted: false,
+        }),
+      ),
+    }),
+    setVolumeTags: async (request) => {
+      await api.updateVolume({ ...request, zone });
+    },
+    deleteVolume: (request) => api.deleteVolume({ ...request, zone }),
   };
 }

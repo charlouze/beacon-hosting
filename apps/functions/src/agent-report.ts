@@ -14,7 +14,7 @@ import {
 import type { ServerStateStore, SaveRecords, SettingsStore, WorldStateStores } from '@beacon/session-record';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
-import { sanitizeLastError } from './sanitize-last-error.js';
+import { expunged, type PlatformJournal } from './platform-journal.js';
 
 export interface AgentReportDeps {
   readonly clock: Clock;
@@ -31,6 +31,7 @@ export interface AgentReportDeps {
    * machine was gone before `pre-shutdown` could ever mean anything.
    */
   readonly host: ServerHost;
+  readonly journal: PlatformJournal;
 }
 
 /** Nothing to do, and nothing to keep doing. What a stale machine is told. */
@@ -69,7 +70,7 @@ export async function runAgentReport(
   const now = deps.clock.now();
   if (report.phase === 'ready') await becomeRunning(deps, state, worldId, session, report, now);
   if (report.phase === 'saved') await recordSave(deps, state, worldId, session, report, now);
-  if (report.phase === 'failed') await fileFailure(state, session, report, now);
+  if (report.phase === 'failed') await fileFailure(deps, state, session, report, now);
 
   // From the session as it was read, not as this call may have just left it: a
   // `ready` that published RUNNING answers PROVISIONING, and the machine learns
@@ -130,7 +131,7 @@ async function becomeRunning(
     await fileEvent(state, now, {
       type: 'AgentContradicted',
       sessionId,
-      detail: `reported ip ${report.ip}, reserved ${facts.ip}`,
+      detail: `reported ip ${expunged(deps.journal, 'agentReport.machine', sessionId, report.ip)}, reserved ${facts.ip}`,
     });
   }
 
@@ -150,10 +151,14 @@ async function becomeRunning(
   // with no reader, and the session dies of the provisioning delay exactly as
   // it would if the ledger had never recorded anything (§6, task brief).
   if (joinInfo === null) {
+    const declared =
+      report.serverId === undefined
+        ? 'none'
+        : expunged(deps.journal, 'agentReport.machine', sessionId, report.serverId);
     await fileEvent(state, now, {
       type: 'AgentContradicted',
       sessionId,
-      detail: `declared server id ${boundedServerId(report.serverId)}, refused by the catalogue`,
+      detail: `declared server id ${declared}, refused by the catalogue`,
     });
     return;
   }
@@ -169,7 +174,7 @@ async function becomeRunning(
       await fileEvent(state, now, {
         type: 'DnsUpdateFailed',
         sessionId,
-        detail: String(error),
+        detail: expunged(deps.journal, 'agentReport.dns', sessionId, error),
       });
     }
   }
@@ -183,22 +188,6 @@ async function becomeRunning(
     },
     now,
   );
-}
-
-const MAX_SERVER_ID_IN_DETAIL = 64;
-
-/**
- * `events/{id}.detail` is read by every member (§5): what reaches it is
- * bounded, the same guarantee `sanitizeLastError` gives `lastError`. This one
- * needs no redaction — `serverId` is an identifier the machine names, never a
- * provider's error text — but `parseReport` alone lets one run to 1024
- * characters, and a forged report is exactly where that ceiling gets used.
- */
-function boundedServerId(serverId: string | undefined): string {
-  if (serverId === undefined) return 'none';
-  return serverId.length > MAX_SERVER_ID_IN_DETAIL
-    ? `${serverId.slice(0, MAX_SERVER_ID_IN_DETAIL)}…`
-    : serverId;
 }
 
 /**
@@ -234,7 +223,7 @@ async function recordSave(
     await fileEvent(state, now, {
       type: 'SaveRefused',
       sessionId,
-      detail: String(error),
+      detail: expunged(deps.journal, 'agentReport.save', sessionId, error),
     });
     return;
   }
@@ -292,14 +281,15 @@ async function destroy(
   try {
     await deps.host.close(sessionId);
   } catch (error) {
+    const detail = expunged(deps.journal, 'agentReport.cleanup', sessionId, error);
     await state.apply(
       {
         state: 'FAILED',
-        lastError: sanitizeLastError(String(error)),
+        lastError: detail,
         clearFacts: false,
         deadline: null,
         closeIntents: [],
-        events: [{ type: 'CleanupFailed', sessionId, detail: String(error) }],
+        events: [{ type: 'CleanupFailed', sessionId, detail }],
       },
       now,
     );
@@ -378,6 +368,7 @@ function assertOwnKey(
  * already names, and it would read the same way to whoever opens the journal.
  */
 async function fileFailure(
+  deps: AgentReportDeps,
   state: ServerStateStore,
   session: Session,
   report: AgentReport,
@@ -385,7 +376,9 @@ async function fileFailure(
 ): Promise<void> {
   const sessionId = report.sessionId;
   const detail =
-    report.detail ?? 'the machine reported a failure without saying which';
+    report.detail === undefined
+      ? 'the machine reported a failure without saying which'
+      : expunged(deps.journal, 'agentReport.machine', sessionId, report.detail);
   const event: DomainEvent =
     session.state === 'PROVISIONING'
       ? { type: 'ProvisioningFailed', sessionId, detail }

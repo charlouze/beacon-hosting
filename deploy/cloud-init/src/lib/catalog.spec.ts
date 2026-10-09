@@ -148,3 +148,10 @@ describe('refuseWorldLayout', () => {
     expect(refusal).not.toContain('(, ');
   });
 });
+
+describe('the disk a game boots on', () => {
+  it('gives each game its own size, in gigabytes', () => {
+    expect(catalogFor('sunkenland').diskGb).toBe(40);
+    expect(catalogFor('enshrouded').diskGb).toBe(30);
+  });
+});

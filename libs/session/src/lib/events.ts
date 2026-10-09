@@ -38,16 +38,18 @@ export type DomainEvent =
    */
   | { type: 'DeadlineClamped'; sessionId: SessionId; detail: string }
   /**
-   * The system took resources back. A null sessionId means no session claimed
-   * them — destroying them still spends money, so it is still audited.
+   * The system took resources back. A null sessionId means the sweep took
+   * them, outside the closing of any session — destroying them still spends
+   * money, so it is still audited. The detail names the session a leftover
+   * volume was tagged for, when it was tagged for one.
    */
   | { type: 'SessionReclaimed'; sessionId: SessionId | null; detail: string }
   /**
    * A detached volume nothing can be traced to. Nothing was destroyed and
    * nothing will be: announcing is the whole action (§6), and it happens once,
    * when the volume appears — what is stranded now is a state, and it is
-   * `health/watchdog` that holds it. It always has a null subject — a volume
-   * carries no tag, which is exactly the problem.
+   * `health/watchdog` that holds it. It always has a null subject — the volume
+   * carries no tag of this system, which is exactly the problem.
    */
   | { type: 'ResourceStranded'; sessionId: null; detail: string }
   | { type: 'CleanupFailed'; sessionId: SessionId | null; detail: string }

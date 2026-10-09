@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed
 ---
 
 # 01 — Le serveur de jeu démarre sur un volume bloc

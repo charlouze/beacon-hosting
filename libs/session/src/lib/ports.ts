@@ -27,9 +27,10 @@ export interface UnclaimedSweep {
   /** Gone, in provider wording. Each entry is money that stopped being spent. */
   readonly destroyed: readonly string[];
   /**
-   * Found, and deliberately left alone: volumes whose origin nothing proves.
-   * §6 — a detached volume carries no tag of ours, and deleting someone else's
-   * disk is not a mistake this component may make.
+   * Found, and deliberately left alone: the detached volumes this system
+   * cannot claim — a local one, which it never tags, and a block one that
+   * does not carry the ownership tag. Nothing proves where they come from,
+   * and deleting someone else's disk is not a mistake this component may make.
    */
   readonly stranded: readonly string[];
   /** One per resource that refused, so the pass can continue past it. */
@@ -117,9 +118,15 @@ export interface ServerHost {
   close(sessionId: SessionId): Promise<void>;
 
   /**
-   * One pass over what this system owns but no session claims: destroy the
-   * resources carrying the ownership tag and no session tag, report the
-   * volumes nothing can be proven about, and survive a refusal on any of them.
+   * One pass over what this system owns and nothing holds any more. It
+   * destroys what no session claims — a server or an ip carrying the
+   * ownership tag and no session tag — and what is left of a game server that
+   * is gone: a detached volume carrying the ownership tag, with or without a
+   * session tag. It reports the detached volumes that do not carry that tag,
+   * and survives a refusal on any single resource.
+   *
+   * Rejects when the provider refuses a listing: a pass that could not look
+   * has swept nothing.
    */
   sweepUnclaimed(): Promise<UnclaimedSweep>;
 }

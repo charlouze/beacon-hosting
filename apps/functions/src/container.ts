@@ -7,17 +7,25 @@ import {
   systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
-import { fromSdk, marketplaceImages, ScalewayServerHost } from '@beacon/scaleway-compute';
+import { catalogFor } from '@beacon/cloud-init';
+import {
+  blockFromSdk,
+  fromSdk,
+  marketplaceImages,
+  ScalewayServerHost,
+} from '@beacon/scaleway-compute';
 import { dynHostUpdater } from '@beacon/ovh-dns';
 import { adminMembershipRecord } from '@beacon/membership-record/admin';
 import { createClient, type Zone } from '@scaleway/sdk-client';
-import { Instancev1, Marketplacev2 } from '@scaleway/sdk';
+import { Blockv1, Instancev1, Marketplacev2 } from '@scaleway/sdk';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { defineSecret, defineString } from 'firebase-functions/params';
+import * as logger from 'firebase-functions/logger';
 import { agentTokens } from './agent-tokens.js';
 import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
+import type { PlatformJournal } from './platform-journal.js';
 import type { ProvisionDeps } from './provisioning.js';
 import type { WatchdogDeps } from './watchdog.js';
 import { watchdogHealth } from './watchdog-health.js';
@@ -41,6 +49,23 @@ export const S3_SECRET_KEY: ReturnType<typeof defineSecret> = defineSecret('S3_S
 export const SAVES_BUCKET: ReturnType<typeof defineString> = defineString('SAVES_BUCKET');
 export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES_BUCKET');
 
+/** Cloud Logging, through the Functions logger: only the operator reads it. */
+const platformJournal: PlatformJournal = {
+  failure: (entry) => logger.error(`${entry.source} failed`, entry),
+};
+
+/**
+ * How long a `close()` waits for the volumes of its session to detach. One
+ * adapter serves the three Functions that close, so the bound is set against
+ * the shortest-lived of them: `agentReport`, killed at 60 s. It counts the
+ * pauses only; the other 30 s are what is left for the provider calls around
+ * them.
+ */
+const VOLUME_DETACHMENT = {
+  budgetMs: 30_000,
+  pause: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+};
+
 /**
  * The Firestore half of `buildShared` — no Scaleway client, no zone to
  * validate. What the watchdog needs on top of it, and nothing more.
@@ -54,6 +79,7 @@ function buildFirestoreDeps() {
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),
     settings: settingsStore(db),
+    journal: platformJournal,
   };
 }
 
@@ -93,7 +119,12 @@ function buildShared() {
     region,
     host: new ScalewayServerHost(
       fromSdk(new Instancev1.API(client), zone as Zone),
+      blockFromSdk(new Blockv1.API(client), zone as Zone),
       marketplaceImages(new Marketplacev2.API(client), zone),
+      VOLUME_DETACHMENT,
+      // The catalogue knows what a game occupies; the adapter only knows it
+      // needs a number.
+      (game) => catalogFor(game).diskGb,
     ),
   };
 }
@@ -110,6 +141,7 @@ export function buildProvisionDeps(): ProvisionDeps {
     host: shared.host,
     states: worldStateStores(db),
     settings: shared.settings,
+    journal: shared.journal,
     ledger: shared.ledger,
     worlds: adminWorldRecord(db),
     serverPassword: () => SERVER_PASSWORD.value(),
@@ -145,5 +177,6 @@ export function buildAgentReportDeps(): AgentReportDeps {
       password: DYNHOST_PASSWORD.value(),
     }),
     host: shared.host,
+    journal: shared.journal,
   };
 }

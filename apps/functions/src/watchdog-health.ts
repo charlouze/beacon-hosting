@@ -23,8 +23,9 @@ export interface WatchdogHealth {
  * has arrived.
  *
  * `stranded` is read, and by the watchdog itself. It is what one pass has to
- * remember for the next: a stranded volume is never destroyed, so it comes
- * back in every sweep, and announcing it is a fact that happens once (§5).
+ * remember for the next: a stranded volume does not carry the ownership tag,
+ * so nothing destroys it and it comes back in every sweep, and announcing it
+ * is a fact that happens once (§5).
  * The document is also the standing answer to "what is stranded right now",
  * which no event can give.
  *

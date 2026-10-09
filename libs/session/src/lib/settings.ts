@@ -19,9 +19,10 @@ export interface SessionSettings {
   readonly extensionWindowMs: number;
   readonly defaultInstanceSize: InstanceSize;
   /**
-   * Per size, and all-inclusive: instance, local disk and ip. The three are
-   * billed together by the started hour (§11), so one rate per size is the
-   * honest unit — splitting them would invite adding them up wrong.
+   * Per size, and all-inclusive: instance, disk and ip. Each is billed by the
+   * started hour (§11), so one rate per size is the honest unit — splitting
+   * them would invite adding them up wrong. The disk counts at the largest
+   * size any game boots on, so no game's disk makes a rate too low.
    */
   readonly tariffPerHour: Readonly<Record<InstanceSize, number>>;
 }
@@ -60,5 +61,5 @@ export const DEFAULT_SETTINGS: SessionSettings = {
   extensionStepMs: 60 * 60_000,
   extensionWindowMs: 30 * 60_000,
   defaultInstanceSize: 'DEV1-L',
-  tariffPerHour: { 'DEV1-L': 0.05454 },
+  tariffPerHour: { 'DEV1-L': 0.05304, 'PLAY2-MICRO': 0.06528 },
 };

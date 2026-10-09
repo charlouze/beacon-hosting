@@ -34,12 +34,6 @@ ci-dessous sont établis par lecture.
 
 ## Violations
 
-- **Closing a session** — ce dont le système ne sait plus dire à quelle session
-  il appartenait est **signalé et jamais détruit**, alors que la spec exige
-  qu'aucun serveur de jeu ne coûte hors d'une session en cours. Un test
-  épingle explicitement le comportement actuel — *destroys nothing*. C'est une
-  facture qui court tant qu'un humain ne regarde pas. `reserved by batch-01`
-
 - **Extending a session** — le système fait respecter une autre règle que celle
   qu'énonce la spec. Il ne conserve que l'heure d'ouverture et l'heure de
   fermeture, **sans jamais compter les prolongations** : `ouverture + 4 h +
@@ -52,14 +46,6 @@ ci-dessous sont établis par lecture.
   de fermeture se déduit de l'ouverture et du nombre de prolongations, et la
   borne disparaît avec le problème qu'elle rattrapait ; soit la spec adopte la
   borne, et le lot correctif se requalifie.
-
-- **`CLAUDE.md`, « Rien de ce qu'un membre peut lire ne révèle un secret du
-  système »** — ce qui vient d'un échec d'hébergeur est expurgé avant d'atteindre
-  l'écran d'une session, mais recopié tel quel dans la trace que tout membre peut
-  lire. Ce qui a échoué portait ce que le système confie au serveur au moment de
-  sa mise en place. **Cette entrée désigne une décision de projet et non une
-  section de spec**, parce que la règle vaut pour tous les modules et ne peut donc
-  vivre dans aucun ; la fuite, elle, est dans le code de celui-ci. `reserved by batch-01`
 
 - **The life of a session** — une session peut passer de *en préparation* à *en
   fermeture*, transition que le diagramme ne porte pas. L'écran ne l'offre pas,
