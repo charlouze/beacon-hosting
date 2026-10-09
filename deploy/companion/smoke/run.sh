@@ -172,15 +172,18 @@ exec 3>&-
 docker build -t beacon-companion:smoke -f ../Dockerfile ..
 # `--wait`, not a bare `-d`: `up -d` returns as soon as the container is
 # *started*, never when the server inside it answers. The service already
-# declares the healthcheck that says so (`mc ready local`), and nothing was
-# reading it — `restore` gets it through `condition: service_healthy`, but the
-# `mc` calls just below run in this shell and had no such gate. Measured on a
-# CI runner the 2026-09-08: MinIO reported Started, and `mc alias set` was
-# refused a connection **154 ms later**. A workstation loses that race rarely
-# enough to look green for good, which is the only reason it lived this long.
-docker compose up -d --wait bucket
-docker compose exec -T bucket mc alias set local http://localhost:9000 smoke smokesmoke
-docker compose exec -T bucket mc mb local/beacon-saves
+# declares the healthcheck that says so, and nothing was reading it — `restore`
+# gets it through `condition: service_healthy`, but the `rclone` calls just
+# below run in this shell and had no such gate. Measured on a CI runner the
+# 2026-09-08, on the bucket of the time: it reported Started, and the first
+# call to it was refused a connection **154 ms later**. A workstation loses
+# that race rarely enough to look green for good, which is the only reason it
+# lived this long.
+#
+# `s3` is the client every bucket call below goes through
+# (render-smoke-compose.mjs), under the remote name `local`.
+docker compose up -d --wait bucket s3
+docker compose exec -T s3 rclone mkdir local:beacon-saves
 
 # 0 — the games bucket does not answer yet, and the restore must refuse. The
 # first defense of the golden rule met from its other side: §6 étape 7 makes
@@ -220,7 +223,7 @@ if [ -n "${BEACON_GAME_FILES_KEY:-}" ]; then
       ;;
   esac
 
-  docker compose exec -T bucket mc mb local/beacon-games
+  docker compose exec -T s3 rclone mkdir local:beacon-games
 
   # The chain no other test in this repository can close. `gameArchiveKeyFor`
   # builds this key in tools/game-depot, the cloud-init writes the same literal
@@ -241,13 +244,16 @@ if [ -n "${BEACON_GAME_FILES_KEY:-}" ]; then
   # would cost minutes on both ends for nothing.
   MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)/tmp:/w" "$CLEANUP_IMAGE" sh -c \
     "mkdir -p /w/game-files && echo beacon-smoke > /w/game-files/$GAME_FILES_MARKER && tar -cf /w/game-files.tar -C /w/game-files ."
-  # `mc pipe` rather than a `docker compose cp` and a second `mc` call: the
-  # archive is on this host and mc reads stdin, so nothing has to travel twice.
-  docker compose exec -T bucket mc pipe "local/beacon-games/$games_key" < ./tmp/game-files.tar
-  # A deposit nobody looked at is a deposit that may not have happened: `mc pipe`
+  # `rclone rcat` rather than a `docker compose cp` and a second call: the
+  # archive is on this host and rcat reads stdin, so nothing has to travel twice.
+  docker compose exec -T s3 rclone rcat "local:beacon-games/$games_key" < ./tmp/game-files.tar
+  # A deposit nobody looked at is a deposit that may not have happened: `rcat`
   # writing nothing at all would leave the restore below refusing for a reason
   # that has nothing to do with what is under test.
-  docker compose exec -T bucket mc stat "local/beacon-games/$games_key" > /dev/null
+  #
+  # The listing is what gets read, not the exit status: `rclone lsf` on a key
+  # that does not exist prints nothing and still exits 0.
+  docker compose exec -T s3 rclone lsf --files-only "local:beacon-games/$games_key" | tr -d '\r' | grep -qxF "${games_key##*/}"
 fi
 
 # 1 — a first boot with an empty bucket restores nothing, and succeeds. This is
@@ -266,11 +272,11 @@ docker compose up -d "$GAME" agent
 # recover the exact same two files — an archive of any garbage over 1024
 # bytes would have passed a check that only looked at the deposit's size.
 #
-# `mc find --name`, not `mc ls`: the key nests under game/origin/session, so a
+# `lsf -R`, not a bare `lsf`: the key nests under game/origin/session, so a
 # non-recursive listing of the game prefix never reaches the archive itself.
-timeout 180 bash -c 'until docker compose exec -T bucket mc find local/beacon-saves --name "*.tar.gz" 2>/dev/null | grep -q tar.gz; do sleep 2; done'
-key=$(docker compose exec -T bucket mc find local/beacon-saves --name '*.tar.gz' | head -1 | tr -d '\r')
-docker compose exec -T bucket mc cat "$key" > /tmp/roundtrip.tar.gz
+timeout 180 bash -c 'until docker compose exec -T s3 rclone lsf -R --files-only --include "*.tar.gz" local:beacon-saves 2>/dev/null | grep -q tar.gz; do sleep 2; done'
+key=$(docker compose exec -T s3 rclone lsf -R --files-only --include '*.tar.gz' local:beacon-saves | head -1 | tr -d '\r')
+docker compose exec -T s3 rclone cat "local:beacon-saves/$key" > /tmp/roundtrip.tar.gz
 test "$(stat -c%s /tmp/roundtrip.tar.gz)" -gt 1024
 
 # `ready` is only ever reported once the probe answered, so its presence is the
@@ -305,11 +311,11 @@ docker compose up -d agent
 # floor, and nothing is deposited. The refusal is read directly out of the
 # agent's own log, and the container's still running when the wait is over —
 # an agent that had simply died would also leave the object count unchanged.
-before=$(docker compose exec -T bucket mc ls -r local/beacon-saves | wc -l)
+before=$(docker compose exec -T s3 rclone lsf -R --files-only local:beacon-saves | wc -l)
 test "$before" -ge 1
 docker compose exec -T agent sh -c "rm -f $BEACON_SAVE_DIR/*"
 sleep 90
-after=$(docker compose exec -T bucket mc ls -r local/beacon-saves | wc -l)
+after=$(docker compose exec -T s3 rclone lsf -R --files-only local:beacon-saves | wc -l)
 test "$before" -eq "$after"
 docker compose logs agent | grep -q 'under the floor of a save'
 test "$(docker inspect -f '{{.State.Running}}' "$(docker compose ps -q agent)")" = "true"
@@ -360,25 +366,23 @@ timeout 120 bash -c "until docker compose exec -T agent sh -c 'test -f /opt/beac
 # for quiet and cannot legitimately have deposited anything yet.
 #
 # Output and exit status are checked separately, and neither is discarded: a
-# transient failure of `docker compose exec` or `mc find` prints empty stdout
+# transient failure of `docker compose exec` or `rclone lsf` prints empty stdout
 # and would otherwise pass exactly as if the prefix were legitimately empty —
 # the same "passes when the command errored" class this whole barrier exists
 # to eliminate, on the one assertion singled out for adversarial reading.
 #
 # The search root is the bucket, not the `pre-shutdown` prefix itself: that
-# prefix names no object yet at this point in the script, and `mc find`
-# treats a target path that does not exist as an error, not an empty match —
-# querying it directly would make the legitimate case indistinguishable from
-# the failure this guard exists to catch. `local/beacon-saves` was created a
-# few lines up, so its absence is never legitimate.
-if full_listing=$(docker compose exec -T bucket mc find local/beacon-saves --name '*.tar.gz' 2>&1); then
+# prefix names no object yet at this point in the script, whereas
+# `local:beacon-saves` was created a few lines up — a listing of it that fails
+# is never legitimate.
+if full_listing=$(docker compose exec -T s3 rclone lsf -R --files-only --include '*.tar.gz' local:beacon-saves 2>&1); then
   pre_shutdown_listing=$(printf '%s\n' "$full_listing" | grep 'pre-shutdown' || true)
   if [ -n "$pre_shutdown_listing" ]; then
     echo "smoke: a pre-shutdown save already existed before the game stopped: $pre_shutdown_listing" >&2
     exit 1
   fi
 else
-  echo "smoke: listing local/beacon-saves failed before the game ever stopped: $full_listing" >&2
+  echo "smoke: listing local:beacon-saves failed before the game ever stopped: $full_listing" >&2
   exit 1
 fi
 
@@ -391,7 +395,7 @@ docker compose stop "$GAME"
 # threshold itself. `saved` is therefore already in the log before this
 # point; the origin fake-endpoint.mjs appends to each `saved` line is what
 # pins this one to the pre-shutdown push rather than to a routine one.
-timeout "$PRE_SHUTDOWN_TIMEOUT" bash -c "until docker compose exec -T bucket mc find local/beacon-saves/pre-shutdown/$BEACON_WORLD --name '*.tar.gz' 2>/dev/null | grep -q tar.gz; do sleep 2; done" ||
+timeout "$PRE_SHUTDOWN_TIMEOUT" bash -c "until docker compose exec -T s3 rclone lsf -R --files-only --include '*.tar.gz' local:beacon-saves/pre-shutdown/$BEACON_WORLD 2>/dev/null | grep -q tar.gz; do sleep 2; done" ||
   { echo "smoke: no pre-shutdown archive ever appeared under pre-shutdown/$BEACON_WORLD/" >&2; exit 1; }
 grep -q '^saved pre-shutdown$' "$PHASES_LOG"
 
