@@ -121,3 +121,12 @@ suite verte ou rouge ne changerait ni la spec ni ce registre.
   réécrit à chaque fois, et aucun rôle ne peut les écrire.
   `docs/archive/specs/2026-09-02-game-hosting-design.md` §4 et §10 le
   prescrivent.
+- **Warning the operator** — le signalement d'un volume n'atteint personne. Un
+  volume du système peut y arriver sans tag : il suffit que la pose du tag ait
+  été refusée à l'ouverture puis à la fermeture, et que la fermeture ait détruit
+  le serveur sans détruire le volume. Un volume signalé produit un événement
+  `ResourceStranded` sans session, écrit une fois, à son apparition, puis figure
+  dans `health/watchdog` tant qu'il existe. Aucun écran ne lit les événements ni
+  `health/watchdog`, et aucune alerte ne porte sur l'un ou l'autre. La spec ne
+  prévient l'exploitant que si la surveillance cesse de tourner ou si la dépense
+  du mois dépasse 5 €.
