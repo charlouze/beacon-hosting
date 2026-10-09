@@ -83,9 +83,11 @@ const CLOSED: Record<ReclaimReason, ClosedMeaning> = {
 
 /**
  * What the sweep of the unclaimed leaves in the journal — once per pass, never
- * once per world: these three facts carry no session, so nothing about them
- * belongs to any one world's correction (§6). `reconcileWorld` never sees the
- * sweep at all, which is what keeps that plural from creeping back in.
+ * once per world: none of these three facts is a session being closed, even
+ * when a destroyed volume names the session it was tagged for, so nothing
+ * about them belongs to any one world's correction (§6). `reconcileWorld`
+ * never sees the sweep at all, which is what keeps that plural from creeping
+ * back in.
  *
  * Destroyed, failed and stranded are three independent facts, not a
  * three-way choice: a sweep that destroyed one resource and was refused on
@@ -292,9 +294,10 @@ function isStillHeld(view: WatchdogView, sessionId: SessionId | null): boolean {
  * routes to IDLE. Left open, the id comes back from `openSessions()` on every
  * later pass, and a resource tagged with it that surfaces afterwards is
  * reclaimed by nobody: `reclamations()` reads the open intent as a session
- * still being born and holds off, `sweepUnclaimed()` sees a session tag and
- * skips it. §4 hangs on this branch — no Scaleway resource outlives its
- * session — and a billed machine nothing will ever destroy is how it breaks.
+ * still being born and holds off, `sweepUnclaimed()` sees a session tag on a
+ * server or an ip and skips it. §4 hangs on this branch — no Scaleway resource
+ * outlives its session — and a billed machine nothing will ever destroy is how
+ * it breaks.
  */
 const closing = (closeIntents: readonly SessionId[], sessionId: SessionId | null): SessionId[] =>
   sessionId === null ? [...closeIntents] : [...closeIntents, sessionId];
