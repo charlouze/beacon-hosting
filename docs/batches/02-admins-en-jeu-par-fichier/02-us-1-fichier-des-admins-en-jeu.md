@@ -802,4 +802,14 @@ EOF
 
 ## Rulings log
 
+Technical design ruling: le commentaire sur l'écart entre les 180 s du compagnon et les 90 s d'arrêt du conteneur n'est écrit que dans `sunkenland.ts`, à `_terminate` et à `stop_grace_period`, et pas dans `deploy/companion/src/agent.ts` — toucher une source du compagnon change l'empreinte que `companion:test` compare à l'image épinglée, donc oblige à publier une image pour un commentaire ; décidé par le commanditaire avant le plan — qui change `shutdownGraceMs` dans `agent.ts`, ou l'attente de `push.ts`, ne lit pas que la suppression du fichier à l'arrêt en dépend.
+
+Open ruling: `_terminate` garde `wineserver -k -w` tel que l'image amont l'écrit, sans le rendre non fatal — le lot demande un mieux et non une garantie, et rien ne mesure ce que cette commande renvoie sur l'image — si elle sort non nulle, `set -e` quitte `_terminate` avant la suppression, et les comptes Steam restent dans la sauvegarde de fin de session, un cas que les risques du lot ne nomment pas. Reste à trancher : rendre `wineserver -k -w` non fatal dans cette story, ou accepter ce cas avec les autres.
+
+Ruling: le commentaire bash en tête du fragment `adminFile` s'écarte du texte du Step 3 — la revue finale a relevé que « it is replaced on every boot and never read » avait un sujet ambigu, et que « Either line failing » était faux sans identifiant déclaré — le plan et le code ne disent plus ce commentaire dans les mêmes mots.
+
+Ruling: aucun test ne rend le fichier d'une session précédente illisible en écriture avant de lancer le fragment — le lot l'écarte, la sonde l'a mesuré, et un tel test ne se comporte pas de la même façon sur un poste Windows et sur un serveur de jeu — la raison de supprimer avant d'écrire n'est tenue que par la mesure.
+
+Ruling: la correction de commentaire issue de la revue finale a été relue par le contrôleur sur son diff, sans relecteur dédié — sept lignes de commentaire dans un fichier, tests et lint de `cloud-init` relancés — une erreur dans ce commentaire n'aurait eu qu'un lecteur avant la revue de livraison.
+
 ## Observed drift
