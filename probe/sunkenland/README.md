@@ -10,6 +10,9 @@ démarrage si la tranche 3 finit par l'adopter.
 - `docker-compose.yml` — le même montage en local que sur la VM, pour que ce qui
   est mesuré ici soit ce qui tourne là-bas.
 - `.env.example` — les variables, et lesquelles restent vides au premier essai.
+- `admin-file-permissions.sh` — rejoue, dans un volume Docker nommé, l'écriture
+  de `AdminSteamIDs.txt` sous de vrais droits Unix. `WORLD_FILES` est requis,
+  `GAME_FILES` ajoute le cas du vrai `start.sh`.
 
 ```bash
 cp probe/sunkenland/.env.example probe/sunkenland/.env   # puis renseigner les chemins

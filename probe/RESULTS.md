@@ -1976,8 +1976,34 @@ renommé `Sonde Renommee~<guid>`, guid inchangé, rien d'autre touché.
 Aucun fichier du dossier ne porte le nom du monde. La cause n'est pas
 identifiée : rien ne la montre côté serveur, qui s'annonce prêt.
 
+### Écrire le fichier sous de vrais droits
+
+Mesuré le 2026-10-10 par `probe/sunkenland/admin-file-permissions.sh`. Le relevé
+ci-dessus montait un dossier Windows, où aucun droit Unix ne s'applique. Ici le
+monde est dans un volume Docker nommé, semé comme le compagnon le restaure :
+copié en root, puis `chown -R 7000:7000`, dossiers en `0755` et fichiers en
+`0644`. Le point d'entrée est un script monté, sans `user:`.
+
+| Question | Mesure |
+|---|---|
+| Sous quel utilisateur tourne un point d'entrée monté ? | `uid=7000(sunkenland) gid=7000(sunkenland)`, umask `0022` : le `USER` de l'image, pas root |
+| Peut-il créer le fichier, l'écraser par `>`, le supprimer par `rm -f` ? | Oui aux trois, sortie 0. Le fichier naît `7000:7000`, mode `644` |
+| Fichier présent en `0444`, à 7000 ? | `>` échoue : `Permission denied`, sortie 1, fichier intact. `rm -f` puis `>` passent, sortie 0 |
+| Fichier présent à root, `0644`, dossier à 7000 ? | Pareil : `>` échoue, sortie 1 ; `rm -f` puis `>` passent, et le fichier renaît `7000:7000` |
+| Aucun `chown`, dossier à root en `0755` ? | Création refusée, sortie 1. Fichier à root déjà présent : `>` et `rm -f` échouent tous deux, sortie 1 |
+| Le vrai `start.sh`, avec `ADMIN_FILE_STEAM_IDS` ? | `beacon: wrote 2 admin ids to AdminSteamIDs.txt (lf)`, fichier `7000:7000`, mode `644`, deux lignes en LF |
+
+`rm -f` puis `>` passe partout où `>` seul passe, et en plus sur un fichier que
+le script ne peut pas ouvrir en écriture : supprimer ne demande que le droit
+d'écrire dans le dossier. Sans `chown` du dossier, rien ne passe.
+
 ### Ce qui reste ouvert
 
+- Les modes qu'une archive réelle rend au dossier restauré : la sonde les pose
+  elle-même, et le volume est celui de Docker Desktop, pas celui d'une machine
+  de jeu.
+- Ce que `start.sh` fait quand l'écriture est refusée : seul le cas où elle
+  passe a été lancé avec lui.
 - Pourquoi un monde au dossier renommé est introuvable, et si un autre nom que
   celui essayé l'est aussi.
 - Ce que le serveur fait d'un fichier modifié pendant qu'il tourne.
