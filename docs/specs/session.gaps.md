@@ -63,6 +63,13 @@ ci-dessous sont établis par lecture.
   manuel, un identifiant retiré à la main des membres d'un monde, qu'un
   correctif devra défaire.
 
+- **Running a game** — le catalogue d'un des jeux (`deploy/cloud-init`,
+  `enshrouded.ts`) ne transmet à son serveur aucun des comptes Steam que les
+  membres d'un monde déclarent : ce serveur démarre sans aucun admin en jeu,
+  alors que l'écran propose la déclaration sur tout monde. Établi par lecture
+  le 2026-10-10 ; rien ne mesure si ce jeu sait désigner un admin par un compte
+  Steam.
+
 ## Gaps
 
 - **Closing a session** — **aucune garantie de
