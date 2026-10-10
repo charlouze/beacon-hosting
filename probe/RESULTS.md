@@ -1925,3 +1925,60 @@ Relevée le 2026-10-08, pour la période du 3 au 22 septembre :
 - La fenêtre de fin de chargement un soir chargé.
 - `DEV1-L` avec le jeu sur un volume bloc : seuls sa création, son démarrage et
   sa destruction y ont été mesurés.
+
+## A · Les admins en jeu par fichier
+
+Mesuré le 2026-10-10 par `probe/sunkenland/`, en local, sur le serveur dédié
+`0.8.93` (build Steam `25746735`) et la copie locale du monde de la section J.
+
+Le manuel de l'éditeur ne documente qu'une voie : un fichier
+`AdminSteamIDs.txt` dans le dossier du monde, un identifiant par ligne. Il ne
+mentionne pas `-adminSteamIDs`.
+
+| Question | Mesure |
+|---|---|
+| Le fichier est-il lu sans l'argument ? | Oui : `FromFile AdminSteamIDs: 76561198044997795, 76561197965918116`, et `FromBatScript AdminSteamIDs:` vide |
+| Plusieurs lignes passent-elles ? | Oui : le compte de la deuxième ligne est journalisé `is Admin` et a la console du jeu |
+| Une fin de ligne LF suffit-elle ? | Oui, avec un LF final. CRLF n'a pas eu à être essayé |
+| Quand le fichier est-il lu ? | À l'arrivée d'un joueur, pas au démarrage : rien n'en parle avant `OnPlayerJoined` |
+| Le serveur touche-t-il au fichier ? | Non : identique à l'octet après une sauvegarde |
+| Que dit la configuration imprimée au démarrage ? | `AdminSteamIDs:` vide. Cette ligne ne reflète que l'argument |
+
+Ce relevé renverse deux phrases des sections J et V : l'argument n'est pas la
+seule voie qui marche, et « Beacon n'écrit rien dans le dossier de sauvegarde »
+ne tient plus si plusieurs membres d'un monde doivent être admins.
+
+### La liste en argument
+
+Relevé en production le 2026-09-17, sans sonde : `-adminSteamIDs` suivi de deux
+identifiants joints par une virgule est refusé. Le serveur journalise
+`Invalid Administrator SteamID:` et démarre avec `AdminSteamIDs:` vide, donc
+sans aucun admin. Un identifiant seul passe (section V).
+
+### Un serveur dédié périmé est invisible
+
+Le premier essai montait la copie du jeu du 2026-09-05 (build `24925559`,
+`AppVersion=0.8.55`). Le serveur a annoncé son identifiant normalement, et le
+client à jour ne l'a pas trouvé. Rien dans son journal ne le dit.
+
+### Renommer le dossier d'un monde le rend introuvable
+
+Mesuré dans la foulée : serveur arrêté, le dossier `Beacon's World~<guid>` est
+renommé `Sonde Renommee~<guid>`, guid inchangé, rien d'autre touché.
+
+| Question | Mesure |
+|---|---|
+| Le serveur démarre-t-il ? | Oui : il ouvre la dernière sauvegarde du dossier renommé et annonce `DisplayName: Sonde Renommee`, `WorldName:Sonde Renommee`, `IsPublic:True` |
+| Son journal diffère-t-il ? | Non : mêmes lignes et mêmes délais que sous l'ancien nom, aucun `OnShutdown` |
+| Un joueur le trouve-t-il ? | **Non**, ni dans la liste ni par l'identifiant (« serveur non trouvé »), sur deux lancements dont un dans un conteneur neuf |
+| Et le nom d'origine rendu au dossier ? | Le serveur réapparaît dans la liste |
+
+Aucun fichier du dossier ne porte le nom du monde. La cause n'est pas
+identifiée : rien ne la montre côté serveur, qui s'annonce prêt.
+
+### Ce qui reste ouvert
+
+- Pourquoi un monde au dossier renommé est introuvable, et si un autre nom que
+  celui essayé l'est aussi.
+- Ce que le serveur fait d'un fichier modifié pendant qu'il tourne.
+- `BanSteamIDs.txt`, que le manuel décrit de la même façon.

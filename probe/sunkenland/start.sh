@@ -35,6 +35,30 @@ if [[ -n "${ADMIN_STEAM_IDS:-}" ]]; then
   args+=(-adminSteamIDs "$ADMIN_STEAM_IDS")
 fi
 
+# The publisher's manual documents only this form: `AdminSteamIDs.txt` inside
+# the world folder, one identifier per line. Measured 2026-09-17, the argument
+# above refuses a comma-joined list and leaves the server with no admin at all,
+# so this is what a second admin has to go through. Leave ADMIN_STEAM_IDS empty
+# when measuring it: the argument wins over the file.
+#
+# The line ending is a variable because the manual is written for Notepad and
+# this server reads the file through Wine: whether a bare LF is accepted is one
+# of the things being measured.
+if [[ -n "${ADMIN_FILE_STEAM_IDS:-}" ]]; then
+  folders=("$WORLD_DIR"/*"$WORLD_GUID")
+  if [[ ! -d ${folders[0]} ]]; then
+    printf 'beacon: no world folder to write AdminSteamIDs.txt into\n'
+    exit 1
+  fi
+  eol=$'\n'
+  if [[ "${ADMIN_FILE_EOL:-lf}" == crlf ]]; then
+    eol=$'\r\n'
+  fi
+  IFS=, read -ra admin_ids <<< "$ADMIN_FILE_STEAM_IDS"
+  printf "%s$eol" "${admin_ids[@]}" > "${folders[0]}/AdminSteamIDs.txt"
+  printf 'beacon: wrote %s admin ids to AdminSteamIDs.txt (%s)\n' "${#admin_ids[@]}" "${ADMIN_FILE_EOL:-lf}"
+fi
+
 # The three this probe exists to answer, plus the one that decides how a world
 # is bootstrapped. All absent by default: the first run has to show what happens
 # when nothing is announced.
