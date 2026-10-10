@@ -74,7 +74,8 @@ describe('the admin face of the membership record', () => {
   // §5 calls a steam id "a public integer", and says the one consequence of a
   // wrong one is not getting the in-game admin role. That is exactly what this
   // does — and it is also what keeps this value out of a shell: it lands
-  // unquoted in the game's launch line, where `$(…)` would run on the machine.
+  // unquoted in the script that starts the game, where `$(…)` would run on the
+  // machine.
   it('skips a declared value that is not a steam id at all', async () => {
     await seed('members/root', { role: 'admin', steamId: '$(id > /tmp/pwned)' });
     await seed('members/zoe', { role: 'player', steamId: '11111111111111111' });

@@ -26,7 +26,7 @@ const provisioning = () => provisioningSession('s1', WORLD_ID, 'enshrouded');
 
 const stopping = () => Session.from({ ...fieldsOf(provisioning()), state: 'STOPPING' });
 
-/** The one game whose cloud-init carries `-adminSteamIDs` at all. */
+/** The one game whose cloud-init carries the declared steam ids at all. */
 const provisioningSunkenland = () => provisioningSession('s1', WORLD_ID, 'sunkenland');
 
 const defaultWorld = (): World =>
@@ -255,7 +255,7 @@ describe('provisioning', () => {
 
     // And after, which matters more: `immediate-pass.spec.ts` builds a real
     // admin face too, over the same emulator, and expects no administrator at
-    // all. A member left behind here would arm it a `-adminSteamIDs` depending
+    // all. A member left behind here would arm it an in-game admin depending
     // on the order the files ran in — the shape of red that shows up once in
     // three runs and costs a day.
     afterEach(clearMembers);

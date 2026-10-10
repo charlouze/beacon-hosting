@@ -34,8 +34,9 @@ export interface BootRequest {
    * role of Beacon: §2 grants this one to **every** member, whatever their role,
    * and what fills the field is the identifiers they declared. `members` names
    * them, this repository no longer does. Empty is an ordinary evening — nobody
-   * declared an identifier — and an entry for a game that does not know the
-   * option ignores the field, as it ignores every other one it has no use for.
+   * declared an identifier — and an entry for a game that is told nothing about
+   * its admins ignores the field, as it ignores every other one it has no use
+   * for.
    *
    * **Digits only.** These reach a machine as shell, and `renderCloudInit`
    * refuses the whole boot over anything else rather than let a caller decide.
@@ -179,8 +180,8 @@ const exposedValues = (request: BootRequest): readonly (readonly [string, string
 /**
  * §5 calls a steam id a public integer. Here that is a contract rather than a
  * description: `adminSteamIds` is the one field of a request that reaches a
- * machine as **shell** — unquoted, inside the `args=( … )` of an entry point —
- * so `$(…)` in it runs as root on a billed machine, and it travelled all the
+ * machine as **shell** — unquoted, as the arguments of a `printf` in an entry
+ * point — so `$(…)` in it runs on a billed machine, and it travelled all the
  * way from a browser. Quoting buys nothing: bash substitutes inside double
  * quotes too. Refusing is what protects, and it belongs to the module that
  * knows a shell script is being written, not to whoever fills the field.
@@ -226,9 +227,9 @@ const refuseAnythingButDigits = (adminSteamIds: readonly string[]): void => {
  * so a short human-chosen password crosses it untouched.
  *
  * The third is `refuseAnythingButDigits` above, and it is held here for the
- * same reason as the `$`: one entry writes that option today, the request is
- * common to both, and a guard living in that entry would protect nothing the
- * day a second game learns the option.
+ * same reason as the `$`: one entry writes those identifiers into a script
+ * today, the request is common to both, and a guard living in that entry would
+ * protect nothing the day a second game does the same.
  */
 export const renderCloudInit = (game: Game, request: BootRequest): string => {
   if (!request.endpoint.startsWith('https://')) {
