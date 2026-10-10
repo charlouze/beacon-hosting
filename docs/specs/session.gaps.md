@@ -61,7 +61,7 @@ ci-dessous sont établis par lecture.
   plus personne ne commande dans la partie, donc plus personne ne peut y
   demander une sauvegarde. L'état de production porte encore un contournement
   manuel, un identifiant retiré à la main des membres d'un monde, qu'un
-  correctif devra défaire.
+  correctif devra défaire. `reserved by batch-02`
 
 - **Running a game** — le catalogue d'un des jeux (`deploy/cloud-init`,
   `enshrouded.ts`) ne transmet à son serveur aucun des comptes Steam que les
