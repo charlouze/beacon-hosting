@@ -58,12 +58,12 @@ describe('the frontier every boot crosses', () => {
       expect(renderCloudInit(game, REQUEST).startsWith('#cloud-config\n')).toBe(true);
     });
 
-    // The one field of a request that reaches a machine as shell, unquoted,
-    // inside an `args=( … )`. It travelled from a browser: a member writes it
-    // on its own document. Double quotes would buy nothing — bash substitutes
-    // inside them — so anything but digits is refused, and refused here rather
-    // than in the entry that writes the option, because the request is common
-    // to both games and only one of them carries that option today.
+    // The one field of a request that reaches a machine as shell, unquoted, as
+    // the arguments of a `printf`. It travelled from a browser: a member writes
+    // it on its own document. Double quotes would buy nothing — bash
+    // substitutes inside them — so anything but digits is refused, and refused
+    // here rather than in the entry that writes it, because the request is
+    // common to both games and only one of them writes it today.
     it(`refuses an administrator that is not a steam id, for ${game}`, () => {
       for (const value of ['$(id)', '`id`', '765;rm -rf /', '765 -password x', '']) {
         expect(() =>

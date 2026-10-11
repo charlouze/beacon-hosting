@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { catalogFor, refuseWorldLayout, renderCloudInit, renderCompose } from './catalog.js';
 import { REQUEST, request, serviceBlock } from './catalogue-fixtures.spec-helper.js';
-import { SERVERID_FILTER, sunkenland } from './sunkenland.js';
+import { adminFile, SERVERID_FILTER, sunkenland } from './sunkenland.js';
 
 /**
  * The filter is bash, and reading it proves nothing about what it matches: the
@@ -57,6 +57,36 @@ function runWorldDerivation(entries: readonly { name: string; directory: boolean
   return { status: run.status, output: run.stdout + run.stderr };
 }
 
+/**
+ * The admin file is laid down by bash too, and it gets run for the same
+ * reason: what it must survive is a real folder — a name with a space and an
+ * apostrophe, a file an earlier session left, something in the way. `body` is
+ * the fragment exactly as exported; the two variables are the ones the entry
+ * point has set by the time it reaches it.
+ */
+function runAdminFile(
+  body: string,
+  prepare: (adminFilePath: string) => void = () => undefined,
+): { status: number | null; output: string; written: string | null } {
+  const dir = mkdtempSync(join(tmpdir(), 'beacon-admins-'));
+  const world = `Beacon's World~${GUID}`;
+  mkdirSync(join(dir, 'worlds', world), { recursive: true });
+  const adminFilePath = join(dir, 'worlds', world, 'AdminSteamIDs.txt');
+  prepare(adminFilePath);
+
+  writeFileSync(
+    join(dir, 'admins.sh'),
+    ['set -euo pipefail', 'WORLD_DIR=worlds', `world="${world}"`, body, ''].join('\n'),
+  );
+  const run = spawnSync('bash', ['admins.sh'], { cwd: dir, encoding: 'utf8' });
+  const result = { status: run.status, output: run.stdout + run.stderr };
+  try {
+    return { ...result, written: readFileSync(adminFilePath, 'utf8') };
+  } catch {
+    return { ...result, written: null };
+  }
+}
+
 const GUID = '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b';
 
 describe('la derivation du monde sur la machine', () => {
@@ -95,6 +125,78 @@ describe('la derivation du monde sur la machine', () => {
     const run = runWorldDerivation([{ name: `A~B~${GUID}`, directory: true }]);
     expect(run.status).toBe(0);
     expect(run.output).toContain(`beacon: opening A~B~${GUID}`);
+  });
+});
+
+describe('the admin file on the machine', () => {
+  const TWO = ['11111111111111111', '76561197965918116'];
+
+  // Measured, `probe/RESULTS.md` section A: one identifier per line, a LF at
+  // the end of each, and the account on the second line is an admin.
+  it('writes one identifier per line, each ended by a LF, in a folder named with a space and an apostrophe', () => {
+    const run = runAdminFile(adminFile(TWO));
+    expect(run.status).toBe(0);
+    expect(run.written).toBe('11111111111111111\n76561197965918116\n');
+  });
+
+  it('writes a single identifier on a single line', () => {
+    const run = runAdminFile(adminFile(['76561197965918116']));
+    expect(run.status).toBe(0);
+    expect(run.written).toBe('76561197965918116\n');
+  });
+
+  // An automatic save carries the file, so a restored folder may hold the one
+  // of an earlier session: a member since removed from the world must not stay
+  // an admin through a line nobody rewrote.
+  it('replaces the file an earlier session left, down to its last line', () => {
+    const run = runAdminFile(adminFile(TWO), (path) =>
+      writeFileSync(path, '22222222222222222\n33333333333333333\n44444444444444444\n'),
+    );
+    expect(run.status).toBe(0);
+    expect(run.written).toBe('11111111111111111\n76561197965918116\n');
+  });
+
+  // The container runs the entry point again when the server dies mid-session.
+  it('leaves the same file when the script runs a second time', () => {
+    const run = runAdminFile(`${adminFile(TWO)}\n${adminFile(TWO)}`);
+    expect(run.status).toBe(0);
+    expect(run.written).toBe('11111111111111111\n76561197965918116\n');
+  });
+
+  it('removes the file an earlier session left when nobody declared an identifier', () => {
+    const run = runAdminFile(adminFile([]), (path) => writeFileSync(path, '76561197965918116\n'));
+    expect(run.status).toBe(0);
+    expect(run.written).toBeNull();
+  });
+
+  it('writes no file at all when nobody declared an identifier', () => {
+    const run = runAdminFile(adminFile([]));
+    expect(run.status).toBe(0);
+    expect(run.written).toBeNull();
+  });
+
+  // A folder is the one thing `rm -f` refuses the same way on every machine
+  // this suite runs on. A server started without the admins its world names is
+  // the defect, so the boot stops instead.
+  const IN_THE_WAY: readonly (readonly [string, readonly string[]])[] = [
+    ['nobody declared an identifier', []],
+    ['identifiers are declared', TWO],
+  ];
+  for (const [situation, ids] of IN_THE_WAY) {
+    it(`stops the boot when the file cannot be removed and ${situation}`, () => {
+      const run = runAdminFile(adminFile(ids), (path) => {
+        mkdirSync(path);
+      });
+      expect(run.status).not.toBe(0);
+      expect(run.output).not.toContain('in-game admins');
+    });
+  }
+
+  it('prints how many identifiers it wrote, zero included, and never one of them', () => {
+    const two = runAdminFile(adminFile(TWO));
+    expect(two.output).toContain('beacon: 2 in-game admins');
+    expect(two.output).not.toMatch(/[0-9]{17}/);
+    expect(runAdminFile(adminFile([])).output).toContain('beacon: 0 in-game admins');
   });
 });
 
@@ -207,8 +309,9 @@ describe('the sunkenland catalogue entry', () => {
 
   // Measured: as PID 1 a process with no handler never receives SIGTERM. An
   // `exec` would turn every docker stop into ten seconds then a SIGKILL,
-  // possibly in the middle of a save.
-  it('keeps the upstream trap, and never execs into the server', () => {
+  // possibly in the middle of a save. The teardown is upstream's, with the
+  // removal of the admin file added to it.
+  it('keeps a trap that stops the server, and never execs into it', () => {
     const rendered = renderCloudInit('sunkenland', REQUEST);
     expect(rendered).toContain('trap _terminate HUP INT QUIT TERM');
     expect(rendered).toContain('wineserver -k -w');
@@ -276,32 +379,44 @@ describe('the sunkenland catalogue entry', () => {
     expect(runFilter('beacon: launching with -batchmode\n').written).toBeNull();
   });
 
-  // The one measured case, byte for byte as the constant rendered it. What was
-  // proved on 2026-09-05 was a save triggered from the game console by this
-  // account, and nothing about the shape of a list.
-  it('renders one administrator exactly as the constant did', () => {
-    const rendered = renderCloudInit('sunkenland', {
-      ...REQUEST,
-      adminSteamIds: ['76561197965918116'],
-    });
-    expect(rendered).toContain('\n        -adminSteamIDs 76561197965918116\n');
-  });
+  /** The entry point as the machine reads it, out of its block scalar. */
+  const entryPoint = (adminSteamIds: readonly string[]): string =>
+    renderCloudInit('sunkenland', { ...REQUEST, adminSteamIds })
+      .split('\n')
+      .map((line) => line.replace(/^ {6}/, ''))
+      .join('\n');
 
-  // Unmeasured: no probe ever passed two. A comma is the guess, and the plan
-  // says so out loud rather than letting a reader assume it was tested.
-  it('joins several administrators with a comma', () => {
-    const rendered = renderCloudInit('sunkenland', {
-      ...REQUEST,
-      adminSteamIds: ['11111111111111111', '76561197965918116'],
-    });
-    expect(rendered).toContain('-adminSteamIDs 11111111111111111,76561197965918116');
-  });
+  const ADMIN_LISTS: readonly (readonly string[])[] = [
+    [],
+    ['76561197965918116'],
+    ['11111111111111111', '76561197965918116'],
+  ];
 
-  // An empty option is not the same as no option, and a flag with no value is
-  // how a command line starts eating the argument that follows it.
-  it('leaves the option out when nobody declared an identifier', () => {
-    const rendered = renderCloudInit('sunkenland', { ...REQUEST, adminSteamIds: [] });
-    expect(rendered).not.toContain('-adminSteamIDs');
+  // After the guid check, because the fragment writes inside the folder that
+  // check has just accepted. Before the server, because the server reads the
+  // file when a player arrives.
+  for (const ids of ADMIN_LISTS) {
+    it(`lays the admin file down once the world is checked, and before the server starts, for ${ids.length} admins`, () => {
+      const script = entryPoint(ids);
+      const at = script.indexOf(adminFile(ids));
+      expect(at).toBeGreaterThan(script.indexOf('does not end in a guid'));
+      expect(at).toBeLessThan(script.indexOf('wine "$GAME_DIR/'));
+    });
+
+    // Measured in production on 2026-09-17: the argument refuses a list of
+    // two, and the server then starts with no admin at all.
+    it(`never passes the admins as an argument, for ${ids.length} admins`, () => {
+      expect(entryPoint(ids)).not.toContain('-adminSteamIDs');
+    });
+  }
+
+  // The end-of-session save is never deleted, so the file goes once the server
+  // is down. `|| true`, because under `set -e` a refused removal would cut the
+  // teardown before the X server stops.
+  it('removes the admin file once the server is down, without letting a refusal cut the teardown', () => {
+    expect(entryPoint([])).toMatch(
+      /_terminate\(\) \{\n[^}]*wineserver -k -w\n[^}]*rm -f "\$admin_file" \|\| true\n[^}]*\}/,
+    );
   });
 
   // The `$` compose swallows is refused at the frontier and no longer here —
@@ -358,10 +473,10 @@ describe('the sunkenland catalogue entry', () => {
     // The entry point is not exported, so its edges and its deepest line stand
     // for it: shebang, argument list, trap, and the line it ends on.
     expect(rendered).toContain('    content: |\n      #!/usr/bin/env bash\n      set -euo pipefail\n');
-    // An argument, at the depth arguments sit at. It used to be
-    // `-adminSteamIDs`, which no longer belongs to a fixture — the test that
-    // renders one administrator now pins that line at this very depth.
+    // An argument, at the depth arguments sit at, and a line of the admin
+    // fragment at the depth of the script.
     expect(rendered).toContain('\n        -region eu\n');
+    expect(rendered).toContain('\n      rm -f "$admin_file"\n');
     expect(rendered).toContain('\n      trap _terminate HUP INT QUIT TERM\n');
     expect(rendered).toContain('\n      wait\n');
   });

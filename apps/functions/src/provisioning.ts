@@ -88,7 +88,7 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
     if (world === null) throw new Error(`world ${worldId} does not exist`);
     // The seam between the two vocabularies, and the only line that crosses it:
     // what `members` holds is a list of declared Steam accounts, what the game
-    // is handed is its `-adminSteamIDs`. §2 makes the two the same list — every
+    // is handed is its in-game admins. §2 makes the two the same list — every
     // member administers the server in the game, whatever their Beacon role —
     // and §4 forbids confusing the words that name them. Nothing downstream
     // needs to know a role exists at all. `world.players` is what §4 delimits a

@@ -18,9 +18,9 @@ function batches<T>(values: readonly T[], size: number): T[][] {
  * exactly like an absent one, rather than refused loudly — one member's typo
  * has no business costing an evening.
  *
- * That is also what keeps this value out of a shell. It reaches the game on a
- * launch line, unquoted, and a member writes it: `$(…)` there would run on a
- * machine the rules never let that member near. The shape is checked here
+ * That is also what keeps this value out of a shell. It reaches the game's
+ * machine in a script, unquoted, and a member writes it: `$(…)` there would run
+ * on a machine the rules never let that member near. The shape is checked here
  * because this is where a declared value becomes an administrator.
  */
 const isSteamId = (value: unknown): value is string =>
@@ -34,8 +34,8 @@ const isSteamId = (value: unknown): value is string =>
  *
  * It says what the list **is**, never what a game makes of it. §4 keeps the two
  * words apart on purpose: the `admin` role of Beacon is a field of `members`,
- * the administrator of a game is what a launch line grants — and §2 grants that
- * one to every member, whatever their role.
+ * the administrator of a game is what the game's own list of admins grants —
+ * and §2 grants that one to every member, whatever their role.
  */
 export interface AdminMembershipRecord {
   /**

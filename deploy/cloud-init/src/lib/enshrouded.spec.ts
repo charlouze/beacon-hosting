@@ -42,11 +42,14 @@ describe('the enshrouded catalogue entry', () => {
     expect(compose).not.toContain('15636');
   });
 
-  // The request is common to both games, and the shared fixture now carries an
-  // identifier: this game knows no such option, so it must ignore the field
-  // rather than grow a `-adminSteamIDs` nobody asked it for.
-  it('ignores the administrators, an option this game does not know', () => {
-    expect(renderCloudInit('enshrouded', REQUEST)).not.toContain('-adminSteamIDs');
+  // The request is common to both games, and the shared fixture carries an
+  // identifier: nothing in this entry tells its server about in-game admins,
+  // so none of the declared accounts may reach its machine.
+  it('carries none of the declared steam ids', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    for (const steamId of REQUEST.adminSteamIds) {
+      expect(rendered).not.toContain(steamId);
+    }
   });
 
   // The world's name is now what a player looks for in the game's own server

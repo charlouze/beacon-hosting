@@ -54,15 +54,6 @@ ci-dessous sont établis par lecture.
   produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
   requalifie.
 
-- **Running a game** — les identifiants que les membres d'un monde déclarent
-  sont transmis au serveur de jeu sous une forme qu'il refuse, et il démarre
-  alors sans aucun admin en jeu. Mesuré le 2026-09-17 dans le catalogue d'un jeu
-  (`deploy/cloud-init`) : dès que deux membres d'un monde déclarent le leur,
-  plus personne ne commande dans la partie, donc plus personne ne peut y
-  demander une sauvegarde. L'état de production porte encore un contournement
-  manuel, un identifiant retiré à la main des membres d'un monde, qu'un
-  correctif devra défaire. `reserved by batch-02`
-
 - **Running a game** — le catalogue d'un des jeux (`deploy/cloud-init`,
   `enshrouded.ts`) ne transmet à son serveur aucun des comptes Steam que les
   membres d'un monde déclarent : ce serveur démarre sans aucun admin en jeu,

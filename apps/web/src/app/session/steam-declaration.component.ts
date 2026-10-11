@@ -4,10 +4,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
  * Asks for the member's Steam account once, then shows it.
  *
  * It exists although no comp shows it: §2 gives every member the administrator
- * role *inside the game*, through `-adminSteamIDs`, and that is the only way a
- * human can trigger a save on the game where §8 measured that nothing else
- * can. The driver carried a bare field; dropping it without a replacement
- * would take that away from every member arriving after this tranche.
+ * role *inside the game*, through the list of admins its server reads, and that
+ * is the only way a human can trigger a save on the game where §8 measured that
+ * nothing else can. The driver carried a bare field; dropping it without a
+ * replacement would take that away from every member arriving after this
+ * tranche.
  *
  * A band and not a modal, decided 2026-09-12. It interrupts nothing, cannot be
  * dismissed by accident, and the state stays readable above it — what a modal

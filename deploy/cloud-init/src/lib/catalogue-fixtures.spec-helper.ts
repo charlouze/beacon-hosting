@@ -12,8 +12,9 @@ export const REQUEST: BootRequest = {
   world: { worldId: 'beacon', name: 'Beacon' },
   serverPassword: 'hunter2',
   slotCount: 4,
-  // The account of the 2026-09-05 measurement, so a suite that does not care
-  // about administrators still renders the boot that was actually observed.
+  // The account measured as an in-game admin, by argument on 2026-09-05 and by
+  // file on 2026-10-10, so a suite that does not care about administrators
+  // still renders a boot that names one.
   adminSteamIds: ['76561197965918116'],
   sessionId: 's1',
   agentToken: 'a'.repeat(64),

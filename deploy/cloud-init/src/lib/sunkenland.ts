@@ -149,23 +149,47 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done
 `;
 
+/** Where this game reads its in-game admins from, inside the world folder. */
+const ADMIN_FILE = 'AdminSteamIDs.txt';
+
 /**
- * Nothing at all when nobody declared an identifier, and never an empty value:
- * `-adminSteamIDs` followed by nothing makes the parser swallow the option
- * after it, exactly as the empty `-password` did further down.
- *
- * The comma is a guess. The measurement of 2026-09-05 passed one identifier and
- * proved one thing — a save triggered from the game's console by that account —
- * and nothing about how this game reads a list.
+ * No file at all when nobody declared an account: it is what a server with no
+ * admin has always booted on, and nothing measures what the game makes of an
+ * empty one.
  */
-const adminOption = (adminSteamIds: readonly string[]): string =>
+const writeAdmins = (adminSteamIds: readonly string[]): string =>
   adminSteamIds.length === 0
-    ? ''
-    : `
-  # The argument form, never a file: it keeps a restored world pure data, and
-  # Beacon writes nothing inside a save folder. What it buys is the only way a
-  # human has of asking this game to save.
-  -adminSteamIDs ${adminSteamIds.join(',')}`;
+    ? '# Nobody declared an account: no file at all.'
+    : `printf '%s\\n' ${adminSteamIds.join(' ')} > "$admin_file"`;
+
+/**
+ * Who administers the server inside the game, laid down as the file the server
+ * reads. Measured, `probe/RESULTS.md` section A: the argument refuses a list of
+ * two and the server then boots with no admin at all, while this file is read
+ * without the argument, one identifier per line, each ended by a LF. It is the
+ * only way a human has of asking this game to save.
+ *
+ * Exported as a value, like `SERVERID_FILTER` and for the same reason: it is
+ * bash, so a test runs it on a real folder instead of reading it. It expects
+ * `WORLD_DIR` and `world`, which the entry point has set by the time it gets
+ * here, and leaves `admin_file` for the teardown.
+ *
+ * The identifiers land unquoted: `renderCloudInit` refuses anything but digits.
+ */
+export const adminFile = (adminSteamIds: readonly string[]): string => `# The world folder travels in every save, so it may carry the file of an
+# earlier session: this script removes it on every boot without reading it,
+# and writes it again when there is someone to name. Removed first, because a
+# file this user cannot open for writing still goes with \`rm\` — deleting only
+# takes the right to write in the folder.
+#
+# A refused removal or a refused write stops the boot under \`set -e\`, before
+# the server starts: a server running without the admins its world names is
+# the defect this exists to close.
+admin_file="$WORLD_DIR/$world/${ADMIN_FILE}"
+rm -f "$admin_file"
+${writeAdmins(adminSteamIds)}
+# The count, never the identifiers.
+printf 'beacon: %s in-game admins\\n' ${adminSteamIds.length}`;
 
 /**
  * The probe's script of 2026-09-05, adopted with its constraints and stripped
@@ -232,13 +256,15 @@ fi
 
 printf 'beacon: opening %s\\n' "$world"
 
+${adminFile(adminSteamIds)}
+
 args=(
   -batchmode
   -nographics
   -worldGuid "$WORLD_GUID"
   -region ${REGION}
   -maxPlayerCapacity "\${MAX_PLAYERS:-4}"
-  -autoSaveIntervalInSeconds ${AUTOSAVE_SECONDS}${adminOption(adminSteamIds)}
+  -autoSaveIntervalInSeconds ${AUTOSAVE_SECONDS}
 )
 
 # Printed so a boot can be read back from the log without guessing what the
@@ -266,13 +292,20 @@ fi
 # script rather than xvfb-run.
 [ -f /tmp/.X1-lock ] && rm -f /tmp/.X1-lock
 
-# And its teardown, for the same reason plus one of our own: as PID 1 a process
-# with no handler never receives SIGTERM at all, so an \`exec\` here would turn
-# every \`docker stop\` into a ten-second wait then a SIGKILL — possibly in the
-# middle of an autosave, on the one folder this system cannot rebuild.
+# Upstream's teardown, with one line of ours in it. A handler and never an
+# \`exec\`: as PID 1 a process with no handler never receives SIGTERM at all, so
+# every \`docker stop\` would be a ten-second wait then a SIGKILL — possibly in
+# the middle of an autosave, on the one folder this system cannot rebuild.
 _terminate() {
   echo 'beacon: caught TERM, stopping'
   wineserver -k -w
+  # Ours, once the server is down: the end-of-session save is never deleted,
+  # and should not keep the members' Steam accounts. An improvement and not a
+  # guarantee — it holds because the companion archives after its
+  # \`shutdownGraceMs\` (180 s, \`deploy/companion/src/agent.ts\`), longer than
+  # this container's \`stop_grace_period\`, and no contract carries that gap.
+  # Never fatal: under \`set -e\` a refused removal would cut the teardown here.
+  rm -f "$admin_file" || true
   /etc/init.d/xvfb stop
 }
 trap _terminate HUP INT QUIT TERM
@@ -309,6 +342,10 @@ const COMPOSE = `services:
     # this repository a fork and an image of its own.
     entrypoint: ["/opt/beacon/start.sh"]
     restart: unless-stopped
+    # Shorter than the companion's \`shutdownGraceMs\` (180 s,
+    # \`deploy/companion/src/agent.ts\`), and the entry point leans on that gap:
+    # it removes the admin file once the server is down, before the companion
+    # archives. No contract carries it — whoever moves one value reads the other.
     stop_grace_period: 90s
     depends_on:
       restore:

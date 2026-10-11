@@ -26,7 +26,7 @@ const provisioning = () => provisioningSession('s1', WORLD_ID, 'enshrouded');
 
 const stopping = () => Session.from({ ...fieldsOf(provisioning()), state: 'STOPPING' });
 
-/** The one game whose cloud-init carries `-adminSteamIDs` at all. */
+/** The one game whose cloud-init carries the declared steam ids at all. */
 const provisioningSunkenland = () => provisioningSession('s1', WORLD_ID, 'sunkenland');
 
 const defaultWorld = (): World =>
@@ -255,7 +255,7 @@ describe('provisioning', () => {
 
     // And after, which matters more: `immediate-pass.spec.ts` builds a real
     // admin face too, over the same emulator, and expects no administrator at
-    // all. A member left behind here would arm it a `-adminSteamIDs` depending
+    // all. A member left behind here would arm it an in-game admin depending
     // on the order the files ran in — the shape of red that shows up once in
     // three runs and costs a day.
     afterEach(clearMembers);
@@ -264,21 +264,25 @@ describe('provisioning', () => {
     // role to every member. What reaches the cloud-init is a member's declared
     // identifier, never a Beacon role. `alice` must be one of the world's
     // players (§4 delimits the world to them): `defaultWorld` names `u1` alone.
+    //
+    // The identifier and not the form it travels in: how a game is told about
+    // its admins is the catalogue's business, and its own suite pins it.
     it('names any member who declared an identifier', async () => {
       await db.doc(`${MEMBERS}/u1`).set({ role: 'player', steamId: '76561197965918116' });
 
       await runStateChange(deps, WORLD_ID, provisioningSunkenland());
 
-      expect(bootstrapOf(deps)).toContain('-adminSteamIDs 76561197965918116');
+      expect(bootstrapOf(deps)).toContain('76561197965918116');
     });
 
-    // Not an empty option: a flag with no value eats the argument after it.
-    it('leaves the option out when nobody declared one', async () => {
+    // A steam id is seventeen digits standing alone, and nothing else in a
+    // bootstrap is: none may appear when no member declared one.
+    it('names nobody when nobody declared an identifier', async () => {
       await db.doc(`${MEMBERS}/u1`).set({ role: 'player' });
 
       await runStateChange(deps, WORLD_ID, provisioningSunkenland());
 
-      expect(bootstrapOf(deps)).not.toContain('-adminSteamIDs');
+      expect(bootstrapOf(deps)).not.toMatch(/\b[0-9]{17}\b/);
     });
 
     // §4 delimits a world to its players: a member outside the world's roster
