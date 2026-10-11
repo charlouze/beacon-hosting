@@ -2145,3 +2145,59 @@ Non mesuré : un serveur qui écoute déjà sans répondre encore.
 - La durée du téléchargement et celle de la décompression de l'archive d'un jeu
   déposé, prises séparément. La section B ne donne que leur somme, environ trois
   minutes sur `PLAY2-MICRO`.
+
+## E · La version qu'un éditeur publie
+
+Question : sans le compte qui possède le jeu, peut-on lire le build que
+l'éditeur publie, et celui d'une installation locale ?
+
+Commande : `npm --prefix probe run steam:version`
+
+Mesuré le 2026-10-11, depuis un poste Windows, Node 22.23.2, `steam-user`
+5.3.0. Lecture seule : aucun compte, aucun téléchargement, aucune ressource.
+
+### Trois sources
+
+Trois lectures d'affilée par source, sur l'application du serveur dédié
+`2667530`, branche `public`.
+
+| Source | Build rendu | Durée |
+|---|---|---|
+| Steam en direct, session anonyme ouverte à chaque lecture | `25746735`, `timeupdated` `1791303546` | 1484, 1371 et 708 ms |
+| `api.steamcmd.net`, service tiers | `25746735`, `timeupdated` `1791303546` | 276, 161 et 56 ms |
+| API web de Steam, `ISteamApps/UpToDateCheck` | aucun : `Couldn't get app info for the app specified.` | — |
+
+Les deux premières rendent le même build et le même instant, le 2026-10-06 à
+16 h 19 UTC. Elles s'accordent aussi sur l'application `2278520`, lue de la
+même façon : `23178631`.
+
+Steam en direct est la bibliothèque `steam-user`, sans le binaire `steamcmd` :
+connexion anonyme, puis `getProductInfo`. Une application que le compte anonyme
+ne peut pas télécharger (section J) rend quand même ses informations.
+
+SteamDB n'a pas été sondé : il n'expose aucune API et interdit la lecture
+automatique de ses pages.
+
+### Le manifeste local
+
+| Emplacement, installation faite par `steamcmd +force_install_dir` | Mesure |
+|---|---|
+| `<installation>/steamapps/appmanifest_2667530.acf` | présent : `buildid` `25746735`, `TargetBuildID` `25746735`, `StateFlags` `4`, `LastUpdated` `1791464955` |
+| `<bibliothèque>/steamapps/appmanifest_2667530.acf` | absent |
+
+Le manifeste est donc dans le dossier que `game-depot` archive, et son `buildid`
+est celui que Steam publie. `LastUpdated` est l'instant de la mise à jour
+locale, le 2026-10-08, et non celui de la publication.
+
+### Ce qui reste ouvert
+
+- La lecture de Steam en direct depuis une Function : la mesure vient d'un
+  poste, et rien ne dit que la sortie réseau d'une Function atteint les
+  serveurs de Steam ni en combien de temps.
+- Le délai entre une publication de l'éditeur et le moment où chaque source la
+  rend. `api.steamcmd.net` met ses réponses en cache.
+- Ce que chaque source répond à des lectures répétées sur des jours.
+- Le manifeste d'une installation faite par le client Steam plutôt que par
+  `steamcmd`.
+- Si deux builds différents sont toujours incompatibles en jeu. Un seul cas est
+  relevé (section A).
