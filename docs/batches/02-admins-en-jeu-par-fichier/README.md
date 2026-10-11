@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed
 ---
 
 # 02 — Les admins en jeu passent par un fichier
