@@ -2008,3 +2008,140 @@ d'écrire dans le dossier. Sans `chown` du dossier, rien ne passe.
   celui essayé l'est aussi.
 - Ce que le serveur fait d'un fichier modifié pendant qu'il tourne.
 - `BanSteamIDs.txt`, que le manuel décrit de la même façon.
+
+## P · La progression de la mise en place
+
+Question : pendant qu'un serveur de jeu se met en place, que peut lire un
+conteneur qui partage le dossier du jeu, et que peut-il lire de la sortie du
+conteneur du jeu sans accès à Docker ?
+
+Mesuré les 2026-10-11 et 2026-10-12, en local, sur Docker 29.6.2 et Compose
+5.3.1, avec l'image `mornedhels/enshrouded-server` épinglée par le catalogue.
+Aucune ressource facturée. **Les durées sont celles d'un poste de
+développement, pas d'un serveur de jeu** : elles ne valent que pour l'ordre des
+choses.
+
+### Ce que le dossier partagé montre du téléchargement
+
+Commande : `bash probe/setup-progress/download-signal.sh <dossier de sortie>`
+
+Un second conteneur monte le volume du jeu en lecture seule et relève toutes
+les deux secondes la taille du dossier et le manifeste
+`server/steamapps/appmanifest_2278520.acf`.
+
+| Depuis le lancement du conteneur | Ce que le dossier montre |
+|---|---|
+| 0 à 34 s | rien : l'outil de téléchargement s'installe |
+| 34 s | le manifeste apparaît |
+| 38 s | `StateFlags=1026`, `BytesToDownload=3734339456`, `BytesToStage=8811579458` |
+| 38 s à 4 min 07 | la taille du dossier croît de 0 à 8,6 Go |
+| 4 min 07 | `BytesDownloaded` et `BytesStaged` passent de 0 à leur total |
+| 4 min 19 | `StateFlags=4`, `SizeOnDisk=8811579458` |
+| 4 min 32 | `enshrouded-server: started` dans la sortie du conteneur |
+
+- **Le manifeste donne le total et la fin, pas l'avancement** : `BytesDownloaded`
+  et `BytesStaged` restent à 0 pendant tout le téléchargement.
+- La taille du dossier, rapportée à `BytesToStage`, suit l'avancement que
+  l'outil imprime, à un point et demi près (relevé suivant).
+- Après le démarrage du serveur, le dossier pèse 9,24 Go : plus que
+  `BytesToStage`.
+
+### Ce que la sortie du conteneur dit
+
+L'outil de téléchargement imprime, toutes les deux secondes environ :
+
+```
+Update state (0x61) downloading, progress: 36.46 (3212988231 / 8811579458)
+```
+
+Sur un démarrage qui réussit, la même sortie porte aussi :
+
+- `ERROR! Failed to install app '2278520' (Missing configuration)`, 27 s après
+  le lancement, avant que l'outil recommence et aboutisse ;
+- `Update state (0x3) reconfiguring, progress: 0.00 (0 / 0)` avant le
+  téléchargement ;
+- trois lignes `Update state (0x81) verifying update` puis
+  `Update state (0x0) unknown, progress: 0.00 (0 / 0)` après lui ;
+- `Success! App '2278520' fully installed.`, puis `enshrouded-server: started`
+  onze secondes plus tard ;
+- `[game_server] Switching state from Load to LoadEcsScene`, puis `... to Run`,
+  quatorze secondes après `started`.
+
+### Suivre la sortie d'un conteneur qui redémarre
+
+Commande : `bash probe/setup-progress/follow-across-restarts.sh <dossier de sortie>`
+
+Un conteneur `alpine` sous `restart: unless-stopped` écrit deux lignes et sort
+en erreur toutes les quatre secondes. Il a redémarré sept fois en quarante
+secondes.
+
+| Façon de suivre | Ce qu'elle recopie | Quand elle s'arrête |
+|---|---|---|
+| `docker logs -f <conteneur>` lancé avant que le conteneur existe | `No such container` | aussitôt, code 1 |
+| `docker logs -f <conteneur>` | le premier démarrage seulement | au premier arrêt du conteneur, code 0 |
+| `docker compose logs -f --no-color --no-log-prefix <service>` | tous les démarrages, avec `<conteneur> exited with code 1 (restarting)` entre chacun | jamais d'elle-même, y compris après `docker compose down` |
+
+Avec `--no-color`, la ligne `exited with code` reste précédée de la séquence
+d'effacement de ligne `ESC [K`.
+
+La seconde partie du script suit le vrai conteneur du jeu par `docker logs -f`,
+depuis un conteneur qui tient le socket, vers un fichier d'un volume qu'un
+troisième conteneur lit sans socket :
+
+- le fichier est identique à ce que `docker logs` rend, sur 677 lignes ;
+- une ligne d'avancement s'y lit moins de deux secondes après son horodatage,
+  deux secondes étant le pas du relevé ;
+- le fichier pèse 76 Ko du lancement au serveur démarré ;
+- l'avancement imprimé et la taille du dossier rapportée à 8 811 579 458 octets :
+
+| Heure | Imprimé | Taille du dossier |
+|---|---|---|
+| 23:03:58 | 16,5 % | 18,1 % |
+| 23:04:18 | 36,9 % | 38,4 % |
+| 23:04:38 | 57,9 % | 59,4 % |
+| 23:04:58 | 77,8 % | 79,2 % |
+| 23:05:19 | 96,9 % | 98,0 % |
+
+### Suivre le vrai jeu par l'outil de composition
+
+Commande : `bash probe/setup-progress/game-log-follow.sh <dossier de sortie>`
+
+Le jeu est un service d'un projet Compose, comme sur un serveur de jeu. Un
+conteneur qui tient le socket lance
+`docker compose logs -f --no-color --no-log-prefix game` vers un fichier, qu'un
+autre conteneur lit sans socket.
+
+- **Lancée avant que le conteneur existe**, la commande rend la main aussitôt,
+  sans rien écrire, avec le code 0.
+- Lancée après `docker compose up -d`, elle écrit un fichier identique à
+  `docker logs`, sur 267 lignes au serveur démarré.
+- 91 relevés sur 91 lisent une ligne d'avancement dans le fichier pendant le
+  téléchargement.
+- Après `docker restart` du conteneur du jeu, la commande continue : le fichier
+  passe de 267 à 1 503 lignes en 45 s, et elle tourne toujours.
+
+### Sonder un jeu qui n'écoute pas encore
+
+Commande : `bash probe/setup-progress/udp-refusal.sh`
+
+L'agent sonde le jeu avant chaque rapport, et cette sonde a un délai de 30 s.
+Pendant un téléchargement, le conteneur du jeu existe et rien n'y écoute.
+
+Un paquet UDP envoyé depuis un socket connecté vers un conteneur du même réseau
+qui n'écoute sur rien revient en erreur `ECONNREFUSED` après **15 ms**. La sonde
+de l'agent (`deploy/companion/src/lib/a2s.ts`) connecte son socket et rend
+« pas prêt » sur une erreur : elle ne retient donc pas un tour de boucle tant
+que le jeu n'écoute pas.
+
+Non mesuré : un serveur qui écoute déjà sans répondre encore.
+
+### Ce qui n'est pas mesuré
+
+- Rien de cette section n'a tourné sur un serveur de jeu : ni l'unité qui
+  lancerait le suivi, ni son ordre avec `docker compose up -d` dans le
+  cloud-init, ni les durées.
+- La taille du fichier sur une session entière.
+- La sortie du conteneur de l'autre jeu pendant son démarrage.
+- La durée du téléchargement et celle de la décompression de l'archive d'un jeu
+  déposé, prises séparément. La section B ne donne que leur somme, environ trois
+  minutes sur `PLAY2-MICRO`.

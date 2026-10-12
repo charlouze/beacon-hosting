@@ -38,5 +38,7 @@ finish review, the verdict, DESIGN.md, and every shipping raster carrying its
 provenance
 ```
 
-Signature de mouvement : la seconde qui tombe est la seule animation de la page.
-Rien d'autre ne bouge, hors transitions d'etat.
+Mouvement : il est permis et il reste sobre. Ce qui bouge dit quelque chose — la
+seconde qui tombe, une longueur qui passe pendant une attente sans avancement —
+et rien ne bouge pour decorer. Tout mouvement s'arrete pour qui a demande moins
+de mouvement a son systeme.

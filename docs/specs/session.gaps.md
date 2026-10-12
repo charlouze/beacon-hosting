@@ -142,7 +142,7 @@ ci-dessous sont établis par lecture.
 - **Opening a session** — la fourchette de disponibilité n'existe que dans la
   mise en forme de l'écran, qui la calcule depuis le début de la mise en place.
   Le cœur de décision ne la porte pas, et le glossaire la lie donc à un nom
-  d'affichage.
+  d'affichage. reserved by batch-03
 
 - **Joining** — quand une partie du point de jonction ne peut pas être publiée,
   la session continue et l'écran montre ce qui reste. Aucune règle ne dit si

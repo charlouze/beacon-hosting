@@ -79,14 +79,29 @@ Elles valent pour toute la suite du projet, pas seulement pour cet écran.
 1. **Rien de sombre.** Aucune surface sombre, nulle part.
 2. **Jamais une console cloud** : ni pastille de statut, ni identifiant
    d'instance mis en avant, ni jargon d'infrastructure.
-3. **Pendant l'attente de démarrage, l'interface libère** : elle annonce
-   l'heure de disponibilité et rend l'utilisateur à sa soirée. La durée de cette
-   attente n'est pas mesurée — l'estimation de quatre minutes précède le
-   changement d'hébergeur du 2026-09-03 et n'a jamais rencontré une vraie
-   session. La contrainte porte sur le comportement, pas sur le nombre.
+3. **Pendant l'attente de démarrage, l'interface libère** : elle dit où en est
+   la mise en place et rend l'utilisateur à sa soirée. Elle montre l'étape en
+   cours et son avancement quand il se mesure, jamais un avancement qu'aucune
+   mesure ne porte, et elle garde la phrase qui rend la soirée. Récrite le
+   2026-10-12, voir plus bas.
 4. **Le coût ne se compare jamais** au tarif du serveur dédié précédent, et
    aucune économie réalisée n'est affichée.
 5. **L'état mène**, les actions disponibles découlent de l'état lu.
+
+## Mise à jour du 2026-10-12 — la contrainte n° 3 est rouverte
+
+Sciemment, par le commanditaire, et la trace du tour est dans
+[`../progress/`](../progress/README.md). Elle interdisait à l'écran de démarrage
+toute barre, toute étape et tout pourcentage. Elle protégeait trois choses :
+
+- **La soirée.** L'écran ne retient personne. **Gardé** : la phrase qui libère
+  reste, et c'est tout ce que la contrainte exige encore du comportement.
+- **Une précision qu'on n'avait pas.** Rien ne mesurait la mise en place, donc
+  une barre aurait menti. **Levé** : l'étape vient de la machine et l'avancement
+  d'un compte d'octets. Ce qui reste interdit est l'avancement inventé.
+- **L'immobilité.** **Levé** : une étape sans avancement porte une longueur qui
+  passe. La règle de mouvement du contrat de direction est récrite en
+  conséquence.
 
 ## Une erreur de méthode, notée pour ne pas la refaire
 

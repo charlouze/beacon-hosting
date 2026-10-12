@@ -1,0 +1,70 @@
+﻿<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — maquettes de l'attente qui dit où elle en est</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { color-scheme:light; }
+  body {
+    background:#e7e4dc; color:#16181b;
+    font:16px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:48px 26px 80px;
+  }
+  ::selection { background:rgba(216,35,42,.2); color:#16181b; }
+  :focus-visible { outline:2px solid #12457f; outline-offset:2px; }
+  .wrap { max-width:760px; margin:0 auto; }
+  h1 { font-size:15px; font-weight:800; letter-spacing:.28em; text-transform:uppercase; }
+  h1 span { font-weight:500; color:#6b6f75; letter-spacing:.02em; text-transform:none; }
+  h2 { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.24em; text-transform:uppercase; color:#16181b; margin:34px 0 12px; }
+  .rule { border-top:4px solid #16181b; margin:20px 0 0; }
+  .intro { padding:24px 0 8px; max-width:62ch; color:#4d4a44; font-size:15px; }
+  .intro b { color:#16181b; }
+  ul.files { list-style:none; }
+  ul.files li a {
+    display:flex; align-items:baseline; gap:18px; padding:20px 2px;
+    border-bottom:1px solid rgba(22,24,27,.18); text-decoration:none; color:inherit;
+  }
+  ul.files li:first-child a { border-top:1px solid rgba(22,24,27,.18); }
+  ul.files li a:hover { background:rgba(18,69,127,.05); }
+  ul.files li a .n { font:800 22px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; width:36px; flex:none; color:#12457f; }
+  ul.files li a .t { flex:1; }
+  ul.files li a .t b { display:block; font-size:17px; font-weight:700; }
+  ul.files li a .t span { display:block; font-size:14px; color:#6b6f75; margin-top:4px; }
+  ul.files li a .go { font:700 11px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.2em; text-transform:uppercase; color:#d8232a; }
+  ol.ask { max-width:62ch; color:#4d4a44; font-size:15px; padding-left:20px; }
+  ol.ask li + li { margin-top:10px; }
+  ol.ask b { color:#16181b; }
+</style>
+<div class="wrap">
+  <h1>Maquettes <span>— l'attente qui dit où elle en est</span></h1>
+  <div class="rule"></div>
+
+  <p class="intro">Le monde visuel ne rejoue pas : <b>The Departure Board</b>. Ce tour rouvre la
+  contrainte n° 3, qui interdisait à l'écran de démarrage toute barre, toute étape et tout
+  pourcentage, et propose trois façons de dire où en est la mise en place sans retenir personne
+  devant l'écran.</p>
+
+  <h2>Les planches</h2>
+  <ul class="files">
+    <li><a href="desktop.html"><span class="n">01</span><span class="t"><b>Écran large — 1440 px</b><span>Les trois variantes, chacune avec et sans heure à annoncer, puis l'écran après un échec.</span></span><span class="go">Ouvrir</span></a></li>
+    <li><a href="phone.html"><span class="n">02</span><span class="t"><b>Téléphone — 390 px</b><span>Les trois mêmes, avec l'autre ordre d'étapes, et l'écran après un échec.</span></span><span class="go">Ouvrir</span></a></li>
+  </ul>
+
+  <h2>Tranché le 2026-10-12</h2>
+  <ol class="ask">
+    <li><b>La variante C est retenue</b> : l'étape à la place d'honneur et le filet qui se remplit.
+    A et B restent sur les planches, comme trace de ce qui a été écarté.</li>
+    <li><b>Une étape sans avancement porte une longueur qui passe</b>, et non une longueur
+    immobile. La règle « la seconde qui tombe est la seule animation de la page » tombe avec ce
+    choix : le mouvement est permis, il reste sobre.</li>
+  </ol>
+
+  <h2>Ce qui reste à valider</h2>
+  <ol class="ask">
+    <li><b>Les mots des quatre étapes</b> : « Waking the server », « Getting the game », « Bringing
+    your world back », « Starting the game ».</li>
+    <li><b>La phrase qui libère</b> : « Nothing to watch here. » devient « No need to stay. », puisqu'il
+    y a désormais quelque chose à regarder. La phrase « Five to eight minutes is what it has taken so
+    far » disparaît : la fourchette vient maintenant des lancements réels.</li>
+    <li><b>L'écran sans heure à annoncer</b> : tranché le 2026-10-12, la ligne de la fourchette
+    disparaît tant que le jeu n'a pas démarré deux fois, et rien ne la remplace.</li>
+  </ol>
+</div>
