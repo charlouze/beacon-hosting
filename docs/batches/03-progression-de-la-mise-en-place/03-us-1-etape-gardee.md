@@ -1857,4 +1857,22 @@ Un commit qui touche `libs/session` ou `libs/agent-protocol` après le tag deman
 
 ## Rulings log
 
+Ruling: la tâche 7 donne aussi `setupChanged` et `discarded` au journal que construit `apps/functions/src/platform-journal.spec.ts` — le typecheck que la tâche lance échoue sans cela, et le plan ne nommait pas ce fichier — si c'est faux, un double de test porte deux méthodes qui ne servent pas.
+
+Ruling: `apps/functions/src/immediate-pass.spec.ts` reçoit `setups` dans le commit qui rend ce champ obligatoire dans `ProvisionDeps` — ce commit ne passe pas le typecheck seul sans cela, et le plan ne nommait pas ce fichier pour la tâche 6 — si c'est faux, un test d'intégration construit un magasin dont il ne lit rien.
+
+Ruling: un test de `agent-report.spec.ts` fixe que l'étape déclarée est gardée avant que le rapport `ready` mette la session en service — la revue de la branche a relevé qu'aucun test ne tenait cet ordre, et le magasin refuse une session qui n'est plus en préparation — si c'est faux, un test de plus contraint l'ordre de deux appels.
+
+Ruling: le test `drops the activity and the progress of the step it leaves` de `libs/session/src/lib/setup.spec.ts` garde son titre — la revue le juge trop fort, puisque le code prend l'activité et l'avancement déclarés, et le changer récrit le premier commit de code pour une formulation — si c'est faux, un titre de test dit « abandonne » là où le code dit « prend ce qui est déclaré ».
+
+Ruling: l'image du compagnon est épinglée à la fin de la revue et non dans une tâche — épingler plus tôt demande une image republiée à chaque correction qui touche `libs/session` ou `libs/agent-protocol` — si c'est faux, la pull request reste rouge sur `companion:test` pendant toute la revue.
+
+Technical design ruling: un échec du magasin pendant qu'il avance est attrapé dans `agentReport` et écrit au journal de la plateforme sous la source `agentReport.setup` — le design ne nomme une source que pour l'échec de commencer, et sans cela une panne d'écriture d'affichage ferait échouer un rapport `ready` — si c'est faux, une panne du magasin ne se lit que dans le journal de la plateforme et l'écran reste sur la dernière étape gardée.
+
+Technical design ruling: `SETUP_ACTIVITIES` vaut `downloading` et `unpacking` — le design demande une liste fermée sans la donner, et ce sont les deux activités que la restauration nomme — si c'est faux, la story qui fait déclarer les étapes au compagnon change la liste, donc l'image du compagnon.
+
+Technical design ruling: `runAgentReport` reçoit les champs écartés dans un quatrième paramètre, vide par défaut — le défaut épargne la récriture des appels des tests existants — si c'est faux, un appelant qui oublie le paramètre n'écrit aucun champ écarté au journal, sans erreur de compilation.
+
 ## Observed drift
+
+Aucune.
