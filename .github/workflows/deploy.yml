@@ -20,8 +20,13 @@ on:
     # tourner sur toute pull request, y compris documentaire. Un dépôt qui
     # cesserait de vérifier un lot parce qu'il a l'air inoffensif est un dépôt
     # qui découvre ses liens le jour où l'un d'eux casse.
+    #
+    # Les sondes et les maquettes sont dans le même cas : rien de ce qui se
+    # publie ne les importe.
     paths-ignore:
       - '**.md'
+      - 'probe/**'
+      - '.impeccable/**'
 
 concurrency:
   group: deploy
