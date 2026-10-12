@@ -60,14 +60,32 @@ Le tour des mondes (`.impeccable/mocks/worlds/`, planches E à H) ajoute à cet
 - **Les petits boutons passent à 11 px**, `Copy` compris : 10 px est sous le
   plancher de lisibilité du texte fonctionnel.
 
+## Mise à jour du 2026-10-12 — l'attente dit où elle en est
+
+Le tour de l'attente (`.impeccable/mocks/progress/`) récrit l'écran de
+démarrage, sans toucher au monde visuel :
+
+- **L'étape prend la place d'honneur**, en chiffres de tableau : son rang sur
+  quatre, son nom, son avancement quand il se mesure, son heure de début. La
+  fourchette de disponibilité passe à droite avec l'heure de fermeture.
+- **Le filet sous le bandeau se coupe en quatre longueurs** : parcourue, en
+  cours jusqu'où le jeu est arrivé, à venir. Une étape sans avancement porte une
+  courte longueur d'encre qui la traverse.
+- **Quatre étapes, les mêmes pour tout jeu**, dans l'ordre que le jeu déclare.
+- **Sans heure à annoncer**, la ligne de la fourchette disparaît et rien ne la
+  remplace.
+- **Après un échec**, l'écran hors service nomme l'étape et l'heure. Aucun texte
+  venu de la machine n'y arrive.
+- **La phrase qui libère reste**, et ne dit plus qu'il n'y a rien à regarder.
+
 ## Contraintes du commanditaire
 
 - **Rien de sombre.** Contrainte ferme, sur toute la surface.
 - **Jamais une console cloud** : ni pastille de statut, ni identifiant
   d'instance mis en avant, ni jargon d'infrastructure.
-- **Pendant l'attente de démarrage, l'interface libère** : elle annonce
-  l'heure de disponibilité et rend l'utilisateur à sa soirée. Elle ne cherche
-  jamais à retenir ni à occuper l'attente.
+- **Pendant l'attente de démarrage, l'interface libère** : elle dit où en est
+  la mise en place et rend l'utilisateur à sa soirée. Elle ne montre jamais un
+  avancement qu'aucune mesure ne porte, et ne cherche jamais à retenir.
 - **Le coût ne se compare jamais** au tarif du serveur dédié précédent, et
   aucune économie réalisée n'est affichée.
 

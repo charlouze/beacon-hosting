@@ -1,0 +1,581 @@
+﻿<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — the wait that says where it is, 1440 px</title>
+<style>
+  :root {
+    --paper:#faf8f3; --ink:#16181b; --red:#d8232a; --blue:#12457f;
+    --rule:rgba(22,24,27,.18); --mute:#6b6f75; --held:#8d8a82;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:#e7e4dc; color:var(--ink);
+    font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:0 0 72px;
+  }
+  ::selection { background:rgba(216,35,42,.2); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
+  .note { max-width:900px; margin:0 auto; padding:28px 24px 4px; font-size:14px; color:#4d4a44; }
+  .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:var(--ink); }
+  .note h2 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin:22px 0 8px; color:var(--ink); }
+  .note p, .note li { max-width:70ch; }
+  .note p + p { margin-top:10px; }
+  .note ul { margin-top:8px; padding-left:18px; }
+  .note li + li { margin-top:6px; }
+  .stage { max-width:1180px; margin:0 auto; padding:20px 24px; }
+  .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin:40px 0 10px; }
+  .label b { color:var(--ink); font-weight:700; }
+  .ask { font-size:13px; color:#4d4a44; max-width:70ch; margin:-2px 0 12px; }
+  code { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12.5px; color:var(--ink); }
+
+  .fit { position:relative; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.14), 0 18px 44px rgba(0,0,0,.16); }
+  .art { width:1440px; transform-origin:0 0; background:var(--paper); }
+
+  /* ---------------- the board, as the states round left it ---------------- */
+  .board { padding:40px 64px 36px; display:flex; flex-direction:column; min-height:820px; }
+  .mid { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .lede { display:flex; align-items:baseline; justify-content:space-between; }
+  .wordmark { font-size:15px; font-weight:800; letter-spacing:.3em; text-transform:uppercase; }
+  .wordmark span { font-weight:500; color:var(--mute); }
+  .status { display:flex; align-items:center; gap:9px; font-size:12px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; }
+  .status .dot { width:10px; height:10px; border-radius:50%; background:var(--red); }
+  .status.off { color:var(--mute); }
+  .status.off .dot { background:#b6b2a8; }
+
+  .rule { border-top:4px solid var(--ink); margin-top:22px; }
+  .rule.thin { border-top-width:1px; border-color:var(--rule); }
+  .k { font-size:11px; font-weight:700; letter-spacing:.24em; text-transform:uppercase; color:var(--mute); display:block; }
+  .k.red { color:var(--red); }
+  .k.ink { color:var(--ink); }
+
+  .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:60px; padding:40px 0 44px; }
+  .clock {
+    font:800 172px/0.82 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-variant-numeric:tabular-nums; letter-spacing:-.045em; margin-top:16px;
+  }
+  .clock.range { font-size:112px; letter-spacing:-.035em; }
+  .clock.range .to, .clock .of { color:var(--mute); }
+  .hero .right { text-align:right; display:flex; flex-direction:column; gap:22px; padding-bottom:12px; }
+  .hero .right .v { font:700 34px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:8px; }
+  .hero .right .v.sm { font-size:19px; font-weight:600; }
+  .hero .right .v .to { color:var(--mute); }
+  .hero .right .v.none { font-size:19px; font-weight:600; color:var(--mute); }
+
+  .foot { display:flex; align-items:flex-end; justify-content:space-between; gap:40px; padding-top:26px; margin-top:auto; }
+  .money { display:flex; gap:56px; }
+  .money .v { font:700 26px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:10px; }
+  .acts { display:flex; gap:14px; align-items:flex-end; }
+  .btncol { display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+  .btn {
+    padding:22px 40px; border:2px solid var(--ink); background:var(--ink); color:var(--paper);
+    font:700 14px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.18em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn.ghost { background:transparent; color:var(--ink); }
+  .btn.xl { padding:26px 54px; font-size:15px; }
+  .hint { font-size:13px; color:var(--mute); }
+
+  .empty { padding:52px 0 46px; display:flex; justify-content:space-between; align-items:flex-start; gap:80px; }
+  .empty .big { font:800 60px/1.02 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.035em; max-width:20ch; }
+  .empty .sub { margin-top:22px; font-size:19px; color:var(--mute); max-width:40ch; line-height:1.5; }
+  .plate { border:1px solid var(--rule); background:rgba(18,69,127,.045); padding:26px 30px; min-width:400px; }
+  .plate .line { display:flex; justify-content:space-between; align-items:baseline; gap:24px; padding:11px 0; }
+  .plate .line + .line { border-top:1px solid var(--rule); }
+  .plate .v { font:700 20px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+  .warn { border-top:3px solid var(--red); padding:18px 0 0; margin-top:34px; }
+  .warn .said { font-size:20px; margin-top:12px; max-width:62ch; }
+  .warn .said b { font-weight:700; }
+
+  .release { padding:16px 0 40px; display:flex; justify-content:space-between; align-items:flex-start; gap:80px; }
+  .release .big { font:800 44px/1.08 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.025em; max-width:16ch; }
+  .release .sub { font-size:19px; color:var(--mute); max-width:44ch; line-height:1.55; padding-top:6px; }
+
+  /* when no time can be announced: a sentence where the window was */
+  .unknown { font:800 60px/1.02 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.035em; margin-top:16px; max-width:16ch; }
+  .unknown + .why { font-size:17px; color:var(--mute); margin-top:14px; max-width:46ch; }
+
+  /* ---------------- A · one announced line ---------------- */
+  .now { padding:30px 0 30px; }
+  .now .row { display:flex; align-items:baseline; gap:26px; margin-top:12px; }
+  .now .name { font:800 44px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.025em; flex:1; }
+  .now .pct { font:800 44px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .now .since { font-size:15px; color:var(--mute); font-variant-numeric:tabular-nums; min-width:12ch; text-align:right; }
+
+  /* ---------------- B · the calling points ---------------- */
+  .twocol { display:grid; grid-template-columns:1.35fr 1fr; gap:88px; align-items:start; padding:30px 0 34px; }
+  .points { display:grid; grid-template-columns:62px 1fr auto 9ch; }
+  .points > div { display:contents; }
+  .points span { padding:15px 0; border-top:1px solid var(--rule); font-size:20px; font-variant-numeric:tabular-nums; align-self:stretch; display:flex; align-items:baseline; }
+  .points .head span { border-top:0; padding:0 0 10px; font-size:11px; font-weight:700; letter-spacing:.24em; text-transform:uppercase; color:var(--mute); }
+  .points span:nth-child(3), .points span:nth-child(4) { justify-content:flex-end; }
+  .points span:nth-child(4) { padding-left:22px; }
+  .points .done span { color:var(--mute); }
+  .points .cur span { font-weight:800; font-size:30px; letter-spacing:-.02em; padding:17px 0 15px; border-top:3px solid var(--ink); }
+  .points .cur + div span { border-top:3px solid var(--ink); }
+  .points .todo span { color:var(--mute); }
+  .aside .big { font:800 30px/1.1 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.02em; }
+  .aside .sub { font-size:17px; color:var(--mute); line-height:1.55; margin-top:14px; max-width:38ch; }
+
+  /* ---------------- C · the step leads, and the rule fills ---------------- */
+  .stephero { display:flex; align-items:flex-end; gap:48px; }
+  .stephero .what { padding-bottom:6px; }
+  .stephero .name { font:800 52px/1.02 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.03em; max-width:16ch; }
+  .stephero .meta { font-size:19px; color:var(--mute); margin-top:16px; font-variant-numeric:tabular-nums; }
+  .stephero .meta b { color:var(--ink); font-weight:800; font-size:26px; letter-spacing:-.01em; margin-right:14px; }
+  /* The world's own rule, in four lengths. A length already travelled is ink,
+     the one under way is ink as far as the game has got, the rest is the hairline. */
+  .track { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .track > div { padding-bottom:0; }
+  .track i { display:block; height:4px; background:linear-gradient(var(--rule),var(--rule)) left bottom/100% 1px no-repeat; }
+  .track .done i { background:var(--ink); }
+  .track .cur i { background:linear-gradient(to right, var(--ink) var(--at,0%), var(--held) var(--at,0%)); }
+  .track .k { margin-top:12px; }
+  .track .done .k, .track .cur .k { color:var(--ink); }
+  .track .todo .k { font-weight:600; }
+
+  /* A step that has no figure to give: a short ink length crosses the one under
+     way, and nothing else on the page moves. Still for whoever asked for stillness. */
+  .track .cur.wait i { background:var(--held); position:relative; overflow:hidden; }
+  .track .cur.wait i::after {
+    content:""; position:absolute; inset:0 auto 0 0; width:28%; background:var(--ink);
+    animation:pass 2.4s cubic-bezier(.45,0,.55,1) infinite;
+  }
+  @keyframes pass { from { transform:translateX(-100%); } to { transform:translateX(358%); } }
+  @media (prefers-reduced-motion: reduce) { .track .cur.wait i::after { display:none; } }
+
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .pair > div { background:var(--paper); padding:26px 30px 30px; box-shadow:0 1px 2px rgba(0,0,0,.12), 0 8px 20px rgba(0,0,0,.10); }
+  .pair .cap { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--mute); margin-bottom:22px; }
+  .pair .track .k { letter-spacing:.18em; }
+</style>
+
+<div class="note">
+  <h1>Beacon — l'attente qui dit où elle en est, 1440 px</h1>
+  <p>Le monde visuel ne bouge pas : The Departure Board. Ce tour rouvre sciemment la contrainte n° 3,
+  qui interdisait à l'écran de démarrage toute barre, toute étape et tout pourcentage.</p>
+
+  <h2>Ce que la contrainte protégeait, et ce qui en reste</h2>
+  <ul>
+    <li><b>Elle protégeait la soirée.</b> L'écran annonce une heure et rend le joueur à ce qu'il
+    faisait ; il ne cherche jamais à le retenir. <b>Gardé</b>, dans les trois variantes : la phrase qui
+    libère reste, et le bouton ne change pas.</li>
+    <li><b>Elle protégeait d'une précision inventée.</b> À l'époque rien ne mesurait la mise en place,
+    une barre aurait menti. <b>Levé</b> : l'étape vient maintenant de la machine, et l'avancement d'un
+    compte d'octets.</li>
+    <li><b>Elle protégeait l'immobilité.</b> La seule animation de la page est la seconde qui tombe.
+    <b>Gardé</b> : une étape change quand la machine le dit, d'un coup, sans transition. Rien ne
+    tourne, rien ne pulse, aucune barre ne glisse.</li>
+  </ul>
+
+  <h2>Ce que montrent les planches</h2>
+  <ul>
+    <li>Les trois variantes dans le même instant : étape 2 sur 4, le jeu récupéré à 37 %, commencée
+    à 20:16, une fourchette connue.</li>
+    <li>Les trois mêmes quand <b>aucune heure ne peut être annoncée</b> (le jeu a démarré moins de deux
+    fois) et que l'étape en cours n'a pas d'avancement. C'est là qu'elles se séparent le plus.</li>
+    <li>L'écran après un échec déclaré par la machine, commun aux trois.</li>
+  </ul>
+  <p>Une étape qui traîne n'a pas d'état à elle : « since 20:16 » la dit déjà, sans jugement. Les
+  quatre étapes sont les mêmes pour tout jeu, dans l'ordre que le jeu déclare ; cette planche montre un
+  ordre, la planche téléphone montre l'autre.</p>
+</div>
+
+<div class="stage">
+
+  <!-- ============================== A ============================== -->
+  <div class="label">A · <b>Une ligne annoncée</b></div>
+  <p class="ask">La fourchette garde la place d'honneur. L'étape est une ligne de tableau sous elle :
+  son rang, son nom, son avancement, son heure de début. C'est la variante la plus proche de l'écran
+  actuel. On ne voit que l'étape en cours, jamais celles qui restent.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div>
+          <span class="k">Ready between</span>
+          <div class="clock range">20:19<span class="to"> – </span>20:22</div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+          <div><span class="k">Opened at</span><div class="v sm">20:14</div></div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="now">
+        <span class="k">Step 2 of 4</span>
+        <div class="row">
+          <div class="name">Getting the game</div>
+          <div class="pct">37 %</div>
+          <div class="since">since 20:16</div>
+        </div>
+      </div>
+      <div class="rule thin" style="margin-top:0"></div>
+
+      <div class="mid">
+        <div class="release">
+          <div class="big">No need to stay.</div>
+          <div class="sub">Close the tab and go back to your evening. The server will be up, and it will
+          close itself at 00:14 whether anyone comes back to this page or not.</div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">A · sans heure à annoncer, étape sans avancement</div>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div>
+          <span class="k">Ready at</span>
+          <div class="unknown">Too early to say.</div>
+          <div class="why">This game has not started here twice yet. After that, this board announces a time.</div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+          <div><span class="k">Opened at</span><div class="v sm">20:14</div></div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="now">
+        <span class="k">Step 1 of 4</span>
+        <div class="row">
+          <div class="name">Waking the server</div>
+          <div class="since">since 20:14</div>
+        </div>
+      </div>
+      <div class="rule thin" style="margin-top:0"></div>
+
+      <div class="mid">
+        <div class="release">
+          <div class="big">No need to stay.</div>
+          <div class="sub">Close the tab and go back to your evening. The server will be up, and it will
+          close itself at 00:14 whether anyone comes back to this page or not.</div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ============================== B ============================== -->
+  <div class="label">B · <b>Les arrêts desservis</b></div>
+  <p class="ask">La fourchette garde la place d'honneur. Dessous, les quatre étapes se lisent comme la
+  liste des arrêts d'un train : celles qui sont passées portent leur heure, celle en cours son
+  avancement, les autres attendent. C'est la seule variante qui montre ce qui reste et ce qui a déjà
+  eu lieu. Elle est aussi la plus dense.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div>
+          <span class="k">Ready between</span>
+          <div class="clock range">20:19<span class="to"> – </span>20:22</div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+          <div><span class="k">Opened at</span><div class="v sm">20:14</div></div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="mid">
+        <div class="twocol">
+          <div class="points">
+            <div class="head"><span>Step</span><span></span><span></span><span>Since</span></div>
+            <div class="done"><span>1</span><span>Waking the server</span><span></span><span>20:14</span></div>
+            <div class="cur"><span>2</span><span>Getting the game</span><span>37 %</span><span>20:16</span></div>
+            <div class="todo"><span>3</span><span>Bringing your world back</span><span></span><span></span></div>
+            <div class="todo"><span>4</span><span>Starting the game</span><span></span><span></span></div>
+          </div>
+          <div class="aside">
+            <div class="big">No need to stay.</div>
+            <div class="sub">Close the tab and go back to your evening. The server will be up, and it
+            will close itself at 00:14 whether anyone comes back to this page or not.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">B · sans heure à annoncer, étape sans avancement</div>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div>
+          <span class="k">Ready at</span>
+          <div class="unknown">Too early to say.</div>
+          <div class="why">This game has not started here twice yet. After that, this board announces a time.</div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+          <div><span class="k">Opened at</span><div class="v sm">20:14</div></div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="mid">
+        <div class="twocol">
+          <div class="points">
+            <div class="head"><span>Step</span><span></span><span></span><span>Since</span></div>
+            <div class="cur"><span>1</span><span>Waking the server</span><span></span><span>20:14</span></div>
+            <div class="todo"><span>2</span><span>Getting the game</span><span></span><span></span></div>
+            <div class="todo"><span>3</span><span>Bringing your world back</span><span></span><span></span></div>
+            <div class="todo"><span>4</span><span>Starting the game</span><span></span><span></span></div>
+          </div>
+          <div class="aside">
+            <div class="big">No need to stay.</div>
+            <div class="sub">Close the tab and go back to your evening. The server will be up, and it
+            will close itself at 00:14 whether anyone comes back to this page or not.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ============================== C ============================== -->
+  <div class="label">C · <b>L'étape mène, et le filet se remplit</b></div>
+  <p class="ask">L'étape prend la place d'honneur, en chiffres de tableau, et la fourchette passe à
+  droite avec l'heure de fermeture. Le filet sous le bandeau se coupe en quatre longueurs : parcourue,
+  en cours jusqu'où le jeu est arrivé, à venir. C'est la variante qui tient le mieux quand aucune heure
+  n'est connue, puisque sa place d'honneur n'en dépend pas : la ligne de la fourchette disparaît, et rien ne la remplace. Elle est aussi celle qui s'éloigne le plus
+  de l'écran actuel, et la seule qui dessine un avancement au lieu de l'écrire.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div class="stephero">
+          <div>
+            <span class="k">Step</span>
+            <div class="clock">2<span class="of">/4</span></div>
+          </div>
+          <div class="what">
+            <div class="name">Getting the game</div>
+            <div class="meta"><b>37 %</b>Downloading · since 20:16</div>
+          </div>
+        </div>
+        <div class="right">
+          <div><span class="k">Ready between</span><div class="v">20:19<span class="to"> – </span>20:22</div></div>
+          <div><span class="k">Closes at</span><div class="v sm">00:14</div></div>
+        </div>
+      </div>
+
+      <div class="track" role="img" aria-label="Step 2 of 4, getting the game, 37 percent">
+        <div class="done"><i></i><span class="k">Waking the server</span></div>
+        <div class="cur"><i style="--at:37%"></i><span class="k">Getting the game</span></div>
+        <div class="todo"><i></i><span class="k">Bringing your world back</span></div>
+        <div class="todo"><i></i><span class="k">Starting the game</span></div>
+      </div>
+
+      <div class="mid">
+        <div class="release">
+          <div class="big">No need to stay.</div>
+          <div class="sub">Close the tab and go back to your evening. The server will be up, and it will
+          close itself at 00:14 whether anyone comes back to this page or not.</div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">C · sans heure à annoncer, étape sans avancement</div>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="hero">
+        <div class="stephero">
+          <div>
+            <span class="k">Step</span>
+            <div class="clock">1<span class="of">/4</span></div>
+          </div>
+          <div class="what">
+            <div class="name">Waking the server</div>
+            <div class="meta">since 20:14</div>
+          </div>
+        </div>
+        <div class="right">
+          <div><span class="k">Closes at</span><div class="v">00:14</div></div>
+        </div>
+      </div>
+
+      <div class="track" role="img" aria-label="Step 1 of 4, waking the server">
+        <div class="cur wait"><i></i><span class="k">Waking the server</span></div>
+        <div class="todo"><i></i><span class="k">Getting the game</span></div>
+        <div class="todo"><i></i><span class="k">Bringing your world back</span></div>
+        <div class="todo"><i></i><span class="k">Starting the game</span></div>
+      </div>
+
+      <div class="mid">
+        <div class="release">
+          <div class="big">No need to stay.</div>
+          <div class="sub">Close the tab and go back to your evening. The server will be up, and it will
+          close itself at 00:14 whether anyone comes back to this page or not.</div>
+        </div>
+      </div>
+
+      <div class="rule thin"></div>
+      <div class="foot">
+        <div class="money"><div><span class="k">This session</span><div class="v">€0.05</div></div></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn ghost">Close it now</div></div>
+          <div class="hint">The first hour is charged either way.</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="label">C · une étape sans avancement — <b>immobile, ou une longueur qui passe</b></div>
+  <p class="ask">À l'échelle réelle. À gauche, la longueur en cours est grise et ne bouge pas. À droite,
+  une courte longueur d'encre la traverse en boucle : c'est la barre indéterminée, dans le vocabulaire
+  du filet. Elle lève la dernière protection de la contrainte n° 3, et elle contredit la signature de
+  mouvement du contrat de direction (« la seconde qui tombe est la seule animation de la page »), qui
+  devra dire cette exception. Elle s'arrête pour qui a demandé moins de mouvement à son système.</p>
+  <div class="pair">
+    <div>
+      <div class="cap">Immobile</div>
+      <div class="track">
+        <div class="cur"><i></i><span class="k">Waking the server</span></div>
+        <div class="todo"><i></i><span class="k">Getting the game</span></div>
+        <div class="todo"><i></i><span class="k">Bringing your world back</span></div>
+        <div class="todo"><i></i><span class="k">Starting the game</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="cap">Une longueur qui passe</div>
+      <div class="track">
+        <div class="cur wait"><i></i><span class="k">Waking the server</span></div>
+        <div class="todo"><i></i><span class="k">Getting the game</span></div>
+        <div class="todo"><i></i><span class="k">Bringing your world back</span></div>
+        <div class="todo"><i></i><span class="k">Starting the game</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== failure ============================== -->
+  <div class="label">Après un échec déclaré par la machine — <b>commun aux trois variantes</b></div>
+  <p class="ask">La session s'arrête aussitôt et l'écran redevient celui d'un monde au repos, avec son
+  bouton. Il nomme l'étape où la mise en place s'est arrêtée et l'heure, rien d'autre : aucun texte de
+  la machine n'arrive ici. La cause entière est dans le journal de la plateforme.</p>
+  <div class="fit"><div class="art">
+    <div class="board">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Saltwater</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="rule"></div>
+
+      <div class="mid">
+        <div class="empty">
+          <div>
+            <div class="big">It didn’t start.</div>
+            <div class="sub">Nothing was left running, and nothing is costing anything. Press again; if it
+            stops at the same step twice, tell whoever runs this.</div>
+          </div>
+          <div class="plate">
+            <div class="line"><span class="k">Next session</span><span class="v">4 h · until 00:21</span></div>
+            <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+          </div>
+        </div>
+
+        <div class="warn">
+          <span class="k red">Where it stopped, at 20:19</span>
+          <div class="said"><b>Step 2 of 4</b> · Getting the game</div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="money"></div>
+        <div class="btncol">
+          <div class="acts"><div class="btn xl">Try again</div></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+</div>
+
+<script>
+  // Each artboard is 1440 px wide and scaled to the column it sits in.
+  const fit = () => document.querySelectorAll('.fit').forEach(box => {
+    const art = box.firstElementChild;
+    const scale = box.clientWidth / 1440;
+    art.style.transform = `scale(${scale})`;
+    box.style.height = `${art.offsetHeight * scale}px`;
+  });
+  addEventListener('resize', fit);
+  fit();
+</script>

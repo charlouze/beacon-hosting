@@ -8,7 +8,8 @@ donner de plus.
 ## Consequences
 
 Un serveur de jeu ne détient aucun identifiant de l'hébergeur, donc il ne peut
-pas se détruire lui-même.
+pas se détruire lui-même : il ne peut que déclarer un échec au système, qui
+décide de le fermer.
 
 La lecture seule du dépôt est tenue par une politique posée sur son seau, parce
 que les droits de l'hébergeur ne descendent pas sous le projet.
