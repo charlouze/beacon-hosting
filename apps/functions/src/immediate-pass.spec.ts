@@ -148,7 +148,7 @@ const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
     accessKey: 'SCWXXXXXXXXXXXXXXXXX',
     secretKey: 'probe',
   }),
-  journal: { failure: () => undefined },
+  journal: { failure: () => undefined, setupChanged: () => undefined, discarded: () => undefined },
 });
 
 const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({
@@ -160,5 +160,5 @@ const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({
   ledger: provisioningLedger(db),
   health: watchdogHealth(db),
   limits: DEFAULT_LIMITS,
-  journal: { failure: () => undefined },
+  journal: { failure: () => undefined, setupChanged: () => undefined, discarded: () => undefined },
 });

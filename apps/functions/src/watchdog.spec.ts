@@ -148,7 +148,11 @@ const deps = (): WatchdogDeps => ({
   health: watchdogHealth(db),
   settings: settingsStore(db),
   limits: DEFAULT_LIMITS,
-  journal: { failure: (entry) => journalled.push(entry) },
+  journal: {
+    failure: (entry) => journalled.push(entry),
+    setupChanged: () => undefined,
+    discarded: () => undefined,
+  },
 });
 
 const eventTypes = async () =>
@@ -199,7 +203,7 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
   },
   settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
   limits: DEFAULT_LIMITS,
-  journal: { failure: vi.fn() },
+  journal: { failure: vi.fn(), setupChanged: vi.fn(), discarded: vi.fn() },
 });
 
 describe('runWatchdog', () => {

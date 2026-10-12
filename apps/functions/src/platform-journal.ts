@@ -1,4 +1,4 @@
-import type { SessionId } from '@beacon/session';
+import type { Game, SessionId, SetupActivity, SetupStep, WorldId } from '@beacon/session';
 import { sanitizeLastError } from './sanitize-last-error.js';
 
 /** Where `apps/functions` received the failure it journals. */
@@ -11,7 +11,8 @@ export type FailureSource =
   | 'agentReport.dns'
   | 'agentReport.save'
   | 'agentReport.cleanup'
-  | 'agentReport.machine';
+  | 'agentReport.machine'
+  | 'agentReport.setup';
 
 export interface JournalledFailure {
   readonly source: FailureSource;
@@ -19,6 +20,23 @@ export interface JournalledFailure {
   readonly sessionId: SessionId | null;
   /** The failure as it was received: nothing bounded, nothing masked. */
   readonly error: string;
+}
+
+/** A setup that moved to another step, or to another activity inside its step. */
+export interface JournalledSetupChange {
+  readonly sessionId: SessionId;
+  readonly worldId: WorldId;
+  readonly game: Game;
+  readonly step: SetupStep;
+  readonly activity: SetupActivity | null;
+  /** The step that was left and the time spent in it. Null when only the activity moved. */
+  readonly left: { readonly step: SetupStep; readonly elapsedMs: number } | null;
+}
+
+/** The fields a report carried and the frontier discarded, by name and never by value. */
+export interface JournalledDiscard {
+  readonly sessionId: SessionId;
+  readonly fields: readonly string[];
 }
 
 /**
@@ -29,6 +47,8 @@ export interface JournalledFailure {
  */
 export interface PlatformJournal {
   failure(entry: JournalledFailure): void;
+  setupChanged(entry: JournalledSetupChange): void;
+  discarded(entry: JournalledDiscard): void;
 }
 
 /**

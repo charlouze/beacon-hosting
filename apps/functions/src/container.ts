@@ -53,6 +53,8 @@ export const GAMES_BUCKET: ReturnType<typeof defineString> = defineString('GAMES
 /** Cloud Logging, through the Functions logger: only the operator reads it. */
 const platformJournal: PlatformJournal = {
   failure: (entry) => logger.error(`${entry.source} failed`, entry),
+  setupChanged: (entry) => logger.info('setup changed', entry),
+  discarded: (entry) => logger.warn('report fields discarded', entry),
 };
 
 /**
@@ -171,6 +173,7 @@ export function buildAgentReportDeps(): AgentReportDeps {
     clock: shared.clock,
     tokens: agentTokens(db),
     states: worldStateStores(db),
+    setups: setupStores(db),
     settings: shared.settings,
     ledger: shared.ledger,
     saves: saveRecords(db),

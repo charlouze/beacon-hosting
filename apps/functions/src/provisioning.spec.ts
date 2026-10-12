@@ -101,7 +101,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
       read: vi.fn(async () => options.world ?? defaultWorld()),
       create: vi.fn(async () => undefined),
     },
-    journal: { failure: vi.fn() },
+    journal: { failure: vi.fn(), setupChanged: vi.fn(), discarded: vi.fn() },
   };
 };
 

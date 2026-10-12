@@ -121,7 +121,12 @@ export const agentReport = onRequest(
       return;
     }
 
-    const instructions = await runAgentReport(buildAgentReportDeps(), token, parsed.report);
+    const instructions = await runAgentReport(
+      buildAgentReportDeps(),
+      token,
+      parsed.report,
+      parsed.discarded,
+    );
     if (instructions === null) {
       // No body, and no reason. A 401 that explained itself would tell whoever
       // is probing which half of the credential they got right.

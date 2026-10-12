@@ -9,9 +9,17 @@ import {
   type ServerHost,
   type Session,
   type SessionId,
+  type SetupAdvance,
+  type SetupDeclaration,
   type WorldId,
 } from '@beacon/session';
-import type { ServerStateStore, SaveRecords, SettingsStore, WorldStateStores } from '@beacon/session-record';
+import type {
+  ServerStateStore,
+  SaveRecords,
+  SetupStores,
+  SettingsStore,
+  WorldStateStores,
+} from '@beacon/session-record';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { expunged, type PlatformJournal } from './platform-journal.js';
@@ -20,6 +28,7 @@ export interface AgentReportDeps {
   readonly clock: Clock;
   readonly tokens: AgentTokens;
   readonly states: WorldStateStores;
+  readonly setups: SetupStores;
   readonly settings: SettingsStore;
   readonly ledger: ProvisioningLedger;
   readonly saves: SaveRecords;
@@ -49,8 +58,15 @@ export async function runAgentReport(
   deps: AgentReportDeps,
   token: string,
   report: AgentReport,
+  discarded: readonly string[] = [],
 ): Promise<AgentInstructions | null> {
   if (!(await deps.tokens.verify(report.sessionId, token))) return null;
+
+  // After the token and never before: anyone can post a body, and the journal
+  // is not where an unauthenticated caller gets to write.
+  if (discarded.length > 0) {
+    deps.journal.discarded({ sessionId: report.sessionId, fields: discarded });
+  }
 
   // The world comes from the registry the function itself wrote when it
   // opened the session, never from the report (§7 holds the machine for the
@@ -68,6 +84,11 @@ export async function runAgentReport(
     return STAND_DOWN;
 
   const now = deps.clock.now();
+  // Before the phase is handled: a `ready` report leaves PROVISIONING, and the
+  // step it declares belongs to the setup it is ending.
+  if (report.setup !== undefined && session.state === 'PROVISIONING') {
+    await keepDeclaredSetup(deps, worldId, session, report.setup, now);
+  }
   if (report.phase === 'ready') await becomeRunning(deps, state, worldId, session, report, now);
   if (report.phase === 'saved') await recordSave(deps, state, worldId, session, report, now);
   if (report.phase === 'failed') await fileFailure(deps, state, session, report, now);
@@ -95,6 +116,47 @@ async function instructionsFor(
       .displayedDeadline(deps.clock, settings)
       .at.toISOString(),
   };
+}
+
+/**
+ * A change of step is not a change of state: it files no event, and the
+ * platform journal is the one place that keeps it. A progress that moves
+ * alone is kept nowhere but in the document the screen reads.
+ *
+ * The setup is only ever displayed, so a store that fails here must not cost
+ * the report its phase.
+ */
+async function keepDeclaredSetup(
+  deps: AgentReportDeps,
+  worldId: WorldId,
+  session: Session,
+  declared: SetupDeclaration,
+  now: Date,
+): Promise<void> {
+  const sessionId = session.sessionId;
+  const game = session.game;
+  if (sessionId === null || game === null) return;
+
+  let advance: SetupAdvance | null;
+  try {
+    advance = await deps.setups.for(worldId).advance(sessionId, declared, now);
+  } catch (error) {
+    deps.journal.failure({ source: 'agentReport.setup', sessionId, error: String(error) });
+    return;
+  }
+  if (advance === null || advance.changed === null || advance.changed === 'progress') return;
+
+  deps.journal.setupChanged({
+    sessionId,
+    worldId,
+    game,
+    step: advance.kept.step,
+    activity: advance.kept.activity,
+    left:
+      advance.left === null
+        ? null
+        : { step: advance.left.step, elapsedMs: now.getTime() - advance.left.since.getTime() },
+  });
 }
 
 /**

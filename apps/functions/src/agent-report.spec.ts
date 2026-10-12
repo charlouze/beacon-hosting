@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Deadline, DEFAULT_SETTINGS, Session, type Game, type WorldId } from '@beacon/session';
+import {
+  Deadline,
+  DEFAULT_SETTINGS,
+  Session,
+  type Game,
+  type SetupAdvance,
+  type WorldId,
+} from '@beacon/session';
 import { runAgentReport } from './agent-report.js';
 
 /**
@@ -91,6 +98,10 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
     read: vi.fn(async () => null),
     claimProvisioning: vi.fn(async () => false),
   };
+  const setup = {
+    begin: vi.fn(async () => undefined),
+    advance: vi.fn(async (): Promise<SetupAdvance | null> => null),
+  };
   return {
     clock: { now: () => NOW },
     tokens: {
@@ -98,6 +109,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
       verify: vi.fn(async () => true),
     },
     states: { for: vi.fn(() => store), all: vi.fn(async () => [WORLD]) },
+    setups: { for: vi.fn(() => setup) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -114,7 +126,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
     },
     saves: { record: vi.fn(async () => undefined) },
     dns: { point: vi.fn(async () => undefined) },
-    journal: { failure: vi.fn() },
+    journal: { failure: vi.fn(), setupChanged: vi.fn(), discarded: vi.fn() },
     host: {
       open: vi.fn(),
       close: vi.fn(async () => undefined),
@@ -122,6 +134,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
       sweepUnclaimed: vi.fn(async () => ({ destroyed: [], stranded: [], errors: [] })),
     },
     store,
+    setup,
   };
 };
 
@@ -138,6 +151,162 @@ beforeEach(() => {
 });
 
 describe('agentReport', () => {
+  describe('the setup a game server declares', () => {
+    const OPENED = new Date('2026-09-15T20:00:00Z');
+    const DECLARED = { step: 'fetching-game', activity: 'downloading', progress: 3 } as const;
+
+    const stepChanged: SetupAdvance = {
+      kept: { step: 'fetching-game', since: NOW, activity: 'downloading', progress: 3 },
+      changed: 'step',
+      left: { step: 'waking', since: OPENED },
+    };
+
+    it('advances the kept step of the world the session was opened on', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.setups.for).toHaveBeenCalledWith(WORLD);
+      expect(deps.setup.advance).toHaveBeenCalledWith('s1', DECLARED, NOW);
+    });
+
+    // The store refuses a session that is no longer preparing, so the last declaration must land first.
+    it('keeps the step a ready report declares before it leaves the preparation', async () => {
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'ready',
+        setup: { step: 'starting-game' },
+      });
+
+      expect(deps.setup.advance).toHaveBeenCalled();
+      expect(deps.store.publish).toHaveBeenCalled();
+      expect(deps.setup.advance.mock.invocationCallOrder[0]).toBeLessThan(
+        deps.store.publish.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('ignores the setup of a session that is no longer preparing', async () => {
+      deps = fakeDeps({ session: runningSession('s1') });
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.setup.advance).not.toHaveBeenCalled();
+    });
+
+    // The companion of before this protocol field declares nothing.
+    it('handles a report without a setup as it always did', async () => {
+      const instructions = await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(deps.setup.advance).not.toHaveBeenCalled();
+      expect(deps.store.publish).toHaveBeenCalledTimes(1);
+      expect(instructions?.state).toBe('PROVISIONING');
+    });
+
+    it('journals a step that changed, with the step left and the time spent in it', async () => {
+      deps.setup.advance.mockResolvedValue(stepChanged);
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.journal.setupChanged).toHaveBeenCalledWith({
+        sessionId: 's1',
+        worldId: WORLD,
+        game: 'enshrouded',
+        step: 'fetching-game',
+        activity: 'downloading',
+        left: { step: 'waking', elapsedMs: NOW.getTime() - OPENED.getTime() },
+      });
+    });
+
+    it('journals an activity that changed, without a step left', async () => {
+      deps.setup.advance.mockResolvedValue({
+        kept: { step: 'fetching-game', since: OPENED, activity: 'unpacking', progress: null },
+        changed: 'activity',
+        left: null,
+      });
+
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'alive',
+        setup: { step: 'fetching-game', activity: 'unpacking' },
+      });
+
+      expect(deps.journal.setupChanged).toHaveBeenCalledWith({
+        sessionId: 's1',
+        worldId: WORLD,
+        game: 'enshrouded',
+        step: 'fetching-game',
+        activity: 'unpacking',
+        left: null,
+      });
+    });
+
+    it('journals nothing for a progress that moved alone', async () => {
+      deps.setup.advance.mockResolvedValue({
+        kept: { step: 'fetching-game', since: OPENED, activity: 'downloading', progress: 4 },
+        changed: 'progress',
+        left: null,
+      });
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.journal.setupChanged).not.toHaveBeenCalled();
+    });
+
+    it('journals nothing when the store applied nothing', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.journal.setupChanged).not.toHaveBeenCalled();
+    });
+
+    // A change of step is not a change of state.
+    it('files no event for a step that changed', async () => {
+      deps.setup.advance.mockResolvedValue(stepChanged);
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive', setup: DECLARED });
+
+      expect(deps.store.apply).not.toHaveBeenCalled();
+    });
+
+    it('puts the session into service when the setup could not advance, and journals why', async () => {
+      deps.setup.advance.mockRejectedValue(new Error('firestore is down'));
+
+      const instructions = await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'ready',
+        setup: { step: 'starting-game' },
+      });
+
+      expect(deps.store.publish).toHaveBeenCalledTimes(1);
+      expect(instructions).not.toBeNull();
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.setup',
+        sessionId: 's1',
+        error: 'Error: firestore is down',
+      });
+    });
+  });
+
+  describe('the fields the frontier discarded', () => {
+    it('are journalled with the session, once the token is verified', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' }, ['setup']);
+
+      expect(deps.journal.discarded).toHaveBeenCalledWith({ sessionId: 's1', fields: ['setup'] });
+      expect(deps.store.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it('are not journalled for a token that does not verify', async () => {
+      deps.tokens.verify.mockResolvedValue(false);
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' }, ['setup']);
+
+      expect(deps.journal.discarded).not.toHaveBeenCalled();
+    });
+
+    it('are not journalled when there are none', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive' }, []);
+
+      expect(deps.journal.discarded).not.toHaveBeenCalled();
+    });
+  });
+
   // The whole barrier. Without it, anyone on the internet writes RUNNING.
   it('answers nothing at all when the token does not verify', async () => {
     deps.tokens.verify = vi.fn(async () => false);
