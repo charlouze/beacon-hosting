@@ -277,6 +277,12 @@ service cloud.firestore {
         // own choosing. §5 seeds it when the world is adopted, and it stays.
         allow update: if (isPlayerOf(worldId) || isAdmin()) && isValidServerUpdate();
       }
+
+      match /server/setup {
+        // Read like the session context beside it, and written by no client:
+        // only the Functions hold what a game server declares.
+        allow read: if isPlayerOf(worldId) || isAdmin();
+      }
     }
 
     // §8: the one collection-group query the system runs — "my worlds". A
