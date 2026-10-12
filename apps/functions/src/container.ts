@@ -4,6 +4,7 @@ import {
   deploymentRecord,
   saveRecords,
   settingsStore,
+  setupStores,
   systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
@@ -140,6 +141,7 @@ export function buildProvisionDeps(): ProvisionDeps {
     clock: shared.clock,
     host: shared.host,
     states: worldStateStores(db),
+    setups: setupStores(db),
     settings: shared.settings,
     journal: shared.journal,
     ledger: shared.ledger,

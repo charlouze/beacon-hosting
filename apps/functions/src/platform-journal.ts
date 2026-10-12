@@ -6,6 +6,7 @@ export type FailureSource =
   | 'watchdog.close'
   | 'watchdog.sweep'
   | 'provisioning.setup'
+  | 'provisioning.begin'
   | 'provisioning.cleanup'
   | 'agentReport.dns'
   | 'agentReport.save'

@@ -8,6 +8,7 @@ import {
   serverDocPath,
   sessionFrom,
   settingsStore,
+  setupStores,
   systemEvents,
   worldStateStores,
 } from '@beacon/session-record';
@@ -131,6 +132,7 @@ const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
   clock: { now: () => new Date() },
   host,
   states: worldStateStores(db),
+  setups: setupStores(db),
   worlds: adminWorldRecord(db),
   settings: settingsStore(db),
   ledger: provisioningLedger(db),
