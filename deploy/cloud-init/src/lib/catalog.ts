@@ -1,4 +1,4 @@
-import type { Game, JoinInfo, WorldId } from '@beacon/session';
+import type { Game, JoinInfo, SetupStepOrder, WorldId } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 import { sunkenland } from './sunkenland.js';
 
@@ -101,6 +101,12 @@ export interface GameCatalogEntry {
    * Measured in `probe/RESULTS.md`, section B.
    */
   readonly diskGb: number;
+  /**
+   * The four steps of a setup in the order this game goes through them. The
+   * two in the middle swap from one game to the other: it depends on whether
+   * the game is fetched by its own container or brought back from the depot.
+   */
+  readonly setupStepOrder: SetupStepOrder;
   /**
    * The name a dns record points at, derived from the world so that two
    * worlds of the same game never contend for one hostname — or null when
