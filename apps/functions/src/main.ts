@@ -115,13 +115,13 @@ export const agentReport = onRequest(
 
     const header = request.get('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
-    const report = parseReport(request.body);
-    if (token === null || report === null) {
+    const parsed = parseReport(request.body);
+    if (token === null || parsed === null) {
       response.status(400).send();
       return;
     }
 
-    const instructions = await runAgentReport(buildAgentReportDeps(), token, report);
+    const instructions = await runAgentReport(buildAgentReportDeps(), token, parsed.report);
     if (instructions === null) {
       // No body, and no reason. A 401 that explained itself would tell whoever
       // is probing which half of the credential they got right.
