@@ -13,6 +13,7 @@ import {
   setLogLevel,
 } from 'firebase/firestore';
 import { World, type Game } from '@beacon/session';
+import { completedSetupStore } from './completed-setups-record.js';
 import { clientSessionRecord, type ClientSessionRecord, type WorldSummary } from './client-session.js';
 import { EVENTS, idleServerDocument, playerDocument, serverDocPath, worldDocument } from './fields.js';
 import { setupStores } from './setup-record.js';
@@ -417,6 +418,88 @@ describe('the setup of a session that prepares', () => {
       await abandonedServer('s2', 's1');
 
       expect((await view())?.server?.setup).toBeNull();
+    });
+  });
+
+  describe('the ready window it announces', () => {
+    const FIVE_MINUTES = 300_000;
+    const EIGHT_MINUTES = 480_000;
+    const after = (ms: number) => new Date(OPENED.getTime() + ms);
+
+    const completed = async (game: Game, ...durationsMs: number[]): Promise<void> => {
+      const store = completedSetupStore(getFirestore());
+      for (const [index, durationMs] of durationsMs.entries()) {
+        await store.keep(game, { sessionId: `past-${index}`, durationMs });
+      }
+    };
+
+    it('goes from the shortest to the longest of the last setups of the game', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+      await completed('enshrouded', 360_000, FIVE_MINUTES, EIGHT_MINUTES);
+
+      expect((await view())?.server?.readyWindow).toEqual({
+        from: after(FIVE_MINUTES),
+        to: after(EIGHT_MINUTES),
+      });
+    });
+
+    it('is none while the game counts a single completed setup', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+      await completed('enshrouded', FIVE_MINUTES);
+
+      const seen = await view();
+
+      expect(seen?.server?.session.state).toBe('PROVISIONING');
+      expect(seen?.server?.readyWindow).toBeNull();
+    });
+
+    it('is none while the game kept nothing at all', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+
+      expect((await view())?.server?.readyWindow).toBeNull();
+    });
+
+    it('is drawn from the setups of the world’s own game, and of no other', async () => {
+      await seedWorld('les-copains', { players: ['alice'], game: 'sunkenland' });
+      await preparingServer('les-copains', 's1');
+      await completed('enshrouded', FIVE_MINUTES, EIGHT_MINUTES);
+
+      expect((await view())?.server?.readyWindow).toBeNull();
+    });
+
+    it('is none for a world out of service, whatever its game kept', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await completed('enshrouded', FIVE_MINUTES, EIGHT_MINUTES);
+
+      const seen = await view();
+
+      expect(seen?.server?.session.state).toBe('IDLE');
+      expect(seen?.server?.readyWindow).toBeNull();
+    });
+
+    it('follows a setup that completes while the world is watched', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+      await completed('enshrouded', FIVE_MINUTES);
+      const seen: (WorldSummary | null)[] = [];
+      const unsubscribe = record().watchWorld('les-copains', (summary) => seen.push(summary));
+      await vi.waitFor(() => expect(seen.some((summary) => summary !== null)).toBe(true));
+
+      await completedSetupStore(getFirestore()).keep('enshrouded', {
+        sessionId: 'another-world',
+        durationMs: EIGHT_MINUTES,
+      });
+
+      await vi.waitFor(() =>
+        expect(seen.at(-1)?.server?.readyWindow).toEqual({
+          from: after(FIVE_MINUTES),
+          to: after(EIGHT_MINUTES),
+        }),
+      );
+      unsubscribe();
     });
   });
 

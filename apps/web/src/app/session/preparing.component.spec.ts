@@ -48,6 +48,7 @@ describe('PreparingComponent', () => {
       facts: { ip: null, joinInfo: null, lastError: null },
       stateSince,
       setup,
+      readyWindow: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();

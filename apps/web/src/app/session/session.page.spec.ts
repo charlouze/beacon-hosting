@@ -52,7 +52,7 @@ describe('SessionPage', () => {
       ],
     });
     const fixture = TestBed.createComponent(SessionPage);
-    fixture.componentRef.setInput('view', { session, facts, stateSince: STARTED_AT, setup: null });
+    fixture.componentRef.setInput('view', { session, facts, stateSince: STARTED_AT, setup: null, readyWindow: null });
     fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', MEMBER);
@@ -113,7 +113,7 @@ describe('SessionPage', () => {
       ],
     });
     const fixture = TestBed.createComponent(SessionPage);
-    fixture.componentRef.setInput('view', { session: Session.idle(), facts: NO_FACTS, stateSince: STARTED_AT, setup: null });
+    fixture.componentRef.setInput('view', { session: Session.idle(), facts: NO_FACTS, stateSince: STARTED_AT, setup: null, readyWindow: null });
     fixture.componentRef.setInput('world', WORLD);
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     fixture.componentRef.setInput('member', { ...MEMBER, steamId: '76561197960287930' });
