@@ -160,6 +160,12 @@ ci-dessous sont établis par lecture.
   la déclaration. Aucune règle ne dit si l'écran doit reculer, et rien ne
   mesure si le cas arrive.
 
+- **Opening a session** — un serveur de jeu cesse d'attendre la réponse à une
+  déclaration d'étape après 5 s et envoie la suivante. La première peut encore
+  être traitée après la seconde : l'écran affiche alors l'étape ou l'activité
+  quittée, jusqu'à la déclaration suivante. Aucune règle ne dit ce que l'écran
+  fait d'une déclaration arrivée après une plus récente.
+
 - **Aucune section** — à 390 px de large, la valeur de la plaque de l'écran
   hors service paraît rognée après un abandon. Vu le 2026-10-13 sur un rendu
   statique, sans l'enveloppe de l'application : à vérifier dans l'application.
