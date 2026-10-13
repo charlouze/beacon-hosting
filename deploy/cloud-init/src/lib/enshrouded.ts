@@ -1,7 +1,14 @@
-import type { AgentSetup } from '@beacon/agent-protocol';
+import { renderAgentSetup, type AgentSetup } from '@beacon/agent-protocol';
 import type { JoinInfo, WorldId } from '@beacon/session';
 import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 import { COMPANION_IMAGE } from './companion-image.js';
+import {
+  GAME_LOG_DIR,
+  GAME_LOG_FILE,
+  GAME_LOG_UNIT,
+  gameLogUnit,
+  SETUP_MARKERS_FILE,
+} from './game-log.js';
 import { fill, indent } from './template.js';
 
 /**
@@ -99,6 +106,10 @@ const COMPOSE = `services:
       # The one channel to the host, and it carries one verb. A docker socket
       # here would have been root on the machine (§7).
       - ./control:/opt/beacon/control
+      # What the game prints, copied here by a unit of the host, and what this
+      # game's output says of its setup. Read-only: the agent observes both.
+      - ./log:${GAME_LOG_DIR}:ro
+      - ./setup-markers.json:${SETUP_MARKERS_FILE}:ro
 `;
 
 const CLOUD_INIT = `#cloud-config
@@ -147,6 +158,8 @@ write_files:
       BEACON_READY_PROBE=a2s://enshrouded:15637
       BEACON_STOP_FLAG=/opt/beacon/control/stop
       BEACON_PUSH_INTERVAL_MS=600000
+      BEACON_GAME_LOG=${GAME_LOG_FILE}
+      BEACON_SETUP_MARKERS=${SETUP_MARKERS_FILE}
   # What the companion can ask of the host, and the whole of it. A path unit
   # watches one file; the service it starts runs one command. §7: a compromised
   # companion obtains a stopped container, not the docker api.
@@ -178,12 +191,23 @@ write_files:
       # clear, so the flag is gone whether the stop succeeded or not.
       ExecStart=-/usr/bin/docker stop -t 90 ${GAME_CONTAINER}
       ExecStartPost=-/bin/rm -f /opt/beacon/control/stop
+  # What the agent declares of this game's setup, read once when it starts.
+  - path: ${SETUP_MARKERS_FILE}
+    permissions: "0644"
+    content: |
+      __SETUP_MARKERS__
+  - path: /etc/systemd/system/${GAME_LOG_UNIT}
+    permissions: "0644"
+    content: |
+      __GAME_LOG_UNIT__
 
 runcmd:
   - [ systemctl, enable, --now, docker ]
   - [ mkdir, -p, /opt/beacon/data ]
   - [ mkdir, -p, /opt/beacon/control ]
+  - [ mkdir, -p, ${GAME_LOG_DIR} ]
   - [ systemctl, enable, --now, beacon-stop.path ]
+  - [ systemctl, enable, --now, ${GAME_LOG_UNIT} ]
   - [ docker, compose, -f, /opt/beacon/docker-compose.yml, --env-file, /opt/beacon/.env, up, -d ]
 `;
 
@@ -216,6 +240,8 @@ export const enshrouded: GameCatalogEntry = {
 
   render(request: BootRequest): string {
     let rendered = fill(CLOUD_INIT, '__DOCKER_COMPOSE__', indent(COMPOSE));
+    rendered = fill(rendered, '__SETUP_MARKERS__', renderAgentSetup(AGENT_SETUP));
+    rendered = fill(rendered, '__GAME_LOG_UNIT__', indent(gameLogUnit(GAME_CONTAINER)));
     rendered = fill(rendered, '__SERVER_NAME__', request.world.name);
     rendered = fill(rendered, '__WORLD_ID__', request.world.worldId);
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);

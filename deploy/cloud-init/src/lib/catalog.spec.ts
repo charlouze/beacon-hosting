@@ -8,7 +8,7 @@ import {
   renderCloudInit,
   renderSetupMarkers,
 } from './catalog.js';
-import { REQUEST, request } from './catalogue-fixtures.spec-helper.js';
+import { REQUEST, request, writtenLine } from './catalogue-fixtures.spec-helper.js';
 
 /**
  * Every field of a request that lands in a file docker compose reads, and how
@@ -191,6 +191,13 @@ describe('the order a game goes through its setup', () => {
 
 describe('what the agent declares of a game', () => {
   for (const game of GAMES) {
+    // The file crosses a template and a yaml block before a machine reads it.
+    it(`reaches the machine through the cloud-init as the entry wrote it, for ${game}`, () => {
+      const written = writtenLine(renderCloudInit(game, REQUEST), '/opt/beacon/setup-markers.json');
+
+      expect(parseAgentSetup(written)).toEqual(catalogFor(game).agentSetup);
+    });
+
     // The first step belongs to the control plane: it starts at the opening
     // of the session, before any machine exists to declare it.
     it(`starts after the first step of the order, and so does every marker, for ${game}`, () => {
