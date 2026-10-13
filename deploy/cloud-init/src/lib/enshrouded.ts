@@ -1,3 +1,4 @@
+import type { AgentSetup } from '@beacon/agent-protocol';
 import type { JoinInfo, WorldId } from '@beacon/session';
 import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 import { COMPANION_IMAGE } from './companion-image.js';
@@ -10,6 +11,28 @@ import { fill, indent } from './template.js';
  * would say so — the stop would simply never happen.
  */
 const GAME_CONTAINER = 'enshrouded';
+
+/**
+ * Measured, `probe/RESULTS.md` section P: the tool that downloads this game
+ * prints a state every two seconds or so, and a line once the install is over.
+ * Only a `downloading` line gives a progress — the others print one that says
+ * zero — and no marker stops on `ERROR!`, which a start that succeeds prints
+ * too.
+ */
+const AGENT_SETUP: AgentSetup = {
+  // The agent starts once the game's container does, and that container
+  // begins by downloading the game.
+  startStep: 'fetching-game',
+  markers: [
+    {
+      pattern: 'Update state \\(0x[0-9a-f]+\\) downloading, progress: ([0-9.]+)',
+      step: 'fetching-game',
+      activity: 'downloading',
+    },
+    { pattern: 'Update state \\(0x[0-9a-f]+\\) ', step: 'fetching-game' },
+    { pattern: "Success! App '[0-9]+' fully installed", step: 'starting-game' },
+  ],
+};
 
 /**
  * What tranche 0 measured, moved from `docker-compose.yml` to here. It is a
@@ -185,6 +208,7 @@ export const enshrouded: GameCatalogEntry = {
   // The restore brings the world back before the game's own container starts
   // and downloads the game.
   setupStepOrder: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+  agentSetup: AGENT_SETUP,
 
   hostname: hostnameFor,
 

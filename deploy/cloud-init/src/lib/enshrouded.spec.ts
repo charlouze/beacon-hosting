@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { declaredByMarkers } from '@beacon/agent-protocol';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
 import { REQUEST, request, serviceBlock } from './catalogue-fixtures.spec-helper.js';
+import { ENSHROUDED_OUTPUT } from './enshrouded-output.spec-helper.js';
 import { enshrouded } from './enshrouded.js';
 
 describe('the enshrouded catalogue entry', () => {
@@ -305,5 +307,36 @@ describe('worldLayoutRefusal', () => {
 
   it('refuse une archive vide', () => {
     expect(enshrouded.worldLayoutRefusal([])).not.toBeNull();
+  });
+});
+
+describe('the markers of the enshrouded entry, on the output the probe measured', () => {
+  const FETCHING = { step: 'fetching-game' };
+  const STARTING = { step: 'starting-game' };
+
+  /** What is declared once each line of the output has been printed, in turn. */
+  const EXPECTED = [
+    // `ERROR!` is printed on a start that succeeds: no marker stops on it.
+    null,
+    FETCHING,
+    { step: 'fetching-game', activity: 'downloading', progress: 36 },
+    FETCHING,
+    FETCHING,
+    FETCHING,
+    // Only a `downloading` line gives a progress: this one says zero once the
+    // download is over.
+    FETCHING,
+    STARTING,
+    STARTING,
+    STARTING,
+    STARTING,
+  ];
+
+  ENSHROUDED_OUTPUT.forEach((line, index) => {
+    it(`declares the right step after line ${index + 1}: ${line}`, () => {
+      const printed = ENSHROUDED_OUTPUT.slice(0, index + 1).join('\n');
+
+      expect(declaredByMarkers(enshrouded.agentSetup, printed)).toEqual(EXPECTED[index]);
+    });
   });
 });

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { isSetupStepOrder, type Game } from '@beacon/session';
-import { type BootRequest, catalogFor, refuseWorldLayout, renderCloudInit } from './catalog.js';
+import { parseAgentSetup, renderAgentSetup } from '@beacon/agent-protocol';
+import {
+  type BootRequest,
+  catalogFor,
+  refuseWorldLayout,
+  renderCloudInit,
+  renderSetupMarkers,
+} from './catalog.js';
 import { REQUEST, request } from './catalogue-fixtures.spec-helper.js';
 
 /**
@@ -179,5 +186,38 @@ describe('the order a game goes through its setup', () => {
       'restoring-world',
       'starting-game',
     ]);
+  });
+});
+
+describe('what the agent declares of a game', () => {
+  for (const game of GAMES) {
+    // The first step belongs to the control plane: it starts at the opening
+    // of the session, before any machine exists to declare it.
+    it(`starts after the first step of the order, and so does every marker, for ${game}`, () => {
+      const { agentSetup, setupStepOrder } = catalogFor(game);
+
+      expect(setupStepOrder.indexOf(agentSetup.startStep)).toBeGreaterThan(0);
+      for (const marker of agentSetup.markers) {
+        expect(setupStepOrder.indexOf(marker.step)).toBeGreaterThan(0);
+      }
+    });
+
+    it(`is read back by the machine as the entry wrote it, for ${game}`, () => {
+      const { agentSetup } = catalogFor(game);
+
+      expect(parseAgentSetup(renderSetupMarkers(game))).toEqual(agentSetup);
+      expect(renderSetupMarkers(game)).toBe(renderAgentSetup(agentSetup));
+    });
+  }
+
+  it('starts on the game fetching itself, for the game its own container downloads', () => {
+    expect(catalogFor('enshrouded').agentSetup.startStep).toBe('fetching-game');
+  });
+
+  it('starts on the game starting and follows no output, for the game the restore brings back', () => {
+    expect(catalogFor('sunkenland').agentSetup).toEqual({
+      startStep: 'starting-game',
+      markers: [],
+    });
   });
 });

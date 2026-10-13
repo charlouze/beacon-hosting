@@ -1,3 +1,4 @@
+import { renderAgentSetup, type AgentSetup } from '@beacon/agent-protocol';
 import type { Game, JoinInfo, SetupStepOrder, WorldId } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 import { sunkenland } from './sunkenland.js';
@@ -107,6 +108,12 @@ export interface GameCatalogEntry {
    * the game is fetched by its own container or brought back from the depot.
    */
   readonly setupStepOrder: SetupStepOrder;
+  /**
+   * What the agent declares of this game's setup once the game's own
+   * container runs: the step it starts on, and what in the game's output
+   * moves it. No marker at all for a game whose output says nothing of it.
+   */
+  readonly agentSetup: AgentSetup;
   /**
    * The name a dns record points at, derived from the world so that two
    * worlds of the same game never contend for one hostname — or null when
@@ -255,6 +262,10 @@ export const renderCloudInit = (game: Game, request: BootRequest): string => {
 };
 
 export const renderCompose = (game: Game): string => catalogFor(game).compose();
+
+/** The file the agent reads its markers from, as a machine of this game receives it. */
+export const renderSetupMarkers = (game: Game): string =>
+  renderAgentSetup(catalogFor(game).agentSetup);
 
 /**
  * `tar tzf` lists every entry with a leading `./`, and no entry has to know

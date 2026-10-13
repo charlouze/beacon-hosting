@@ -11,6 +11,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../../libs/agent-protocol/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/session/tsconfig.lib.json"
     }
   ],

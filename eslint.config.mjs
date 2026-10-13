@@ -31,12 +31,13 @@ export default [
               onlyDependOnLibsWithTags: ['scope:domain'],
             },
             // The catalogue knows images, ports and command-line options. It
-            // needs the domain for `Game` and `JoinInfo`, and nothing else —
-            // an adapter it could reach would let a provider's word back in
-            // through the one place §4 keeps free of it.
+            // needs the domain for `Game` and `JoinInfo`, and the protocol for
+            // the one file it writes that the machine reads back. Nothing
+            // else — an adapter it could reach would let a provider's word
+            // back in through the one place §4 keeps free of it.
             {
               sourceTag: 'scope:catalog',
-              onlyDependOnLibsWithTags: ['scope:domain'],
+              onlyDependOnLibsWithTags: ['scope:domain', 'scope:protocol'],
             },
             // The administrator's own tool. It pushes archives through the
             // storage port, names one with the domain's `Game`, and asks the

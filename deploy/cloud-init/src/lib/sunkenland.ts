@@ -1,3 +1,4 @@
+import type { AgentSetup } from '@beacon/agent-protocol';
 import type { JoinInfo } from '@beacon/session';
 import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 import { COMPANION_IMAGE } from './companion-image.js';
@@ -85,6 +86,12 @@ const READY_FILE = `${READY_DIR}/serverid`;
 
 /** Measured: the image runs the server as this uid, and root unpacks for it. */
 const SERVER_OWNER = '7000:7000';
+
+/**
+ * The restore has brought the game back by the time the agent starts, and
+ * nothing measures what this game's output says of its start.
+ */
+const AGENT_SETUP: AgentSetup = { startStep: 'starting-game', markers: [] };
 
 /**
  * The one line that leaves the game container, and the whole reason this
@@ -512,6 +519,7 @@ export const sunkenland: GameCatalogEntry = {
   diskGb: 40,
   // The restore brings the game back from the depot first, then the world.
   setupStepOrder: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+  agentSetup: AGENT_SETUP,
 
   /**
    * Nothing to point a record at: discovery goes through the game's own
