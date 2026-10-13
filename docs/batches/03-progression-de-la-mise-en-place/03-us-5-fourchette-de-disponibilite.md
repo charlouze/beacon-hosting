@@ -1581,4 +1581,32 @@ Un commit qui touche `libs/session`, `libs/agent-protocol`, `libs/scaleway-stora
 
 ## Rulings log
 
+Ruling: la tâche 6 est acceptée sans exécution rouge de ses tests — son implémenteur a écrit tests et code avant le premier lancement, et rejouer le rouge demande de défaire son commit — si c'est faux, un test de cette tâche passerait aussi sans le code ; sa revue en relève un seul, `announces the window it is given, and never a single hour`, dont les heures sont celles de l'ancienne fourchette fixe.
+
+Ruling: le commentaire du test `computes no hour of the window itself` ne cite plus les « five to eight minutes » que le plan lui donnait — le plan interdit par ailleurs tout reste de la fourchette fixe dans `apps/web` — si c'est faux, un commentaire de test s'écarte du texte du plan.
+
+Ruling: la revue de chaque tâche a tourné pendant l'implémentation de la suivante — les deux touchent des fichiers disjoints, et la revue ne lit que le diff commité — si c'est faux, une correction de revue arrive après le commit suivant, en `fixup!`.
+
+Ruling: la skill `impeccable` n'a pas été invoquée pour la tâche des écrans — cette story ne change ni gabarit, ni feuille de style, ni mot visible, et l'écran sans fourchette suit la décision déjà validée de `.impeccable/mocks/progress/README.md` — si c'est faux, un écart de mise en page sur l'écran sans fourchette n'est vu qu'à la revue.
+
+Ruling: la vague de corrections de la revue de la branche prend l'import collé et le commentaire de l'attente dans `client-session`, l'ordre d'import de `format.spec.ts`, la durée nulle de la fixture des règles, et le semis des mises en place abouties par l'outil d'écrans de développement — la revue de la branche les relève, et le commanditaire demande de prendre dans la pull request ce qui tient en quelques lignes — si c'est faux, un commit de plus touche `apps/functions/src/screen.ts` et son test, hors des fichiers que les tâches nomment.
+
+Ruling: dans l'outil d'écrans de développement, la session de l'écran de préparation s'ouvre quarante secondes avant l'instant donné, et non quatre-vingt-dix minutes — la fourchette part de l'ouverture, et une ouverture ancienne l'annoncerait dans le passé — si c'est faux, l'écran de préparation de développement montre une heure d'ouverture et un coût qui ne sont plus ceux des autres écrans.
+
+Ruling: restent en l'état une durée négative que `completedSetup` accepte, le test du plafond qui parcourt un `setups` non typé, la garde `game === null` inatteignable de `rememberCompletedSetup`, l'absence de test sur un monde absent ou de jeu inconnu passé la nouvelle attente, et le premier test de fourchette de `preparing.component.spec.ts` — la revue de la branche les juge sans effet : le lecteur écarte toute durée négative ou nulle, et deux autres tests échouent sur l'ancien calcul — si c'est faux, un test de régression manque sur la porte de publication de `watchWorldSummary`.
+
+Ruling: la collection se nomme `completedSetups`, et ses deux fonctions `completedSetupsDocPath` et `completedSetupsDocument`, là où le design du lot et le plan de cette story écrivent `launches` — le commanditaire le tranche à la revue : « launch » n'est pas un terme du glossaire, et la spec, le domaine, le magasin et le champ disent « mise en place aboutie », `CompletedSetup`, `CompletedSetupStore` et `setups` — si c'est faux, le nom de la collection s'écarte de celui que le document du lot porte, et le renommer après son premier déploiement demande une migration.
+
+Technical design ruling: `readyWindow` reçoit la dernière session ouverte, `LastOpening`, et non la seule heure d'ouverture, et ne rend rien hors de la préparation — « pendant la mise en place » est une règle de la spec, que le domaine tient ainsi et teste sans émulateur — si c'est faux, le record lit l'état de la session pour la fourchette comme il le lit déjà pour `shownSetup`.
+
+Technical design ruling: `completedSetups/{game}` garde cinq mises en place abouties, et non cinq au moins — la fourchette n'en lit jamais plus, et un plafond égal à ce qu'elle lit tient en une constante — si c'est faux, changer le nombre de mises en place dont la fourchette se tire demande d'attendre que le document se remplisse.
+
+Technical design ruling: le domaine porte aussi ce qu'un jeu garde quand une mise en place aboutit, `keepCompletedSetup`, et la durée d'une mise en place aboutie, `completedSetup` — le design ne nomme que la fonction de la fourchette, et la transaction du magasin n'a plus qu'à lire et écrire — si c'est faux, deux fonctions pures de plus dans `libs/session`, donc dans l'image du compagnon.
+
+Technical design ruling: un échec de l'écriture dans `completedSetups` va au journal de la plateforme sous une source nouvelle, `agentReport.completedSetup` — le design dit que cet échec y va sans nommer de source — si c'est faux, une source de trop dans `FailureSource`.
+
+Technical design ruling: l'écoute de `completedSetups/{game}` s'ouvre au premier instantané du monde qui nomme un jeu, une par monde suivi — le record ne connaît le jeu d'un monde qu'après l'avoir lu, et un monde ne change jamais de jeu — si c'est faux, la liste des mondes tient une écoute par monde sur le même document, que le SDK ne lit qu'une fois.
+
 ## Observed drift
+
+Aucune.
