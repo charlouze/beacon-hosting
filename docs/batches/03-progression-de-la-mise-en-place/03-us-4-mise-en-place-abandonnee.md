@@ -2102,4 +2102,40 @@ Un commit qui touche `libs/session`, `libs/agent-protocol`, `libs/scaleway-stora
 
 ## Rulings log
 
+Ruling: cette story prend l'abandon avant la fourchette tirée des mises en place abouties — le compagnon envoie déjà la fin de la sortie du jeu sans que rien la lise, et le lot n'ordonne pas ces deux blocs — si c'est faux, la fourchette fixe reste à l'écran une story de plus.
+
+Ruling: deux fixtures `ShownSetup` de plus reçoivent `abandonedAt: null` dans `preparing.component.spec.ts` — le plan n'en nommait que deux, et `web:test` ne compilait pas sans — si c'est faux, deux lignes de test hors de la liste de la tâche.
+
+Ruling: les tâches 6 et 7 sont acceptées sans exécution rouge de leurs tests — leurs implémenteurs ont écrit tests et code avant le premier lancement, et rejouer le rouge demande de défaire leur commit — si c'est faux, un test de ces deux tâches passerait aussi sans le code, ce que leurs revues et celle de la branche n'ont pas relevé.
+
+Ruling: `reachedStep` écrit au journal de la plateforme, sous la source `agentReport.setup`, l'échec de lecture du magasin — le plan mandatait un `catch` nu, et une étape nulle ne distinguait plus une lecture en panne d'une mise en place absente — si c'est faux, une entrée de journal de trop à chaque abandon dont la lecture échoue.
+
+Ruling: deux rapports `failed` reçus pendant la fermeture peuvent classer deux fois `ProvisioningFailed` — l'abandon relit l'enregistrement puis écrit sans transaction, comme la fermeture d'une session en service — si c'est faux, un événement en double dans le journal pour un seul abandon.
+
+Ruling: un rapport `failed` reçu en préparation après un rapport `ready` que le plan de contrôle n'a pas publié abandonne sous la phrase d'un abandon déclaré — le lot prend déjà le risque que tout rapport `failed` reçu en préparation abandonne — si c'est faux, le journal des événements dit qu'un serveur n'a pas pu finir sa mise en place alors qu'il l'avait finie.
+
+Ruling: `shownSetup` montre une mise en place abandonnée dans tout état hors de la préparation, `RUNNING` et `STOPPING` compris, quand la marque porte la dernière session ouverte — le design ne restreint pas les états, et les écrans de ces deux états ne lisent pas ce champ — si c'est faux, un écran qui se mettrait à le lire montrerait un abandon sur une session en service née d'une course entre le délai et un rapport `ready`.
+
+Ruling: l'écran hors service après un abandon garde ce que l'écran d'un refus porte déjà, et non ce que la planche montre : le titre en `big sm`, la phrase sous le bouton, et sur téléphone le bloc d'avertissement après la plaque — la planche dessine un écran entier, et cette story n'y ajoute qu'un bloc — si c'est faux, trois réglages de mise en page à reprendre sur cet écran.
+
+Ruling: un abandon au délai dont la fermeture est refusée classe `ProvisioningFailed` puis `CleanupFailed`, comme l'abandon déclaré et le refus de l'hébergeur, là où `main` ne classait que `CleanupFailed` — le commanditaire demande à la revue de prendre dans cette story ce qui peut l'être — si c'est faux, un événement de trop par abandon bloqué.
+
+Ruling: les mots que la planche pose entrent tels quels à l'écran, `Where it stopped, at HH:MM`, `Step N of 4` suivi du nom de l'étape, et `Press again; if it stops at the same step twice, tell whoever runs this.` — le commanditaire les valide à la revue, alors que `.impeccable/mocks/progress/README.md` les range encore sous ce qui reste à valider — si c'est faux, trois libellés à changer dans les deux gabarits.
+
+Open ruling: un rendu statique de l'écran hors service, à 1440 et à 390 px, sans l'enveloppe de l'application, tient lieu de passe d'inspection contre la planche — l'application ne se sert pas sans émulateur ni connexion — si c'est faux, un écart que seul le gabarit Angular produit n'est vu qu'à la revue — reste à trancher : à 390 px la valeur de la plaque paraît rognée dans ce rendu, à regarder dans l'application. Le commanditaire le laisse ouvert à la revue : à regarder ensemble, sans doute dans un lot de tests d'intégration sur l'émulateur.
+
+Technical design ruling: le magasin de la mise en place gagne un troisième geste, lire — le design n'en nomme que deux, et l'étape atteinte doit se lire quand le rapport `failed` ne porte pas `setup`, comme celui de la restauration — si c'est faux, un geste de lecture de trop sur ce magasin.
+
+Technical design ruling: `shownSetup` reçoit la dernière session ouverte lue du document, `LastOpening`, et non la session — une session hors service ne nomme ni identifiant ni heure d'ouverture — si c'est faux, le record lit deux fois les mêmes champs de `server/current`.
+
+Technical design ruling: le chemin d'abandon reçoit la réponse de l'hébergeur au refus de l'ouverture, ou rien, au lieu de deux valeurs de `lastError` — les deux appelants ne diffèrent que par là, et une fermeture refusée garde alors ce que l'hébergeur lui a répondu — si c'est faux, un troisième appelant qui veut un autre `lastError` change la signature.
+
+Technical design ruling: `ShownSetup` porte l'heure de l'abandon dans un champ `abandonedAt`, nul pendant la préparation — le design dit que `ServerView` gagne ce que `shownSetup` rend, sans en donner la forme — si c'est faux, un écran distingue les deux cas par un champ nul plutôt que par un type.
+
+Technical design ruling: les deux écrans répètent le bloc `Where it stopped` de leur gabarit, et ne partagent que `stoppedAt` dans `format.ts` — ils répètent déjà ainsi le bloc `What the host said` — si c'est faux, un changement de ce bloc se fait deux fois.
+
+Technical design ruling: le commentaire de `preparing.component.ts` sur l'ancienne contrainte d'interface, et ceux de `client-session.ts` sur `stateSince`, ne changent pas — la story de l'étape affichée a récrit le premier, et les seconds vont avec la fourchette — si c'est faux, deux commentaires restent à récrire avec la fourchette.
+
 ## Observed drift
+
+Le watchdog applique sa correction sans relire l'enregistrement : un abandon déclaré qui arrive entre sa lecture et son écriture, sur une session passée le délai, reçoit un second `ProvisioningFailed`, une heure d'abandon plus tardive et la phrase du délai. Le corriger demande de dire ce qu'une correction périmée garde de ses événements, donc une règle du watchdog : à proposer au registre à la clôture du lot.
