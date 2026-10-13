@@ -21,6 +21,10 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 // runs on, Windows included.
 const PHASES_LOG = './tmp/beacon-smoke-phases.log';
 const STOPPING_FLAG = './tmp/beacon-smoke-stopping';
+// One line per report that declares a step, apart from the phases: `run.sh`
+// reads the phases back with `grep -qx`, and a step riding on those lines
+// would change every one of them.
+const SETUP_LOG = './tmp/beacon-smoke-setup.log';
 mkdirSync('./tmp', { recursive: true });
 
 createServer((request, response) => {
@@ -32,12 +36,16 @@ createServer((request, response) => {
   request.on('data', (chunk) => chunks.push(chunk));
   request.on('end', () => {
     try {
-      const { phase, save, serverId } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const { phase, save, serverId, setup } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       // Whichever of the two the report carries, appended raw: this file is
       // read back with `grep -qx`, so a value the companion mangled on the way
       // cannot match a value the stub wrote. Neither field is ever both.
       const carried = save ? ` ${save.origin}` : serverId ? ` ${serverId}` : '';
       appendFileSync(PHASES_LOG, `${phase}${carried}\n`);
+      if (setup) {
+        const declared = [setup.step, setup.activity, setup.progress].filter((part) => part !== undefined);
+        appendFileSync(SETUP_LOG, `${declared.join(' ')}\n`);
+      }
     } catch {
       // A body this cannot parse still gets answered below: the round trip
       // does not hinge on this test harness reading it back.

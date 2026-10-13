@@ -4,7 +4,7 @@
 // the one-verb channel triggers.
 import { createSocket } from 'node:dgram';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 // No default: a silent fallback to one game's save directory would let a
@@ -23,14 +23,45 @@ writeFileSync(join(dir, '3ad85aea-index'), randomBytes(512));
  * The world above is written at once, the announcement below is not, and the
  * order is the measured one: a server has its world folder long before it
  * finishes booting — 121 to 205 seconds for the real image (probe/RESULTS.md).
- * What the probe has to survive is the wait, so this stub makes it wait. Twenty
- * seconds is one report cycle short of a minute: the agent reports `alive` at
- * least once, and cannot report `ready` on its very first turn.
+ * What the probe has to survive is the wait, so this stub makes it wait: the
+ * agent reports `alive` at least once, and cannot report `ready` on its very
+ * first turn.
  */
 const ANNOUNCE_DELAY_MS = 20_000;
 
 /** Long enough to say nothing about readiness, short enough to notice at all. */
 const HEARTBEAT_MS = 60_000;
+
+/**
+ * What this game prints, handed in as a file because this stub knows no game:
+ * the lines before `---` are written at launch, the others a moment later.
+ * They go straight to the file a unit of the host fills on a real machine —
+ * nothing in this harness plays that unit's part.
+ */
+const OUTPUT_FILE = '/opt/game-output.txt';
+const LATER_OUTPUT_MS = 15_000;
+
+/**
+ * Longer than the later output takes to be written, plus two turns of an agent
+ * that follows a setup: the agent must have declared what both halves decide
+ * before the server answers, since it declares nothing once it is announced.
+ */
+const QUERY_DELAY_MS = 40_000;
+
+printOutput();
+
+function printOutput() {
+  const gameLog = process.env.GAME_LOG;
+  if (!gameLog) throw new Error('stub-game: GAME_LOG is required');
+  // A checkout may end these lines with a carriage return.
+  const [atLaunch = '', later = ''] = readFileSync(OUTPUT_FILE, 'utf8').replaceAll('\r', '').split('---\n');
+  // A game whose output was never measured prints nothing, and its agent reads
+  // a file that is not there.
+  if (atLaunch.trim() === '') return;
+  mkdirSync(dirname(gameLog), { recursive: true });
+  writeFileSync(gameLog, atLaunch);
+  setTimeout(() => appendFileSync(gameLog, later), LATER_OUTPUT_MS);
+}
 
 // `BEACON_READY_PROBE`, as the catalogue writes it and as `readiness.ts` reads
 // it — passed in by render-smoke-compose.mjs. The stub answers the probe the
@@ -59,12 +90,11 @@ function answerQueries(port) {
       from.address,
     );
   });
-  socket.bind(port);
+  // Not at once: a real server downloads and installs before it listens, and a
+  // probe sent meanwhile is refused — which is what the agent must survive.
+  setTimeout(() => socket.bind(port), QUERY_DELAY_MS);
 
-  process.on('SIGTERM', () => {
-    socket.close();
-    process.exit(0);
-  });
+  process.on('SIGTERM', () => process.exit(0));
 }
 
 /**
@@ -80,9 +110,15 @@ function announceIdentifier(path) {
   }
   mkdirSync(dirname(path), { recursive: true });
 
+  // The folder a game names `<world>~<guid>`: the agent compares the guid of the
+  // announced identifier with this one, and refuses a server that opened another.
+  const worldFolder = join(dir, `smoke~${serverId.slice(0, serverId.lastIndexOf('~'))}`);
+  mkdirSync(worldFolder, { recursive: true });
+  writeFileSync(join(worldFolder, 'World~0.json'), '{}\n');
+
   const announce = setTimeout(() => {
     // Aside then renamed, exactly as the entry point's own filter does: the
-    // agent reads this file every thirty seconds, and half a line would be a
+    // agent reads this file on every turn, and half a line would be a
     // failure this harness invented rather than one it found.
     writeFileSync(`${path}.tmp`, `${serverId}\n`);
     renameSync(`${path}.tmp`, path);
