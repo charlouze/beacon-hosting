@@ -1,6 +1,7 @@
 import { DEFAULT_LIMITS } from '@beacon/session';
 import {
   adminWorldRecord,
+  completedSetupStore,
   deploymentRecord,
   saveRecords,
   settingsStore,
@@ -174,6 +175,7 @@ export function buildAgentReportDeps(): AgentReportDeps {
     tokens: agentTokens(db),
     states: worldStateStores(db),
     setups: setupStores(db),
+    completedSetups: completedSetupStore(db),
     settings: shared.settings,
     ledger: shared.ledger,
     saves: saveRecords(db),
