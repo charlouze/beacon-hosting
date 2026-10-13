@@ -91,12 +91,21 @@ Quand l'hébergeur refuse une mise en place, l'écran dit ce qu'il a répondu.
 
 Une mise en place qui n'aboutit pas est abandonnée.
 
+Une mise en place est abandonnée dès que le serveur de jeu déclare qu'il ne
+peut pas la finir.
+
+Après l'abandon d'une mise en place, et jusqu'à l'ouverture suivante d'une
+session sur le même monde, l'écran affiche l'étape à laquelle elle s'est
+arrêtée et l'heure de l'abandon.
+
 La durée d'une session et le gabarit sont les mêmes pour tous les mondes, et
 seul un administrateur les change.
 
 ## Seeing a session
 
-Seuls les membres d'un monde et les administrateurs voient sa session en cours.
+Seuls les membres d'un monde et les administrateurs voient sa session en cours,
+et ce que l'écran affiche de sa dernière mise en place quand elle a été
+abandonnée.
 
 ## Joining
 
