@@ -4,7 +4,7 @@ import type { SessionSettings } from '@beacon/session';
 import type { WorldSummary } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
 import { countdownsTo } from '../countdown';
-import { gameLabel, hourLabel, readyWindow, stateLabel, type Announced } from '../format';
+import { gameLabel, hourLabel, stateLabel, windowLabel, type Announced } from '../format';
 import { byUrgency, overview } from './overview';
 
 /** One band of the index: a world's name, what it is doing, and what its state gives to read. */
@@ -99,10 +99,7 @@ export class WorldsPage {
       // hour to announce.
       deadline: session.state === 'RUNNING' ? deadline : null,
       closesAt: hourLabel(deadline),
-      window:
-        session.state === 'PROVISIONING' && server.stateSince !== null
-          ? readyWindow(server.stateSince)
-          : null,
+      window: server.readyWindow === null ? null : windowLabel(server.readyWindow),
       nextSession: null,
     };
   }

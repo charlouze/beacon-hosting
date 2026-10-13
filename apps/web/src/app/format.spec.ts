@@ -1,16 +1,15 @@
 import { SETUP_ACTIVITIES, SETUP_STEPS, World } from '@beacon/session';
 import {
   activityLabel,
-  BOOT_WINDOW_MS,
   euroLabel,
   gameLabel,
   hourLabel,
   inviteLink,
-  readyWindow,
   splitCountdown,
   stateLabel,
   stepLabel,
   stoppedAt,
+  windowLabel,
 } from './format';
 
 describe('gameLabel', () => {
@@ -59,28 +58,23 @@ describe('euroLabel', () => {
   });
 });
 
-describe('readyWindow', () => {
-  /**
-   * Measured, not guessed: 4 min 49 s then 7 min 58 s on the same size in the
-   * same zone, an hour apart (probe/RESULTS.md, §S). A single announced hour
-   * would be three minutes wrong one time in two.
-   */
-  it('announces a window, opened from the instant the state began', () => {
-    expect(readyWindow(new Date('2026-09-12T20:14:00'))).toEqual({
-      from: '20:19',
-      to: '20:22',
-    });
+describe('windowLabel', () => {
+  it('writes the two hours of a window, to the minute', () => {
+    expect(
+      windowLabel({
+        from: new Date('2026-09-12T20:19:10'),
+        to: new Date('2026-09-12T20:22:05'),
+      }),
+    ).toEqual({ from: '20:19', to: '20:22' });
   });
 
-  it('derives from the instant it is given, never from now', () => {
-    expect(readyWindow(new Date('2026-09-12T23:58:00'))).toEqual({
-      from: '00:03',
-      to: '00:06',
-    });
-  });
-
-  it('holds the measured bounds, and says where they come from', () => {
-    expect(BOOT_WINDOW_MS).toEqual([300_000, 480_000]);
+  it('writes a window that crosses midnight', () => {
+    expect(
+      windowLabel({
+        from: new Date('2026-09-12T23:58:40'),
+        to: new Date('2026-09-13T00:03:10'),
+      }),
+    ).toEqual({ from: '23:58', to: '00:03' });
   });
 });
 

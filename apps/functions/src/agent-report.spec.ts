@@ -112,6 +112,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
     },
     states: { for: vi.fn(() => store), all: vi.fn(async () => [WORLD]) },
     setups: { for: vi.fn(() => setup) },
+    completedSetups: { keep: vi.fn(async () => undefined) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -280,6 +281,69 @@ describe('agentReport', () => {
       expect(instructions).not.toBeNull();
       expect(deps.journal.failure).toHaveBeenCalledWith({
         source: 'agentReport.setup',
+        sessionId: 's1',
+        error: 'Error: firestore is down',
+      });
+    });
+  });
+
+  describe('the setup that comes into service', () => {
+    // Opened at 20:00, reported ready at 20:10.
+    const TEN_MINUTES = 600_000;
+
+    it('is kept with the ones of its game, with the time it took since the opening', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(deps.completedSetups.keep).toHaveBeenCalledTimes(1);
+      expect(deps.completedSetups.keep).toHaveBeenCalledWith('enshrouded', {
+        sessionId: 's1',
+        durationMs: TEN_MINUTES,
+      });
+    });
+
+    // What is kept is a setup that completed: the join point is published first.
+    it('is kept once the session is in service', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(deps.store.publish.mock.invocationCallOrder[0]).toBeLessThan(
+        deps.completedSetups.keep.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('is not kept again by a ready report on a session already in service', async () => {
+      deps = fakeDeps({ session: runningSession('s1') });
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(deps.completedSetups.keep).not.toHaveBeenCalled();
+    });
+
+    // The doubled entry refuses every join point: the session stays in
+    // preparation, and its setup did not complete.
+    it('is not kept when the session does not come into service', async () => {
+      deps = fakeDeps({ session: provisioningSession('s1', 'sunkenland') });
+
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(deps.store.publish).not.toHaveBeenCalled();
+      expect(deps.completedSetups.keep).not.toHaveBeenCalled();
+    });
+
+    it('is not kept by a report that is not ready', async () => {
+      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'alive' });
+
+      expect(deps.completedSetups.keep).not.toHaveBeenCalled();
+    });
+
+    it('leaves the report succeed when it could not be kept, and journals why', async () => {
+      deps.completedSetups.keep.mockRejectedValue(new Error('firestore is down'));
+
+      const instructions = await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'ready' });
+
+      expect(instructions?.state).toBe('PROVISIONING');
+      expect(deps.store.publish).toHaveBeenCalledTimes(1);
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.completedSetup',
         sessionId: 's1',
         error: 'Error: firestore is down',
       });

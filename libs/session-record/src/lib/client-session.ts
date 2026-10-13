@@ -1,9 +1,11 @@
 import {
   DEFAULT_SETTINGS,
+  readyWindow,
   Session,
   shownSetup,
   World,
   type Actor,
+  type ReadyWindow,
   type SessionSettings,
   type ShownSetup,
   type WorldId,
@@ -26,8 +28,11 @@ import {
 } from 'firebase/firestore';
 import {
   abandonedSetupFrom,
+  completedSetupsDocPath,
+  completedSetupsFrom,
   displayedFactsFrom,
   EVENTS,
+  gameFrom,
   keptSetupFrom,
   lastOpeningFrom,
   openingFields,
@@ -56,15 +61,11 @@ export interface OpenRequest {
 
 /**
  * One snapshot of a world's server documents, as the screen needs it: what the
- * domain reads, the three facts §4 says are displayed, and the instant the
- * current state began.
+ * domain reads, the three facts §4 says are displayed, the instant the current
+ * state began, and what is announced of a setup.
  *
- * `stateSince` travels with them and is not a catch-all. The boot screen
- * announces a window computed from the instant the state began, and the
- * aggregate does not carry that field — `startedAt` is the session's opening,
- * which is the same instant today and will not be the day one state precedes
- * another. The admin face already reads it; this is the same translation
- * offered to the second transport.
+ * `stateSince` travels with them because the aggregate does not carry it, and
+ * the screens of a world out of service or not cleared say since when.
  */
 export interface ServerView {
   readonly session: Session;
@@ -76,6 +77,12 @@ export interface ServerView {
    * null otherwise.
    */
   readonly setup: ShownSetup | null;
+  /**
+   * The two instants between which the server should become joinable, drawn
+   * from the last setups of the world's game that came into service. Null out
+   * of a setup, and while that game counts fewer than two.
+   */
+  readonly readyWindow: ReadyWindow | null;
 }
 
 /**
@@ -233,6 +240,8 @@ export function clientSessionRecord(
     let serverData: Record<string, unknown> | undefined;
     let playerUids: readonly string[] | undefined;
     let setupData: Record<string, unknown> | undefined;
+    let completedData: Record<string, unknown> | undefined;
+    let unsubCompleted: Unsubscribe | null = null;
     let publishing = Promise.resolve();
 
     const publish = (): void => {
@@ -259,27 +268,53 @@ export function clientSessionRecord(
             onSummary(null);
             return;
           }
+          // A world `worldFrom` reads names a game this vocabulary knows, so the
+          // listener on that game's completed setups is already open and will
+          // answer, by a snapshot or by a refusal: waiting here cannot hang.
+          if (completedData === undefined) return;
+
           const session = sessionFrom(serverData, world);
+          if (session === null) {
+            onSummary({ world, server: null });
+            return;
+          }
+          const opening = lastOpeningFrom(serverData, session.state);
           onSummary({
             world,
-            server:
-              session === null
-                ? null
-                : {
-                    session,
-                    facts: displayedFactsFrom(serverData),
-                    stateSince: toDate(serverData['stateSince']),
-                    setup: shownSetup(
-                      lastOpeningFrom(serverData, session.state),
-                      abandonedSetupFrom(serverData),
-                      keptSetupFrom(setupData),
-                    ),
-                  },
+            server: {
+              session,
+              facts: displayedFactsFrom(serverData),
+              stateSince: toDate(serverData['stateSince']),
+              setup: shownSetup(opening, abandonedSetupFrom(serverData), keptSetupFrom(setupData)),
+              readyWindow: readyWindow(
+                opening,
+                completedSetupsFrom(completedData).map((completed) => completed.durationMs),
+              ),
+            },
           });
         })
         .catch(() => {
           onSummary(null);
         });
+    };
+
+    // One document per game, and a world never changes game: the listener
+    // opens on the first snapshot of the world that names one, and stays.
+    // Absent or refused, it reads as nothing kept, and no window is announced.
+    const watchCompletedSetups = (world: Record<string, unknown>): void => {
+      const game = gameFrom(world);
+      if (game === null || unsubCompleted !== null) return;
+      unsubCompleted = onSnapshot(
+        doc(db, completedSetupsDocPath(game)),
+        (snapshot) => {
+          completedData = snapshot.data() ?? {};
+          publish();
+        },
+        () => {
+          completedData = {};
+          publish();
+        },
+      );
     };
 
     // A rules refusal completes the stream rather than rejecting a promise —
@@ -290,6 +325,7 @@ export function clientSessionRecord(
       worldDoc(worldId),
       (snapshot) => {
         worldData = snapshot.exists() ? (snapshot.data() ?? {}) : null;
+        if (worldData !== null) watchCompletedSetups(worldData);
         publish();
       },
       () => {
@@ -342,6 +378,7 @@ export function clientSessionRecord(
       unsubServer();
       unsubPlayers();
       unsubSetup();
+      unsubCompleted?.();
     };
   }
 

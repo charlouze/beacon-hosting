@@ -77,6 +77,17 @@ describe('screenFixture', () => {
     expect(deadline.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
+  it('opens the preparing session when its setup starts, so a ready window starts from the opening', () => {
+    const fixture = screenFixture('preparing', NOW);
+    const startedAt = fixture['startedAt'] as Date;
+    expect(startedAt).toEqual(fixture['stateSince']);
+    expect(startedAt).toEqual(fixture['provisionClaimedAt']);
+    expect(NOW.getTime() - startedAt.getTime()).toBe(40_000);
+    expect((fixture['deadline'] as Date).getTime() - startedAt.getTime()).toBe(
+      DEFAULT_SETTINGS.sessionDurationMs,
+    );
+  });
+
   it('says what went wrong on the screen that reports a failure', () => {
     expect(displayedFactsFrom(screenFixture('failed', NOW)).lastError).toBeTruthy();
   });
@@ -119,5 +130,15 @@ describe('screen', () => {
     expect(doc.get('state')).toBe('RUNNING');
     expect(doc.get('game')).toBeUndefined();
     expect(doc.get('joinInfo').hostname).toBe('dev-world.beacon.charlouze.com');
+  });
+
+  it('keeps two completed setups of the dev world game, so a ready window can be announced', async () => {
+    await db.doc('completedSetups/enshrouded').delete();
+    await screen('preparing', NOW);
+
+    const doc = await db.doc('completedSetups/enshrouded').get();
+    expect(doc.get('setups').map((setup: { durationMs: number }) => setup.durationMs)).toEqual([
+      300_000, 480_000,
+    ]);
   });
 });

@@ -28,6 +28,7 @@ describe('NotClearedComponent', () => {
       facts: { ip: null, joinInfo: null, lastError },
       stateSince: new Date('2026-09-13T00:31:00'),
       setup,
+      readyWindow: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();

@@ -25,6 +25,7 @@ describe('ClosingComponent', () => {
       facts: { ip: null, joinInfo: null, lastError: null },
       stateSince: new Date('2026-09-13T00:30:00'),
       setup: null,
+      readyWindow: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();

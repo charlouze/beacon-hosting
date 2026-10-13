@@ -12,7 +12,8 @@ export type FailureSource =
   | 'agentReport.save'
   | 'agentReport.cleanup'
   | 'agentReport.machine'
-  | 'agentReport.setup';
+  | 'agentReport.setup'
+  | 'agentReport.completedSetup';
 
 export interface JournalledFailure {
   readonly source: FailureSource;

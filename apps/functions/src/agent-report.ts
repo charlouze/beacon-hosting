@@ -2,6 +2,7 @@ import { catalogFor } from '@beacon/cloud-init';
 import type { AgentInstructions, AgentReport } from '@beacon/agent-protocol';
 import {
   Save,
+  completedSetup,
   type Clock,
   type DnsUpdater,
   type DomainEvent,
@@ -15,6 +16,7 @@ import {
   type WorldId,
 } from '@beacon/session';
 import type {
+  CompletedSetupStore,
   ServerStateStore,
   SaveRecords,
   SetupStores,
@@ -31,6 +33,7 @@ export interface AgentReportDeps {
   readonly tokens: AgentTokens;
   readonly states: WorldStateStores;
   readonly setups: SetupStores;
+  readonly completedSetups: CompletedSetupStore;
   readonly settings: SettingsStore;
   readonly ledger: ProvisioningLedger;
   readonly saves: SaveRecords;
@@ -260,6 +263,33 @@ async function becomeRunning(
     },
     now,
   );
+  await rememberCompletedSetup(deps, session, now);
+}
+
+/**
+ * The setup that just came into service joins the last ones of its game, from
+ * which the sessions to come announce when they should be ready.
+ *
+ * It is only ever displayed, so a store that fails here must not cost the
+ * report its phase: the session is in service already.
+ */
+async function rememberCompletedSetup(
+  deps: AgentReportDeps,
+  session: Session,
+  now: Date,
+): Promise<void> {
+  const { sessionId, game, startedAt } = session;
+  if (sessionId === null || game === null || startedAt === null) return;
+
+  try {
+    await deps.completedSetups.keep(game, completedSetup(sessionId, startedAt, now));
+  } catch (error) {
+    deps.journal.failure({
+      source: 'agentReport.completedSetup',
+      sessionId,
+      error: String(error),
+    });
+  }
 }
 
 /**

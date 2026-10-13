@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, type Game, type JoinInfo } from '@beacon/session';
-import { serverDocPath } from '@beacon/session-record';
+import { completedSetupsDocPath, completedSetupsDocument, serverDocPath } from '@beacon/session-record';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { emulatorsOnly } from './emulator-guard.js';
@@ -109,6 +109,8 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
       return {
         ...opened,
         state: 'PROVISIONING',
+        startedAt: ago(40_000),
+        deadline: ahead(DEFAULT_SETTINGS.sessionDurationMs - 40_000),
         stateSince: ago(40_000),
         provisionClaimedAt: ago(40_000),
       };
@@ -152,6 +154,12 @@ function forDevWorld(joinInfo: JoinInfo | null): JoinInfo | null {
   return { ...joinInfo, hostname: `${DEV_WORLD_ID}.beacon.charlouze.com` };
 }
 
+const DEV_WORLD_GAME: Game = 'enshrouded';
+const DEV_WORLD_SETUPS = [
+  { sessionId: 'dev-setup-0001', durationMs: 5 * 60_000 },
+  { sessionId: 'dev-setup-0002', durationMs: 8 * 60_000 },
+];
+
 export async function screen(name: string, now: Date): Promise<void> {
   emulatorsOnly('screen');
 
@@ -164,9 +172,13 @@ export async function screen(name: string, now: Date): Promise<void> {
   const { game, ...fixture } = screenFixture(name, now);
   void game;
 
-  await getFirestore(defaultApp())
+  const db = getFirestore(defaultApp());
+  await db
     .doc(serverDocPath(DEV_WORLD_ID))
     .set({ ...fixture, joinInfo: forDevWorld(fixture['joinInfo'] as JoinInfo | null) });
+  // A ready window is announced only from two completed setups of the game;
+  // written whole on every screen, like `server/current`.
+  await db.doc(completedSetupsDocPath(DEV_WORLD_GAME)).set(completedSetupsDocument(DEV_WORLD_SETUPS));
   console.log(
     `${serverDocPath(DEV_WORLD_ID)} now shows "${name}" — the open tab follows without a reload`,
   );

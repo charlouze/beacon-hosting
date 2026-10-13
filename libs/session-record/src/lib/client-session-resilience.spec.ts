@@ -123,6 +123,8 @@ describe('a roster read the rules refuse', () => {
       order: null,
       abandonedAt: null,
     });
+    // Nor on `completedSetups`: the world publishes all the same, with no window.
+    expect(seen.at(-1)?.server?.readyWindow).toBeNull();
 
     unsubscribe();
     await Promise.all(clients.splice(0).map((app) => deleteApp(app)));
