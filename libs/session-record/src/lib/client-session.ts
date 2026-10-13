@@ -25,9 +25,11 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import {
+  abandonedSetupFrom,
   displayedFactsFrom,
   EVENTS,
   keptSetupFrom,
+  lastOpeningFrom,
   openingFields,
   playerDocument,
   PLAYERS,
@@ -68,7 +70,11 @@ export interface ServerView {
   readonly session: Session;
   readonly facts: DisplayedFacts;
   readonly stateSince: Date | null;
-  /** What the screen shows of the setup, and null outside the preparation. */
+  /**
+   * What the screen shows of the world's last setup: the step under way while
+   * the session prepares, the step it stopped at once it was abandoned, and
+   * null otherwise.
+   */
   readonly setup: ShownSetup | null;
 }
 
@@ -263,7 +269,11 @@ export function clientSessionRecord(
                     session,
                     facts: displayedFactsFrom(serverData),
                     stateSince: toDate(serverData['stateSince']),
-                    setup: shownSetup(session, null, keptSetupFrom(setupData)),
+                    setup: shownSetup(
+                      lastOpeningFrom(serverData, session.state),
+                      abandonedSetupFrom(serverData),
+                      keptSetupFrom(setupData),
+                    ),
                   },
           });
         })

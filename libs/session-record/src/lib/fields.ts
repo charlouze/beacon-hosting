@@ -10,10 +10,12 @@ import {
   SESSION_STATES,
   Session,
   World,
+  type AbandonedSetup,
   type InstanceSize,
   type JoinInfo,
   type KeptSetup,
   type KeptSetupStep,
+  type LastOpening,
   type SessionSettings,
   type SessionState,
   type WorldId,
@@ -65,6 +67,38 @@ export function keptSetupFrom(data: Record<string, unknown>): KeptSetup | null {
   const step = keptStepFrom(data);
   if (typeof sessionId !== 'string' || !isSetupStepOrder(order) || step === null) return null;
   return { sessionId, order, step };
+}
+
+/**
+ * The field of `server/current` that marks an abandoned setup: whose it was,
+ * and when. Only the Functions write it, in the write that changes the state.
+ * It stays out of `RESERVED_FACTS` like `lastError`, and for the same reason:
+ * the cleanup of an abandon empties those, and this is what it must leave.
+ */
+export const ABANDONED_SETUP = 'abandonedSetup';
+
+/** The mark as the domain reads it. Half a mark reads as none. */
+export function abandonedSetupFrom(data: Record<string, unknown>): AbandonedSetup | null {
+  const mark = data[ABANDONED_SETUP];
+  if (typeof mark !== 'object' || mark === null) return null;
+  const { sessionId, at } = mark as Record<string, unknown>;
+  const abandonedAt = toDate(at);
+  if (typeof sessionId !== 'string' || abandonedAt === null) return null;
+  return { sessionId, at: abandonedAt };
+}
+
+/**
+ * The session `server/current` last opened. A return to out of service leaves
+ * it on the document, which is why this reads the document and not the
+ * session: an idle `Session` names none.
+ */
+export function lastOpeningFrom(data: Record<string, unknown>, state: SessionState): LastOpening {
+  const sessionId = data['sessionId'];
+  return {
+    state,
+    sessionId: typeof sessionId === 'string' ? sessionId : null,
+    startedAt: toDate(data['startedAt']),
+  };
 }
 
 /**
@@ -310,6 +344,7 @@ export function idleServerDocument(now: Date): Record<string, unknown> {
     joinInfo: null,
     provisionClaimedAt: null,
     lastError: null,
+    [ABANDONED_SETUP]: null,
   };
 }
 

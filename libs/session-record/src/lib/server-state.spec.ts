@@ -2,7 +2,7 @@ import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Deadline, type StateCorrection } from '@beacon/session';
-import { EVENTS, serverDocPath, toDate } from './fields.js';
+import { abandonedSetupFrom, EVENTS, serverDocPath, toDate } from './fields.js';
 import { serverStateStore, type ServerStateStore } from './server-state.js';
 
 process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
@@ -346,5 +346,46 @@ describe('applying a deadline', () => {
     expect(data['stateSince']).toBeUndefined();
     const events = await db.collection(EVENTS).get();
     expect(events.docs.map((d) => d.get('type'))).toEqual(['DeadlineClamped']);
+  });
+});
+
+describe('the mark of an abandoned setup', () => {
+  const MARK = { sessionId: 's1', at: AT };
+  const current = async () => (await db.doc(SERVER_DOC).get()).data() ?? {};
+
+  it('is written with the state, in the same write, at the instant of the pass', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's1', ip: '51.15.42.7' });
+
+    await apply({ state: 'IDLE', clearFacts: true, abandonedSetup: 's1' });
+
+    const after = await current();
+    expect(after['state']).toBe('IDLE');
+    expect(abandonedSetupFrom(after)).toEqual({ sessionId: 's1', at: NOW });
+  });
+
+  // The retry that clears a blocked session abandons nothing: the mark it
+  // finds is the one thing that still says where the setup stopped.
+  it('is left alone by a correction that abandons nothing, even one that empties the facts', async () => {
+    await seedServer({ state: 'FAILED', sessionId: 's1', abandonedSetup: MARK });
+
+    await apply({ state: 'IDLE', clearFacts: true });
+
+    expect(abandonedSetupFrom(await current())).toEqual(MARK);
+  });
+
+  it('is erased by the claim of the next setup, since that one answers for itself', async () => {
+    await seedServer({ state: 'PROVISIONING', sessionId: 's2', abandonedSetup: MARK });
+
+    expect(await store.claimProvisioning('s2', AT)).toBe(true);
+
+    expect((await current())['abandonedSetup']).toBeNull();
+  });
+
+  it('is left alone by a claim that is refused', async () => {
+    await seedServer({ state: 'IDLE', sessionId: 's2', abandonedSetup: MARK });
+
+    expect(await store.claimProvisioning('s2', AT)).toBe(false);
+
+    expect(abandonedSetupFrom(await current())).toEqual(MARK);
   });
 });

@@ -9,6 +9,7 @@ import {
 } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import {
+  ABANDONED_SETUP,
   EVENTS,
   RESERVED_FACTS,
   serverDocPath,
@@ -116,6 +117,8 @@ export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateSt
           // call *is* that next attempt. Not at publish: `announce()` may have
           // just filed a dns incident on this very session.
           lastError: null,
+          // Where the setup before stopped goes with it, for the same reason.
+          [ABANDONED_SETUP]: null,
         });
         return true;
       });
@@ -158,6 +161,15 @@ export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateSt
         // The deadline alone. `stateSince` stays where it is: the state did
         // not change, and the delays of §6 are measured on it.
         patch['deadline'] = Timestamp.fromDate(correction.deadline.at);
+      }
+      if (correction.abandonedSetup !== null) {
+        // With the state, in the same write: a screen never reads an abandon
+        // without where it stopped. Null leaves the recorded mark, like
+        // `lastError`.
+        patch[ABANDONED_SETUP] = {
+          sessionId: correction.abandonedSetup,
+          at: Timestamp.fromDate(at),
+        };
       }
       if (Object.keys(patch).length > 0) {
         batch.set(serverDoc(), patch, { merge: true });
