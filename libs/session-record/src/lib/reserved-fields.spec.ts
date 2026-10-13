@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
-import { DEPLOYED_FIELDS, openingFields, RESERVED_FACTS } from './fields.js';
+import { ABANDONED_SETUP, DEPLOYED_FIELDS, openingFields, RESERVED_FACTS } from './fields.js';
 
 // An ordinary member's opening, which is the one that must go through every
 // evening. No `instanceSize`: §5 leaves the template to an admin, and the
@@ -68,12 +68,18 @@ describe('the rules and the record agree on who owns what', () => {
   });
 
   // The other direction, and the one that leaks rather than breaks. `lastError`
-  // is reserved by §5 but deliberately absent from RESERVED_FACTS — the record
-  // does not carry it — so it is named here, or nothing would guard it.
+  // and `abandonedSetup` are reserved but deliberately absent from
+  // RESERVED_FACTS — the cleanup of an abandon must not empty them — so they
+  // are named here, or nothing would guard them.
   it('demands no field the functions reserve', () => {
-    for (const field of [...RESERVED_FACTS, 'lastError']) {
+    for (const field of [...RESERVED_FACTS, 'lastError', ABANDONED_SETUP]) {
       expect(demandedByRules()).not.toContain(field);
     }
+  });
+
+  it('keeps what a failed attempt left out of the facts a cleanup empties', () => {
+    expect(RESERVED_FACTS).not.toContain('lastError');
+    expect(RESERVED_FACTS).not.toContain(ABANDONED_SETUP);
   });
 
   // `instanceSize` is demanded, but only for an admin. It is neither a

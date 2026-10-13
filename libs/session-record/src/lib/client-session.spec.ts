@@ -301,6 +301,7 @@ describe('the setup of a session that prepares', () => {
   const FIRST_STEP = {
     step: { step: 'waking', since: OPENED, activity: null, progress: null },
     order: null,
+    abandonedAt: null,
   };
 
   async function preparingServer(worldId: string, sessionId: string): Promise<void> {
@@ -333,6 +334,7 @@ describe('the setup of a session that prepares', () => {
     expect((await view())?.server?.setup).toEqual({
       step: { step: 'fetching-game', since: AT, activity: 'downloading', progress: 37 },
       order: [...ORDER],
+      abandonedAt: null,
     });
   });
 
@@ -361,6 +363,61 @@ describe('the setup of a session that prepares', () => {
 
     expect(seen?.server?.session.state).toBe('IDLE');
     expect(seen?.server?.setup).toBeNull();
+  });
+
+  describe('once it is abandoned', () => {
+    const ABANDONED = new Date('2026-10-12T20:19:00Z');
+
+    /** What an abandon leaves: out of service, the session still named, and the mark. */
+    async function abandonedServer(sessionId: string, markedSession = sessionId): Promise<void> {
+      await getFirestore()
+        .doc(serverDocPath('les-copains'))
+        .set(
+          {
+            state: 'IDLE',
+            stateSince: Timestamp.fromDate(ABANDONED),
+            sessionId,
+            abandonedSetup: { sessionId: markedSession, at: Timestamp.fromDate(ABANDONED) },
+          },
+          { merge: true },
+        );
+    }
+
+    it('publishes the step the setup stopped at, and the instant it was abandoned', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+      await setups().begin('s1', ORDER, OPENED);
+      await setups().advance('s1', { step: 'fetching-game' }, AT);
+      await abandonedServer('s1');
+
+      const seen = await view();
+
+      expect(seen?.server?.session.state).toBe('IDLE');
+      expect(seen?.server?.setup).toEqual({
+        step: { step: 'fetching-game', since: AT, activity: null, progress: null },
+        order: [...ORDER],
+        abandonedAt: ABANDONED,
+      });
+    });
+
+    it('publishes the first step when the setup it kept is another session’s', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's1');
+      await setups().begin('s0', ORDER, OPENED);
+      await abandonedServer('s1');
+
+      expect((await view())?.server?.setup).toEqual({ ...FIRST_STEP, abandonedAt: ABANDONED });
+    });
+
+    // A session opened and stopped before it was claimed: the mark is still
+    // the one of the session before it.
+    it('publishes nothing when the mark names another session than the last one opened', async () => {
+      await seedWorld('les-copains', { players: ['alice'] });
+      await preparingServer('les-copains', 's2');
+      await abandonedServer('s2', 's1');
+
+      expect((await view())?.server?.setup).toBeNull();
+    });
   });
 
   // The progress lives in a document of its own: a write to it moves no field

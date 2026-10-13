@@ -175,8 +175,9 @@ const downloading = (progress: number): SetupDeclaration => ({
 
 /**
  * Best effort, and deliberately swallowed: the control plane not hearing why is
- * bad, and this process staying alive to say so would be worse. What ends the
- * session either way is the provisioning delay of §6.
+ * bad, and this process staying alive to say so would be worse. A report that
+ * arrives makes the control plane abandon the setup at once; one that is lost
+ * leaves the session to the provisioning delay.
  */
 async function tell(deps: RestoreDeps, detail: string): Promise<void> {
   try {

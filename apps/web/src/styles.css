@@ -463,6 +463,10 @@ a {
   max-width: 62ch;
 }
 
+.warn .said b {
+  font-weight: 700;
+}
+
 /* What the interface says instead of occupying a wait. */
 .release {
   padding: 16px 0 40px;

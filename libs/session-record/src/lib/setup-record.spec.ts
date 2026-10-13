@@ -183,3 +183,21 @@ describe('advance', () => {
     expect((await setup())?.['step']).toBe('booting');
   });
 });
+
+describe('read', () => {
+  it('reads whose setup is kept, the order of its game and the step it is on', async () => {
+    await preparing('s1');
+    await store.begin('s1', ORDER, OPENED);
+    await store.advance('s1', { step: 'fetching-game' }, AT);
+
+    expect(await store.read()).toEqual({
+      sessionId: 's1',
+      order: [...ORDER],
+      step: { step: 'fetching-game', since: AT, activity: null, progress: null },
+    });
+  });
+
+  it('reads nothing where no setup was ever begun', async () => {
+    expect(await store.read()).toBeNull();
+  });
+});

@@ -54,11 +54,12 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
     publish: vi.fn(async () => undefined),
     apply: vi.fn(async () => undefined),
     read: vi.fn(async () => null),
-    readSession: vi.fn(async () => null),
+    readSession: vi.fn(async (): Promise<Session | null> => provisioning()),
   };
   const setup = {
     begin: vi.fn(async () => undefined),
     advance: vi.fn(async () => null),
+    read: vi.fn(async () => null),
   };
   return {
     clock: { now: () => NOW },
@@ -284,6 +285,54 @@ describe('provisioning', () => {
     // The intent stays open: something is still billed, and closing it would
     // hide the resources from the reconciliation that has to find them.
     expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+
+  it('gives the session whose setup the refusal abandons', async () => {
+    deps.host.open = vi.fn(async () => {
+      throw new Error('no capacity');
+    });
+    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'IDLE', abandonedSetup: 's1' }),
+      NOW,
+    );
+  });
+
+  it('gives it too when the cleanup fails', async () => {
+    deps.host.open = vi.fn(async () => {
+      throw new Error('no capacity');
+    });
+    deps.host.close = vi.fn(async () => {
+      throw new Error('api unreachable');
+    });
+    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'FAILED', abandonedSetup: 's1' }),
+      NOW,
+    );
+  });
+
+  // The cleanup can last half a minute, and the world does not wait for it.
+  it('writes nothing when the world moved on to another session during the cleanup', async () => {
+    deps.host.open = vi.fn(async () => {
+      throw new Error('no capacity');
+    });
+    deps.states.for(WORLD_ID).readSession = vi.fn(async () =>
+      provisioningSession('s2', WORLD_ID, 'enshrouded'),
+    );
+    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(deps.host.close).toHaveBeenCalledWith('s1');
+    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
+    expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing when a member closed the session during the cleanup', async () => {
+    deps.host.open = vi.fn(async () => {
+      throw new Error('no capacity');
+    });
+    deps.states.for(WORLD_ID).readSession = vi.fn(async () => stopping());
+    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
   });
 
   // The register, not a double: what this tranche changes is that `members`

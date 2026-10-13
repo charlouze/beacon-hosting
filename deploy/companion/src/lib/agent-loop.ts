@@ -137,8 +137,8 @@ const ALIVE: ReadyOutcome = { report: { phase: 'alive' }, becomesReady: false };
  * `ready` once the server answers, but a `serverId` is followed rather than
  * merely relayed (§6): it names the world the *game* generated, and the only
  * defence against a blank world is to compare it against the world *this
- * machine* restored. No match, no publish — the session then dies of the
- * provisioning deadline instead, with a legible reason.
+ * machine* restored. No match, no publish — the report makes the control
+ * plane abandon the setup instead, with a legible reason.
  */
 function readyOutcome(
   readiness: Readiness & { ready: true },

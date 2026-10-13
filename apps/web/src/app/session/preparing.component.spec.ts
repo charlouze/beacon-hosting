@@ -16,11 +16,13 @@ describe('PreparingComponent', () => {
   const FIRST_STEP: ShownSetup = {
     step: { step: 'waking', since: startedAt, activity: null, progress: null },
     order: null,
+    abandonedAt: null,
   };
 
   const fetching = (parts: Partial<ShownSetup['step']> = {}): ShownSetup => ({
     step: { step: 'fetching-game', since: stepSince, activity: null, progress: null, ...parts },
     order: DEPOT_FIRST,
+    abandonedAt: null,
   });
 
   const render = async (
@@ -123,6 +125,7 @@ describe('PreparingComponent', () => {
       const fixture = await render({
         step: { step: 'waking', since: stepSince, activity: null, progress: null },
         order: DEPOT_FIRST,
+        abandonedAt: null,
       });
 
       expect(field(fixture, 'step-rank')).toBe('1/4');
@@ -135,6 +138,7 @@ describe('PreparingComponent', () => {
       const fixture = await render({
         step: { step: 'restoring-world', since: stepSince, activity: null, progress: null },
         order: DEPOT_FIRST,
+        abandonedAt: null,
       });
 
       expect(states(fixture)).toEqual(['done', 'done', 'cur', 'todo']);

@@ -11,6 +11,7 @@ import {
   type SessionId,
   type SetupAdvance,
   type SetupDeclaration,
+  type SetupStep,
   type WorldId,
 } from '@beacon/session';
 import type {
@@ -20,6 +21,7 @@ import type {
   SettingsStore,
   WorldStateStores,
 } from '@beacon/session-record';
+import { abandonSetup } from './abandon-setup.js';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { expunged, type PlatformJournal } from './platform-journal.js';
@@ -91,7 +93,15 @@ export async function runAgentReport(
   }
   if (report.phase === 'ready') await becomeRunning(deps, state, worldId, session, report, now);
   if (report.phase === 'saved') await recordSave(deps, state, worldId, session, report, now);
-  if (report.phase === 'failed') await fileFailure(deps, state, session, report, now);
+  if (report.phase === 'failed') {
+    if (session.state === 'PROVISIONING') {
+      await abandonDeclaredSetup(deps, worldId, report, now);
+      // Whatever came of the close: this server has nothing left to do, and
+      // an agent told to stand down stops reporting.
+      return STAND_DOWN;
+    }
+    await fileFailure(deps, state, report, now);
+  }
 
   // From the session as it was read, not as this call may have just left it: a
   // `ready` that published RUNNING answers PROVISIONING, and the machine learns
@@ -351,6 +361,7 @@ async function destroy(
         clearFacts: false,
         deadline: null,
         closeIntents: [],
+        abandonedSetup: null,
         events: [{ type: 'CleanupFailed', sessionId, detail }],
       },
       now,
@@ -379,6 +390,7 @@ async function destroy(
       clearFacts: true,
       deadline: null,
       closeIntents: [],
+      abandonedSetup: null,
       events: [stopped],
     },
     now,
@@ -422,30 +434,82 @@ function assertOwnKey(
   }
 }
 
+/** What every user reads of a declared abandon: a fixed sentence, and nothing a game server wrote. */
+const DECLARED_ABANDON = 'the game server said it could not finish its setup';
+
+const UNEXPLAINED_FAILURE = 'the machine reported a failure without saying which';
+
 /**
- * `ProvisioningFailed` only from PROVISIONING, exactly as `becomeRunning`
- * gates on it above: a session already RUNNING did not fail to *provision*,
- * whatever else it failed at — a crashed game process, a failed push. Filing
- * that as a provisioning failure is the dishonesty `DnsUpdateFailed`'s comment
- * already names, and it would read the same way to whoever opens the journal.
+ * A game server that says it cannot finish its setup is believed, and nothing
+ * else is checked: it is the only one that knows why it fails. The world is
+ * the one the function recorded at the opening, never one the report names.
+ *
+ * What it wrote — its cause, the end of the game's output — goes whole to the
+ * platform journal and nowhere else: neither the event nor `lastError` keeps
+ * any of it.
+ */
+async function abandonDeclaredSetup(
+  deps: AgentReportDeps,
+  worldId: WorldId,
+  report: AgentReport,
+  now: Date,
+): Promise<void> {
+  const sessionId = report.sessionId;
+  deps.journal.failure({
+    source: 'agentReport.machine',
+    sessionId,
+    error: report.detail ?? UNEXPLAINED_FAILURE,
+    step: await reachedStep(deps, worldId, sessionId),
+    ...(report.gameLog === undefined ? {} : { gameLog: report.gameLog }),
+  });
+  await abandonSetup(
+    deps,
+    {
+      worldId,
+      sessionId,
+      detail: DECLARED_ABANDON,
+      hostRefusal: null,
+      cleanupSource: 'agentReport.cleanup',
+    },
+    now,
+  );
+}
+
+/**
+ * Only ever journalled, so a store that fails here must not cost the abandon:
+ * the failure is journalled on its own, and the step is then null.
+ */
+async function reachedStep(
+  deps: AgentReportDeps,
+  worldId: WorldId,
+  sessionId: SessionId,
+): Promise<SetupStep | null> {
+  try {
+    const kept = await deps.setups.for(worldId).read();
+    return kept !== null && kept.sessionId === sessionId ? kept.step.step : null;
+  } catch (error) {
+    deps.journal.failure({ source: 'agentReport.setup', sessionId, error: String(error) });
+    return null;
+  }
+}
+
+/**
+ * A failure reported outside the preparation — a crashed game process, a
+ * failed push. It did not fail to *provision*, whatever else it failed at, and
+ * it ends nothing: one audit line, and the session goes on.
  */
 async function fileFailure(
   deps: AgentReportDeps,
   state: ServerStateStore,
-  session: Session,
   report: AgentReport,
   now: Date,
 ): Promise<void> {
   const sessionId = report.sessionId;
   const detail =
     report.detail === undefined
-      ? 'the machine reported a failure without saying which'
+      ? UNEXPLAINED_FAILURE
       : expunged(deps.journal, 'agentReport.machine', sessionId, report.detail);
-  const event: DomainEvent =
-    session.state === 'PROVISIONING'
-      ? { type: 'ProvisioningFailed', sessionId, detail }
-      : { type: 'AgentReportedFailure', sessionId, detail };
-  await fileEvent(state, now, event);
+  await fileEvent(state, now, { type: 'AgentReportedFailure', sessionId, detail });
 }
 
 /**
@@ -465,6 +529,7 @@ async function fileEvent(
       clearFacts: false,
       deadline: null,
       closeIntents: [],
+      abandonedSetup: null,
       events: [event],
     },
     now,

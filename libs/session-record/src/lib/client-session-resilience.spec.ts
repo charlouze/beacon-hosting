@@ -121,6 +121,7 @@ describe('a roster read the rules refuse', () => {
     expect(seen.at(-1)?.server?.setup).toEqual({
       step: { step: 'waking', since: NOW, activity: null, progress: null },
       order: null,
+      abandonedAt: null,
     });
 
     unsubscribe();

@@ -12,6 +12,7 @@ import { sessionTag } from '@beacon/scaleway-compute';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { expunged, type PlatformJournal } from './platform-journal.js';
+import { abandonSetup } from './abandon-setup.js';
 
 export interface ProvisionDeps {
   readonly clock: Clock;
@@ -159,43 +160,9 @@ async function failed(
   cause: unknown,
 ): Promise<void> {
   const detail = expunged(deps.journal, 'provisioning.setup', sessionId, cause);
-  const state = deps.states.for(worldId);
-  try {
-    await deps.host.close(sessionId);
-  } catch (cleanupError) {
-    await state.apply(
-      {
-        state: 'FAILED',
-        lastError: detail,
-        clearFacts: false,
-        deadline: null,
-        closeIntents: [],
-        events: [
-          { type: 'ProvisioningFailed', sessionId, detail },
-          {
-            type: 'CleanupFailed',
-            sessionId,
-            detail: expunged(deps.journal, 'provisioning.cleanup', sessionId, cleanupError),
-          },
-        ],
-      },
-      now,
-    );
-    // The intent stays open on purpose: something may still be billed, and a
-    // closed intent is exactly what makes the reconciliation stop looking.
-    return;
-  }
-
-  await state.apply(
-    {
-      state: 'IDLE',
-      lastError: detail,
-      clearFacts: true,
-      deadline: null,
-      closeIntents: [],
-      events: [{ type: 'ProvisioningFailed', sessionId, detail }],
-    },
+  await abandonSetup(
+    deps,
+    { worldId, sessionId, detail, hostRefusal: detail, cleanupSource: 'provisioning.cleanup' },
     now,
   );
-  await deps.ledger.close(sessionId, now);
 }

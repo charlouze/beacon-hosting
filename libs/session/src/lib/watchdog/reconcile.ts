@@ -33,6 +33,12 @@ export interface StateCorrection {
    * is what the stuck-state delays are measured on.
    */
   readonly deadline: Deadline | null;
+  /**
+   * The session whose setup this correction abandons, or null. Null leaves
+   * whatever mark the record already carries: the mark of an abandoned setup
+   * outlives the corrections that follow it, until the next setup is claimed.
+   */
+  readonly abandonedSetup: SessionId | null;
 }
 
 const NOTHING: StateCorrection = {
@@ -42,6 +48,7 @@ const NOTHING: StateCorrection = {
   closeIntents: [],
   events: [],
   deadline: null,
+  abandonedSetup: null,
 };
 
 interface ClosedMeaning {
@@ -175,6 +182,11 @@ export function reconcileWorld(
   for (const outcome of outcomes) {
     const { sessionId } = outcome.reclamation;
     if (!outcome.closed) {
+      // A setup the delay abandons failed whether or not its server could be
+      // closed: the refusal is a second fact, and never the only one.
+      if (abandonedBy(outcome.reclamation) !== null) {
+        events.push(CLOSED[outcome.reclamation.reason].event(outcome.reclamation, costEuros));
+      }
       events.push({ type: 'CleanupFailed', sessionId, detail: outcome.error });
       continue;
     }
@@ -203,6 +215,7 @@ export function reconcileWorld(
       closeIntents,
       events,
       deadline: null,
+      abandonedSetup: abandonedBy(own.reclamation),
     };
   }
 
@@ -214,6 +227,7 @@ export function reconcileWorld(
       closeIntents,
       events,
       deadline: null,
+      abandonedSetup: abandonedBy(own.reclamation),
     };
   }
 
@@ -231,6 +245,7 @@ export function reconcileWorld(
       closeIntents,
       events,
       deadline: null,
+      abandonedSetup: null,
     };
   }
 
@@ -248,6 +263,7 @@ export function reconcileWorld(
       closeIntents: closing(closeIntents, record.sessionId),
       events,
       deadline: null,
+      abandonedSetup: null,
     };
   }
 
@@ -265,6 +281,7 @@ export function reconcileWorld(
       closeIntents,
       events: [...events, { type: 'SessionExpired', sessionId: expiring.sessionId, detail: expiring.detail }],
       deadline: null,
+      abandonedSetup: null,
     };
   }
 
@@ -284,6 +301,13 @@ export function reconcileWorld(
   const clamped = clamping(view, world);
   return { ...NOTHING, ...clamped, closeIntents, events: [...events, ...clamped.events] };
 }
+
+/**
+ * The delay only runs out on a session still preparing, so this reason alone
+ * abandons a setup — whether its server could be closed or not.
+ */
+const abandonedBy = (reclamation: Reclamation): SessionId | null =>
+  reclamation.reason === 'provisioning-timeout' ? reclamation.sessionId : null;
 
 function isStillHeld(view: WatchdogView, sessionId: SessionId | null): boolean {
   return sessionId !== null && view.hosted.some((s) => s.sessionId === sessionId);

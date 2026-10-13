@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import type { SessionSettings } from '@beacon/session';
 import type { ServerView } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
-import { euroLabel, hourLabel } from '../format';
+import { euroLabel, hourLabel, stoppedAt } from '../format';
 
 /**
  * A machine was left standing, and it is still being billed. §8: cleanup that
@@ -45,6 +45,15 @@ import { euroLabel, hourLabel } from '../format';
         </div>
       </div>
 
+      @if (stopped(); as stopped) {
+        <div class="warn" data-field="stopped-at">
+          <span class="k" data-warn>Where it stopped, at {{ stopped.at }}</span>
+          <div class="said">
+            <b>Step {{ stopped.rank }} of {{ stopped.total }}</b> · {{ stopped.name }}
+          </div>
+        </div>
+      }
+
       @if (refusal(); as refusal) {
         <div class="warn">
           <span class="k" data-warn>What the host said{{ said() }}</span>
@@ -80,6 +89,8 @@ export class NotClearedComponent {
   private readonly clock = inject(CLOCK);
 
   readonly refusal = computed(() => this.view().facts.lastError);
+
+  readonly stopped = computed(() => stoppedAt(this.view().setup));
 
   readonly since = computed(() => {
     const at = this.view().stateSince;

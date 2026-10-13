@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   Session,
   type Game,
+  type KeptSetup,
   type SetupAdvance,
   type WorldId,
 } from '@beacon/session';
@@ -92,7 +93,7 @@ interface FakeDepsOptions {
  */
 const fakeDeps = (options: FakeDepsOptions = {}) => {
   const store = {
-    readSession: vi.fn(async () => options.session ?? null),
+    readSession: vi.fn(async (): Promise<Session | null> => options.session ?? null),
     publish: vi.fn(async () => undefined),
     apply: vi.fn(async () => undefined),
     read: vi.fn(async () => null),
@@ -101,6 +102,7 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
   const setup = {
     begin: vi.fn(async () => undefined),
     advance: vi.fn(async (): Promise<SetupAdvance | null> => null),
+    read: vi.fn(async (): Promise<KeptSetup | null> => null),
   };
   return {
     clock: { now: () => NOW },
@@ -785,20 +787,6 @@ describe('agentReport', () => {
       expect(entry.error).toContain(foreignKey);
     });
 
-    it('keeps what a game server reports of its own failure out of the event', async () => {
-      const reported = `restore refused: AWS_SECRET_ACCESS_KEY=${secret}`;
-      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'failed', detail: reported });
-      const [event] = filed(deps);
-      expect(event.type).toBe('ProvisioningFailed');
-      expect(event.detail).not.toContain(secret);
-      expect(event.detail).toContain('[redacted]');
-      expect(deps.journal.failure).toHaveBeenCalledWith({
-        source: 'agentReport.machine',
-        sessionId: 's1',
-        error: reported,
-      });
-    });
-
     it('keeps what a running game server reports out of the event too', async () => {
       deps = fakeDeps({ session: runningSession('s1') });
       await runAgentReport(deps, TOKEN, {
@@ -856,12 +844,6 @@ describe('agentReport', () => {
       expect(filed(deps)[0].detail).toBe('declared server id none, refused by the catalogue');
       expect(deps.journal.failure).not.toHaveBeenCalled();
     });
-
-    it('journals nothing when the game server says nothing of its failure', async () => {
-      await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'failed' });
-      expect(filed(deps)[0].detail).toBe('the machine reported a failure without saying which');
-      expect(deps.journal.failure).not.toHaveBeenCalled();
-    });
   });
 
   // As stale as any other report about a session that has moved on — the
@@ -883,25 +865,220 @@ describe('agentReport', () => {
     expect(answer).toEqual({ state: 'IDLE', deadlineIso: null });
   });
 
-  // The default session in `deps` is PROVISIONING: a `failed` reported before
-  // the machine ever became RUNNING genuinely is a provisioning failure.
-  it('files what the machine says went wrong, while it is still provisioning', async () => {
-    await runAgentReport(deps, TOKEN, {
+  // The default session in `deps` is PROVISIONING: a game server that says it
+  // cannot finish is believed, and its setup is abandoned at once.
+  describe('a game server that says it cannot finish its setup', () => {
+    const FAILED = {
       sessionId: 's1',
       phase: 'failed',
       detail: 'restore refused: the bucket did not answer',
+    } as const;
+    const STAND_DOWN = { state: 'IDLE', deadlineIso: null };
+
+    const corrections = () =>
+      (deps.store.apply as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+
+    it('closes the server, goes out of service and gives the abandoned session', async () => {
+      await runAgentReport(deps, TOKEN, FAILED);
+
+      expect(deps.host.close).toHaveBeenCalledWith('s1');
+      expect(corrections()).toHaveLength(1);
+      expect(corrections()[0]).toMatchObject({
+        state: 'IDLE',
+        clearFacts: true,
+        lastError: null,
+        abandonedSetup: 's1',
+      });
+      expect(deps.ledger.close).toHaveBeenCalledWith('s1', NOW);
     });
-    expect(filed(deps)[0]).toEqual({
-      type: 'ProvisioningFailed',
-      sessionId: 's1',
-      detail: 'restore refused: the bucket did not answer',
+
+    it('files one event, whose detail is a fixed sentence', async () => {
+      await runAgentReport(deps, TOKEN, FAILED);
+
+      expect(filed(deps)).toEqual([
+        {
+          type: 'ProvisioningFailed',
+          sessionId: 's1',
+          detail: 'the game server said it could not finish its setup',
+        },
+      ]);
     });
-    // Not FAILED, and not IDLE. §5 keeps FAILED for a cleanup that could not be
-    // guaranteed; here nothing has been destroyed and nothing has been tried.
-    // The provisioning delay of §6 is what ends this session, and it destroys.
-    const correction = (deps.store.apply as ReturnType<typeof vi.fn>).mock
-      .calls[0][0];
-    expect(correction.state).toBeNull();
+
+    it('is blocked when the close is refused, and keeps what the host answered to it', async () => {
+      deps.host.close = vi.fn(async () => {
+        throw new Error('api unreachable');
+      });
+
+      await runAgentReport(deps, TOKEN, FAILED);
+
+      expect(corrections()[0]).toMatchObject({
+        state: 'FAILED',
+        clearFacts: false,
+        abandonedSetup: 's1',
+      });
+      expect(corrections()[0].lastError).toContain('api unreachable');
+      expect(filed(deps).map((event) => event.type)).toEqual([
+        'ProvisioningFailed',
+        'CleanupFailed',
+      ]);
+      expect(deps.ledger.close).not.toHaveBeenCalled();
+      expect(deps.journal.failure).toHaveBeenCalledWith({
+        source: 'agentReport.cleanup',
+        sessionId: 's1',
+        error: 'Error: api unreachable',
+      });
+    });
+
+    it('tells the game server to stand down, whatever came of the close', async () => {
+      expect(await runAgentReport(deps, TOKEN, FAILED)).toEqual(STAND_DOWN);
+
+      deps = fakeDeps({ session: provisioningSession('s1') });
+      deps.host.close = vi.fn(async () => {
+        throw new Error('api unreachable');
+      });
+      expect(await runAgentReport(deps, TOKEN, FAILED)).toEqual(STAND_DOWN);
+    });
+
+    // The close can last half a minute, and the world does not wait for it.
+    it('writes nothing when the world moved on to another session during the close', async () => {
+      deps.store.readSession
+        .mockResolvedValueOnce(provisioningSession('s1'))
+        .mockResolvedValueOnce(provisioningSession('s2'));
+
+      expect(await runAgentReport(deps, TOKEN, FAILED)).toEqual(STAND_DOWN);
+
+      expect(deps.host.close).toHaveBeenCalledWith('s1');
+      expect(deps.store.apply).not.toHaveBeenCalled();
+      expect(deps.ledger.close).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when a member closed the session during the close', async () => {
+      deps.store.readSession
+        .mockResolvedValueOnce(provisioningSession('s1'))
+        .mockResolvedValueOnce(stoppingSession('s1'));
+
+      await runAgentReport(deps, TOKEN, FAILED);
+
+      expect(deps.store.apply).not.toHaveBeenCalled();
+      // The closing owns the intent now, and closes it when it is done.
+      expect(deps.ledger.close).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the record cannot be read after the close', async () => {
+      deps.store.readSession
+        .mockResolvedValueOnce(provisioningSession('s1'))
+        .mockResolvedValueOnce(null);
+
+      expect(await runAgentReport(deps, TOKEN, FAILED)).toEqual(STAND_DOWN);
+
+      expect(deps.store.apply).not.toHaveBeenCalled();
+      expect(deps.ledger.close).not.toHaveBeenCalled();
+    });
+
+    // What an abandon leaves is a world out of service, which names no session.
+    it('stands a second report down once the setup is abandoned, and does nothing more', async () => {
+      deps = fakeDeps({ session: Session.idle() });
+
+      expect(await runAgentReport(deps, TOKEN, FAILED)).toEqual(STAND_DOWN);
+
+      expect(deps.host.close).not.toHaveBeenCalled();
+      expect(deps.store.apply).not.toHaveBeenCalled();
+    });
+
+    describe('what it leaves in the platform journal', () => {
+      const KEPT: KeptSetup = {
+        sessionId: 's1',
+        order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+        step: { step: 'fetching-game', since: NOW, activity: null, progress: null },
+      };
+
+      it('is the whole cause, the step reached and the end of the game output', async () => {
+        deps.setup.read.mockResolvedValue(KEPT);
+
+        await runAgentReport(deps, TOKEN, { ...FAILED, gameLog: 'line 1\nline 2' });
+
+        expect(deps.journal.failure).toHaveBeenCalledWith({
+          source: 'agentReport.machine',
+          sessionId: 's1',
+          error: 'restore refused: the bucket did not answer',
+          step: 'fetching-game',
+          gameLog: 'line 1\nline 2',
+        });
+      });
+
+      it('names no step when what is kept belongs to another session', async () => {
+        deps.setup.read.mockResolvedValue({ ...KEPT, sessionId: 's0' });
+
+        await runAgentReport(deps, TOKEN, FAILED);
+
+        expect(deps.journal.failure).toHaveBeenCalledWith({
+          source: 'agentReport.machine',
+          sessionId: 's1',
+          error: 'restore refused: the bucket did not answer',
+          step: null,
+        });
+      });
+
+      it('names no step, and abandons all the same, when the kept setup cannot be read', async () => {
+        deps.setup.read.mockRejectedValue(new Error('firestore unavailable'));
+
+        await runAgentReport(deps, TOKEN, FAILED);
+
+        expect(deps.journal.failure).toHaveBeenCalledWith(
+          expect.objectContaining({ source: 'agentReport.machine', step: null }),
+        );
+        expect(deps.journal.failure).toHaveBeenCalledWith({
+          source: 'agentReport.setup',
+          sessionId: 's1',
+          error: 'Error: firestore unavailable',
+        });
+        expect(corrections()[0]).toMatchObject({ state: 'IDLE', abandonedSetup: 's1' });
+      });
+
+      it('says so when the game server said nothing of its failure', async () => {
+        await runAgentReport(deps, TOKEN, { sessionId: 's1', phase: 'failed' });
+
+        expect(deps.journal.failure).toHaveBeenCalledWith({
+          source: 'agentReport.machine',
+          sessionId: 's1',
+          error: 'the machine reported a failure without saying which',
+          step: null,
+        });
+      });
+    });
+
+    // An event and `lastError` are read by members, and the output of a game
+    // carries what the system entrusted to its server.
+    it('keeps everything the game server wrote out of every write', async () => {
+      const secret = 'a'.repeat(64);
+
+      await runAgentReport(deps, TOKEN, {
+        sessionId: 's1',
+        phase: 'failed',
+        detail: `restore refused: AWS_SECRET_ACCESS_KEY=${secret}`,
+        gameLog: `server password ${secret}`,
+      });
+
+      const written = JSON.stringify((deps.store.apply as ReturnType<typeof vi.fn>).mock.calls);
+      expect(written).not.toContain(secret);
+      expect(written).not.toContain('restore refused');
+      expect(written).not.toContain('server password');
+      expect(deps.journal.failure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: `restore refused: AWS_SECRET_ACCESS_KEY=${secret}`,
+          gameLog: `server password ${secret}`,
+        }),
+      );
+    });
+
+    it('keeps the step the failed report declares before it abandons', async () => {
+      await runAgentReport(deps, TOKEN, { ...FAILED, setup: { step: 'starting-game' } });
+
+      expect(deps.setup.advance).toHaveBeenCalledWith('s1', { step: 'starting-game' }, NOW);
+      expect(deps.setup.advance.mock.invocationCallOrder[0]).toBeLessThan(
+        deps.setup.read.mock.invocationCallOrder[0],
+      );
+    });
   });
 
   // §6 repair, again: a session already RUNNING did not fail to *provision* —

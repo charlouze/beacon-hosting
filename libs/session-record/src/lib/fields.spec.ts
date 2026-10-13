@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
 import {
+  abandonedSetupFrom,
   displayedFactsFrom,
   idleServerDocument,
   keptSetupFrom,
+  lastOpeningFrom,
   openingFields,
   playerDocument,
   serverDocPath,
@@ -95,6 +97,7 @@ describe('what a client writes', () => {
       'joinInfo',
       'provisionClaimedAt',
       'lastError',
+      'abandonedSetup',
     ]) {
       expect(doc).toHaveProperty(key, null);
     }
@@ -239,5 +242,49 @@ describe('keptSetupFrom', () => {
   it('reads nothing from a step or a session it does not recognise', () => {
     expect(keptSetupFrom({ ...DOCUMENT, step: 'booting' })).toBeNull();
     expect(keptSetupFrom({ ...DOCUMENT, sessionId: 42 })).toBeNull();
+  });
+});
+
+describe('abandonedSetupFrom', () => {
+  const AT = new Date('2026-10-12T20:19:00Z');
+
+  it('reads whose setup was abandoned, and when', () => {
+    expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT } })).toEqual({
+      sessionId: 's1',
+      at: AT,
+    });
+  });
+
+  it('reads nothing from a document that carries no mark', () => {
+    expect(abandonedSetupFrom({})).toBeNull();
+    expect(abandonedSetupFrom({ abandonedSetup: null })).toBeNull();
+  });
+
+  it('refuses half a mark, rather than an abandon with no session or no hour', () => {
+    expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1' } })).toBeNull();
+    expect(abandonedSetupFrom({ abandonedSetup: { at: AT } })).toBeNull();
+    expect(abandonedSetupFrom({ abandonedSetup: 's1' })).toBeNull();
+  });
+});
+
+describe('lastOpeningFrom', () => {
+  const OPENED = new Date('2026-10-12T20:14:00Z');
+
+  // What a return to out of service leaves: the session and its opening stay
+  // on the document until the next opening rewrites them.
+  it('reads the session a world last opened, on a world out of service too', () => {
+    expect(lastOpeningFrom({ state: 'IDLE', sessionId: 's1', startedAt: OPENED }, 'IDLE')).toEqual({
+      state: 'IDLE',
+      sessionId: 's1',
+      startedAt: OPENED,
+    });
+  });
+
+  it('reads no opening from a world that never opened a session', () => {
+    expect(lastOpeningFrom({ sessionId: null, startedAt: null }, 'IDLE')).toEqual({
+      state: 'IDLE',
+      sessionId: null,
+      startedAt: null,
+    });
   });
 });

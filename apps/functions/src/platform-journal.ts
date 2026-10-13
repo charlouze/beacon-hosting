@@ -20,6 +20,17 @@ export interface JournalledFailure {
   readonly sessionId: SessionId | null;
   /** The failure as it was received: nothing bounded, nothing masked. */
   readonly error: string;
+  /**
+   * The step a setup had reached when its game server declared it could not
+   * finish, and null when none is kept for its session. Absent on every other
+   * failure.
+   */
+  readonly step?: SetupStep | null;
+  /**
+   * The last lines the game printed, as the game server sent them. This
+   * journal is the one place they are written.
+   */
+  readonly gameLog?: string;
 }
 
 /** A setup that moved to another step, or to another activity inside its step. */
