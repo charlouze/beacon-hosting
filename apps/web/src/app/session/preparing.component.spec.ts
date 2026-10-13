@@ -26,6 +26,7 @@ describe('PreparingComponent', () => {
       session,
       facts: { ip: null, joinInfo: null, lastError: null },
       stateSince: startedAt,
+      setup: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();

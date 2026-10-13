@@ -19,7 +19,7 @@ const summary = (worldId = 'les-bras-casses'): WorldSummary => ({
     inviteCode: '7f3a9c2e',
     players: ['u1'],
   }),
-  server: { session: Session.idle(), facts: NO_FACTS, stateSince: null },
+  server: { session: Session.idle(), facts: NO_FACTS, stateSince: null, setup: null },
 });
 
 describe('WorldRoute', () => {

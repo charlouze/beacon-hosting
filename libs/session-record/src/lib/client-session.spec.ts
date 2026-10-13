@@ -15,6 +15,7 @@ import {
 import { World, type Game } from '@beacon/session';
 import { clientSessionRecord, type ClientSessionRecord, type WorldSummary } from './client-session.js';
 import { EVENTS, idleServerDocument, playerDocument, serverDocPath, worldDocument } from './fields.js';
+import { setupStores } from './setup-record.js';
 
 // Same teardown artefact as `round-trip.spec.ts`: the record's settings
 // listener lives as long as the record, and deleting a test's client app
@@ -290,5 +291,102 @@ describe('a session on a world', () => {
       'STOPPING',
     );
     expect(await eventTypes()).toEqual(['SessionStopRequested']);
+  });
+});
+
+describe('the setup of a session that prepares', () => {
+  const OPENED = new Date('2026-10-12T20:14:00Z');
+  const AT = new Date('2026-10-12T20:16:00Z');
+  const ORDER = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
+  const FIRST_STEP = {
+    step: { step: 'waking', since: OPENED, activity: null, progress: null },
+    order: null,
+  };
+
+  async function preparingServer(worldId: string, sessionId: string): Promise<void> {
+    await getFirestore()
+      .doc(serverDocPath(worldId))
+      .set(
+        {
+          state: 'PROVISIONING',
+          stateSince: Timestamp.fromDate(OPENED),
+          sessionId,
+          startedBy: 'alice',
+          startedAt: Timestamp.fromDate(OPENED),
+          deadline: Timestamp.fromDate(new Date(OPENED.getTime() + 4 * 3_600_000)),
+        },
+        { merge: true },
+      );
+  }
+
+  const setups = () => setupStores(getFirestore()).for('les-copains');
+
+  const view = () =>
+    firstValue<WorldSummary | null>((on) => record().watchWorld('les-copains', on));
+
+  it('publishes the kept step and the order of the game with the world', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    await preparingServer('les-copains', 's1');
+    await setups().begin('s1', ORDER, OPENED);
+    await setups().advance('s1', { step: 'fetching-game', activity: 'downloading', progress: 37 }, AT);
+
+    expect((await view())?.server?.setup).toEqual({
+      step: { step: 'fetching-game', since: AT, activity: 'downloading', progress: 37 },
+      order: [...ORDER],
+    });
+  });
+
+  it('publishes the first step since the opening while no setup is kept', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    await preparingServer('les-copains', 's1');
+
+    expect((await view())?.server?.setup).toEqual(FIRST_STEP);
+  });
+
+  it('publishes the first step while the kept setup is still the previous session’s', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    await preparingServer('les-copains', 's0');
+    await setups().begin('s0', ORDER, new Date('2026-10-11T20:00:00Z'));
+    await setups().advance('s0', { step: 'starting-game' }, new Date('2026-10-11T20:05:00Z'));
+    await preparingServer('les-copains', 's1');
+
+    expect((await view())?.server?.setup).toEqual(FIRST_STEP);
+  });
+
+  it('publishes no setup for a world out of service, whatever is kept', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    await setups().begin('s0', ORDER, OPENED);
+
+    const seen = await view();
+
+    expect(seen?.server?.session.state).toBe('IDLE');
+    expect(seen?.server?.setup).toBeNull();
+  });
+
+  // The progress lives in a document of its own: a write to it moves no field
+  // of `server/current`, and must reach the screen all the same.
+  it('publishes again when the step moves, without any write to the session', async () => {
+    await seedWorld('les-copains', { players: ['alice'] });
+    await preparingServer('les-copains', 's1');
+    await setups().begin('s1', ORDER, OPENED);
+    const seen: (WorldSummary | null)[] = [];
+    const stop = record().watchWorld('les-copains', (summary) => seen.push(summary));
+    await vi.waitFor(() => expect(seen.at(-1)?.server?.setup?.step.step).toBe('waking'), {
+      timeout: 5_000,
+    });
+
+    await setups().advance('s1', { step: 'restoring-world' }, AT);
+
+    await vi.waitFor(
+      () =>
+        expect(seen.at(-1)?.server?.setup?.step).toEqual({
+          step: 'restoring-world',
+          since: AT,
+          activity: null,
+          progress: null,
+        }),
+      { timeout: 5_000 },
+    );
+    stop();
   });
 });

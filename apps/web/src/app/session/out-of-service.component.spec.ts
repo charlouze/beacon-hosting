@@ -14,6 +14,7 @@ describe('OutOfServiceComponent', () => {
       session: Session.idle(),
       facts: { ip: null, joinInfo: null, lastError },
       stateSince: null,
+      setup: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
