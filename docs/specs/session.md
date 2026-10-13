@@ -87,6 +87,21 @@ déclare une.
 Pendant la mise en place, l'écran annonce une fourchette de disponibilité,
 jamais une heure unique ni une durée.
 
+Exception : tant que le jeu de la session compte moins de deux mises en place
+abouties, l'écran n'annonce aucune fourchette.
+
+La fourchette de disponibilité se tire des cinq dernières mises en place
+abouties du jeu de la session, ou de toutes s'il y en a moins de cinq, sans
+distinguer les mondes ni les gabarits. Elle va de l'ouverture de la session
+plus la durée de la plus courte, à cette ouverture plus la durée de la plus
+longue.
+
+La durée d'une mise en place aboutie va de l'ouverture de sa session à son
+passage en service.
+
+Quand les deux heures de la fourchette tombent dans la même minute, l'écran
+annonce la minute suivante pour la plus tardive.
+
 Quand l'hébergeur refuse une mise en place, l'écran dit ce qu'il a répondu.
 
 Une mise en place qui n'aboutit pas est abandonnée.
