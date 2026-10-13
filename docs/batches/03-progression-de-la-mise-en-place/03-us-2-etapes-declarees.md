@@ -3163,4 +3163,36 @@ Un commit qui touche `libs/session`, `libs/agent-protocol`, `libs/scaleway-stora
 
 ## Rulings log
 
+Ruling: les deux cloud-init gardent chacun leur copie des fragments du fichier des marqueurs, de l'unité et des montages, et seuls le texte de l'unité et les chemins sont partagés dans `game-log.ts` — chaque entrée est un document littéral qu'on relit contre un serveur de jeu, et l'unité d'arrêt y est déjà copiée ainsi — si c'est faux, un changement de ces fragments se fait deux fois.
+
+Ruling: la tâche 6 a tourné avant la tâche 5 — la tâche 5 récrit les fichiers que la revue de la tâche 4 pouvait encore rouvrir, et la tâche 6 ne touche que `deploy/companion/src` — si c'est faux, l'ordre des commits diffère de l'ordre des tâches, sans dépendance entre les deux.
+
+Ruling: le test `sends nothing while a declaration still waits for its answer` de `declare-setup.spec.ts` attend un tour avant de répondre — le faux rapport n'est appelé qu'une microtâche après `declare`, et la version du plan répondait à un rapport qui n'existait pas encore — si c'est faux, un test attend un tour de trop.
+
+Ruling: les tests de `restore.spec.ts` qui remplacent `report` reconstruisent `deps` au lieu d'assigner le champ — `RestoreDeps.report` est en lecture seule, et le plan faisait échouer le typecheck — si c'est faux, trois tests construisent un objet de plus.
+
+Ruling: les deux commentaires « every thirty seconds » de `deploy/cloud-init/src/lib/sunkenland.ts` et de `sunkenland.spec.ts` disent « on every turn of the agent » — la recherche de la tâche 8 les vise et sa liste de fichiers les oubliait — si c'est faux, deux commentaires hors de la liste de la tâche ont changé, dont un dans le script que le cloud-init rend.
+
+Ruling: le faux jeu du test de fumée pose un dossier `<nom>~<guid>` quand le jeu s'annonce par un identifiant, et `run.sh` vide le dossier des sauvegardes par `rm -rf` — le test de fumée de ce jeu n'atteignait plus `ready` sur `main`, son agent refusant un identifiant qui ne nomme aucun monde du disque, et les vérifications de cette story demandent ce passage au vert — si c'est faux, le harnais prouve le chemin de ce jeu avec un dossier qu'une vraie restauration aurait posé elle-même.
+
+Ruling: la restauration déclare d'abord le téléchargement sans avancement, et un avancement seulement à partir des octets reçus — le plan déclarait 0 % avant de savoir si le seau donne la taille de l'objet, contre son propre point de vigilance — si c'est faux, l'écran ne montre aucun pourcentage pendant les dix premières secondes d'un téléchargement.
+
+Ruling: une déclaration abandonnée après 5 s peut encore être traitée par le plan de contrôle, après la suivante — la revue de la branche le relève, et le lot accepte déjà qu'un rapport d'étape perdu ne soit pas renvoyé — si c'est faux, l'écran reste sur l'activité précédente jusqu'au rapport suivant, et le lot gagne ce risque à sa clôture.
+
+Ruling: le faux jeu du test de fumée ne laisse lire la première moitié de sa sortie que pendant 15 s — la revue de la branche le relève, et un agent y fait deux tours — si c'est faux, un poste lent rend le test de fumée rouge à tort, jamais vert à tort.
+
+Technical design ruling: la fonction qui décide d'une étape à partir de la sortie d'un jeu, `declaredByMarkers`, vit dans `libs/agent-protocol` avec le format du fichier, et les marqueurs d'Enshrouded s'exécutent sur la sortie relevée dans le test du catalogue, non dans celui du compagnon — le design range ce test chez le compagnon, qui ne nomme aucun jeu — si c'est faux, le compagnon n'a aucun test sur la sortie d'un vrai jeu, hors du test de fumée.
+
+Technical design ruling: la fixture de la sortie d'Enshrouded reprend les lignes que `probe/RESULTS.md`, section P, cite, dans l'ordre qu'il mesure — la sonde n'a pas gardé sa capture — si c'est faux, une ligne que le relevé ne cite pas échappe aux tests des marqueurs.
+
+Technical design ruling: le rapport qui annonce le serveur porte encore l'étape — il part avant que l'agent se sache annoncé, et il laisse l'étape gardée sur la dernière que le jeu a montrée — si c'est faux, un rapport `ready` porte une déclaration dont le plan de contrôle n'a pas besoin.
+
+Technical design ruling: `parseReport` écarte aussi un `gameLog` qui n'est pas une chaîne — le design ne nomme que la borne de 16 384 caractères — si c'est faux, un rapport `failed` mal formé passe avec sa cause au lieu d'être refusé.
+
+Technical design ruling: le plan de contrôle ne fait rien de `gameLog` dans cette story, et les commentaires de `restore.ts` et de `agent-loop.ts` sur l'attente du délai d'abandon restent — l'entrée du journal de la plateforme et l'abandon déclaré appartiennent à la story qui transcrit D4 — si c'est faux, la fin de la sortie du jeu voyage sans lecteur jusqu'à cette story.
+
+Technical design ruling: l'unité de suivi passe `-f` et `--env-file` à `docker compose` et ne redirige que la sortie standard — sans le fichier d'environnement la commande écrit un avertissement par variable du compose — si c'est faux, une erreur de la commande elle-même ne se lit que dans le journal de systemd.
+
 ## Observed drift
+
+Aucune.
