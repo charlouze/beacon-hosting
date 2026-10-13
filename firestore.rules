@@ -294,6 +294,14 @@ service cloud.firestore {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
+    // The last setups of each game that came into service: session ids and
+    // durations, and nothing of a world. Every member reads them — the window
+    // a preparing session announces is drawn from all the worlds of its game —
+    // and no client writes them: a duration is a finding of the Functions.
+    match /completedSetups/{game} {
+      allow read: if isMember();
+    }
+
     // §4: the two fields of `config/settings` the deployment stamps at every
     // merge. The writer is the Admin SDK, which is above the rules, so all this
     // has to do is subtract the keys from the ones a client can affect.
