@@ -4,7 +4,10 @@ import {
   firstSetupStep,
   isSetupProgress,
   isSetupStepOrder,
+  type KeptSetup,
   type KeptSetupStep,
+  setupStepRank,
+  shownSetup,
 } from './setup.js';
 
 const OPENED = new Date('2026-10-12T20:00:00Z');
@@ -132,5 +135,82 @@ describe('isSetupStepOrder', () => {
       isSetupStepOrder(['waking', 'starting-game', 'restoring-world', 'fetching-game']),
     ).toBe(false);
     expect(isSetupStepOrder('waking')).toBe(false);
+  });
+});
+
+describe('shownSetup', () => {
+  const ORDER = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
+  const PREPARING = { state: 'PROVISIONING', sessionId: 's1', startedAt: OPENED } as const;
+
+  const keptFor = (sessionId: string): KeptSetup => ({
+    sessionId,
+    order: ORDER,
+    step: kept({ since: LATER, activity: 'downloading', progress: 37 }),
+  });
+
+  it('shows the kept step and the order of its game, while its own session prepares', () => {
+    expect(shownSetup(PREPARING, keptFor('s1'))).toEqual({
+      step: { step: 'fetching-game', since: LATER, activity: 'downloading', progress: 37 },
+      order: ORDER,
+    });
+  });
+
+  it('shows the first step since the opening, and no order, while nothing is kept', () => {
+    expect(shownSetup(PREPARING, null)).toEqual({
+      step: { step: 'waking', since: OPENED, activity: null, progress: null },
+      order: null,
+    });
+  });
+
+  // Nothing erases what a setup left: the next session finds the previous one
+  // there until its own is begun.
+  it('shows the first step when what is kept belongs to another session', () => {
+    expect(shownSetup(PREPARING, keptFor('s0'))).toEqual({
+      step: { step: 'waking', since: OPENED, activity: null, progress: null },
+      order: null,
+    });
+  });
+
+  for (const state of ['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const) {
+    it(`shows nothing of a session that is ${state}`, () => {
+      expect(shownSetup({ ...PREPARING, state }, keptFor('s1'))).toBeNull();
+    });
+  }
+
+  it('shows nothing of a session that names no opening', () => {
+    expect(shownSetup({ ...PREPARING, startedAt: null }, keptFor('s1'))).toBeNull();
+    expect(shownSetup({ ...PREPARING, sessionId: null }, null)).toBeNull();
+  });
+});
+
+describe('setupStepRank', () => {
+  const step = kept({ step: 'fetching-game' });
+
+  it('reads the rank of a step in the order of its game, from one', () => {
+    expect(
+      setupStepRank({
+        step,
+        order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+      }),
+    ).toBe(3);
+    expect(
+      setupStepRank({
+        step,
+        order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+      }),
+    ).toBe(2);
+  });
+
+  it('ranks the last step fourth', () => {
+    expect(
+      setupStepRank({
+        step: kept({ step: 'starting-game' }),
+        order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+      }),
+    ).toBe(4);
+  });
+
+  it('ranks the first step first while no order is known', () => {
+    expect(setupStepRank({ step: firstSetupStep(OPENED), order: null })).toBe(1);
   });
 });

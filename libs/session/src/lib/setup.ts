@@ -1,3 +1,6 @@
+import type { Session } from './session-aggregate.js';
+import type { SessionId } from './session.js';
+
 /**
  * What a session goes through between its opening and its coming into
  * service. The first step starts at the opening and the last one is the game
@@ -104,4 +107,41 @@ function changeWithinStep(
   if (activity !== kept.activity) return 'activity';
   if (progress !== kept.progress) return 'progress';
   return null;
+}
+
+/** What the control plane keeps of one session's setup: whose it is, the order of its game, and the step it is on. */
+export interface KeptSetup {
+  readonly sessionId: SessionId;
+  readonly order: SetupStepOrder;
+  readonly step: KeptSetupStep;
+}
+
+/** What the screen shows of a setup. No order until the game's own is known. */
+export interface ShownSetup {
+  readonly step: KeptSetupStep;
+  readonly order: SetupStepOrder | null;
+}
+
+/**
+ * What the screen shows of a session's setup, and null outside the
+ * preparation. What is kept counts only when it belongs to this session:
+ * nothing erases it, so the next session finds the previous one's there until
+ * its own is begun, and shows the first step since its opening meanwhile.
+ */
+export function shownSetup(
+  session: Pick<Session, 'state' | 'sessionId' | 'startedAt'>,
+  kept: KeptSetup | null,
+): ShownSetup | null {
+  if (session.state !== 'PROVISIONING') return null;
+  if (session.sessionId === null || session.startedAt === null) return null;
+  if (kept !== null && kept.sessionId === session.sessionId) {
+    return { step: kept.step, order: kept.order };
+  }
+  return { step: firstSetupStep(session.startedAt), order: null };
+}
+
+/** The rank of the shown step in the order of its game, from one. */
+export function setupStepRank(shown: ShownSetup): number {
+  // No order is shown with the first step only, whatever the game.
+  return shown.order === null ? 1 : shown.order.indexOf(shown.step.step) + 1;
 }
