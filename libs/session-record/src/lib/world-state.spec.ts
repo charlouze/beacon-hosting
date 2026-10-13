@@ -55,6 +55,7 @@ describe('worldStateStores', () => {
     await adminWorldRecord(db).create(WORLD, NOW);
     await worldStateStores(db).for('les-copains').apply(
       { state: null, lastError: null, clearFacts: false, deadline: null, closeIntents: [],
+        abandonedSetup: null,
         events: [{ type: 'DeadlineClamped', sessionId: 's1', detail: 'x' }] },
       NOW,
     );

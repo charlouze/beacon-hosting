@@ -170,6 +170,7 @@ async function failed(
         clearFacts: false,
         deadline: null,
         closeIntents: [],
+        abandonedSetup: null,
         events: [
           { type: 'ProvisioningFailed', sessionId, detail },
           {
@@ -193,6 +194,7 @@ async function failed(
       clearFacts: true,
       deadline: null,
       closeIntents: [],
+      abandonedSetup: null,
       events: [{ type: 'ProvisioningFailed', sessionId, detail }],
     },
     now,

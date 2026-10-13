@@ -112,6 +112,43 @@ describe('reconcileWorld', () => {
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
+  it('gives the session whose setup the delay abandons, once it is closed', () => {
+    const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], []);
+    expect(correction.state).toBe('IDLE');
+    expect(correction.abandonedSetup).toBe('s1');
+  });
+
+  it('gives it too when the close is refused', () => {
+    const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], []);
+    expect(correction.state).toBe('FAILED');
+    expect(correction.abandonedSetup).toBe('s1');
+  });
+
+  // Only a setup is abandoned. A session that stops late, or whose cleanup is
+  // tried again, leaves whatever mark the record already carries.
+  it('abandons no setup for any other reason, nor when nothing happened', () => {
+    const stopping = view({ worlds: [singleWorld(record('STOPPING', 's1', true))], hosted: [hosted('s1')] });
+    expect(
+      reconcileWorld(stopping, stopping.worlds[0], [outcome('s1', 'stopping-timeout', true)], [])
+        .abandonedSetup,
+    ).toBeNull();
+
+    const failed = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
+    expect(
+      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', true)], [])
+        .abandonedSetup,
+    ).toBeNull();
+    expect(
+      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', false)], [])
+        .abandonedSetup,
+    ).toBeNull();
+
+    const quietView = view();
+    expect(reconcileWorld(quietView, quietView.worlds[0], [], []).abandonedSetup).toBeNull();
+  });
+
   it('sends a timed-out STOPPING back to IDLE and says the session stopped', () => {
     const v = view({ worlds: [singleWorld(record('STOPPING', 's1', true))], hosted: [hosted('s1')] });
     const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'stopping-timeout', true)], []);

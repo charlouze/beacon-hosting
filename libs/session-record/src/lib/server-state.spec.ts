@@ -42,6 +42,7 @@ const correction = (parts: Partial<StateCorrection> = {}): StateCorrection => ({
   clearFacts: false,
   deadline: null,
   closeIntents: [],
+  abandonedSetup: null,
   events: [],
   ...parts,
 });
@@ -332,6 +333,7 @@ describe('applying a deadline', () => {
         clearFacts: false,
         deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
         closeIntents: [],
+        abandonedSetup: null,
         events: [{ type: 'DeadlineClamped', sessionId: 's1', detail: 'brought back to 4 h' }],
       },
       AT,
