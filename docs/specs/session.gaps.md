@@ -154,3 +154,8 @@ ci-dessous sont établis par lecture.
   second abandon et la phrase du délai. Aucune règle ne dit ce qu'un abandon
   arrivé trop tard garde de ses événements. Relevé par lecture pendant le lot
   03.
+
+- **Opening a session** — quand un serveur de jeu déclare une étape antérieure
+  à celle qu'il avait déclarée, l'écran revient à cette étape, avec l'heure de
+  la déclaration. Aucune règle ne dit si l'écran doit reculer, et rien ne
+  mesure si le cas arrive.
