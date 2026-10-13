@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
 import {
   abandonedSetupFrom,
+  completedSetupsDocPath,
+  completedSetupsFrom,
   displayedFactsFrom,
+  gameFrom,
   idleServerDocument,
   keptSetupFrom,
   lastOpeningFrom,
@@ -286,5 +289,63 @@ describe('lastOpeningFrom', () => {
       sessionId: null,
       startedAt: null,
     });
+  });
+});
+
+describe('completedSetupsDocPath', () => {
+  it('names one document per game', () => {
+    expect(completedSetupsDocPath('enshrouded')).toBe('completedSetups/enshrouded');
+  });
+});
+
+describe('completedSetupsFrom', () => {
+  it('reads the completed setups a game kept, in the order they are kept', () => {
+    expect(
+      completedSetupsFrom({
+        setups: [
+          { sessionId: 's1', durationMs: 300_000 },
+          { sessionId: 's2', durationMs: 480_000 },
+        ],
+      }),
+    ).toEqual([
+      { sessionId: 's1', durationMs: 300_000 },
+      { sessionId: 's2', durationMs: 480_000 },
+    ]);
+  });
+
+  it('reads a document that keeps nothing as no completed setup', () => {
+    expect(completedSetupsFrom({})).toEqual([]);
+    expect(completedSetupsFrom({ setups: 'none' })).toEqual([]);
+  });
+
+  // A duration that is no positive number would open a window before the
+  // opening itself, or none at all.
+  it('leaves out an entry it cannot read, and keeps the others', () => {
+    expect(
+      completedSetupsFrom({
+        setups: [
+          null,
+          'five minutes',
+          { sessionId: 's1' },
+          { sessionId: 7, durationMs: 300_000 },
+          { sessionId: 's2', durationMs: '300000' },
+          { sessionId: 's3', durationMs: 0 },
+          { sessionId: 's4', durationMs: -5 },
+          { sessionId: 's5', durationMs: Number.NaN },
+          { sessionId: 's6', durationMs: 480_000 },
+        ],
+      }),
+    ).toEqual([{ sessionId: 's6', durationMs: 480_000 }]);
+  });
+});
+
+describe('gameFrom', () => {
+  it('reads the game a world document names', () => {
+    expect(gameFrom({ game: 'sunkenland' })).toBe('sunkenland');
+  });
+
+  it('reads a game this vocabulary does not know as none', () => {
+    expect(gameFrom({ game: 'not-a-game' })).toBeNull();
+    expect(gameFrom({})).toBeNull();
   });
 });

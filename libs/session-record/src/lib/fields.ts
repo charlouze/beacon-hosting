@@ -11,6 +11,8 @@ import {
   Session,
   World,
   type AbandonedSetup,
+  type CompletedSetup,
+  type Game,
   type InstanceSize,
   type JoinInfo,
   type KeptSetup,
@@ -67,6 +69,38 @@ export function keptSetupFrom(data: Record<string, unknown>): KeptSetup | null {
   const step = keptStepFrom(data);
   if (typeof sessionId !== 'string' || !isSetupStepOrder(order) || step === null) return null;
   return { sessionId, order, step };
+}
+
+export const COMPLETED_SETUPS = 'completedSetups';
+
+/** `completedSetups/{game}` — the last setups of one game that came into service. */
+export function completedSetupsDocPath(game: Game): string {
+  return `${COMPLETED_SETUPS}/${game}`;
+}
+
+/**
+ * The completed setups `completedSetups/{game}` keeps, oldest first. An entry that
+ * names no session, or no duration a setup can have taken, is left out: the
+ * ready window is drawn from what is read here, and one wrong duration would
+ * announce an hour before the opening.
+ */
+export function completedSetupsFrom(data: Record<string, unknown>): readonly CompletedSetup[] {
+  const setups = data['setups'];
+  if (!Array.isArray(setups)) return [];
+  return setups.flatMap((entry: unknown): CompletedSetup[] => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { sessionId, durationMs } = entry as Record<string, unknown>;
+    if (typeof sessionId !== 'string') return [];
+    if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) return [];
+    return [{ sessionId, durationMs }];
+  });
+}
+
+/** `completedSetups/{game}` as it is written: whole, so nothing unreadable outlives a write. */
+export function completedSetupsDocument(setups: readonly CompletedSetup[]): Record<string, unknown> {
+  return {
+    setups: setups.map((setup) => ({ sessionId: setup.sessionId, durationMs: setup.durationMs })),
+  };
 }
 
 /**
@@ -208,6 +242,12 @@ export function worldFrom(
   } catch {
     return null;
   }
+}
+
+/** The game `worlds/{worldId}` names, or null when it is none this vocabulary knows. */
+export function gameFrom(data: Record<string, unknown>): Game | null {
+  const game = data['game'];
+  return isGame(game) ? game : null;
 }
 
 /**
