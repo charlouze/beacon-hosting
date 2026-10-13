@@ -1482,4 +1482,32 @@ Un commit qui touche `libs/session` après le tag demande un nouveau tag.
 
 ## Rulings log
 
+Ruling: un rendu statique de l'écran, à 1440 et à 390 px, tient lieu de passe d'inspection contre les planches — l'application ne se sert pas sans émulateur ni connexion, et le rendu reprend les deux feuilles et le balisage du gabarit — si c'est faux, un écart que seul le gabarit Angular produit n'est vu qu'à la revue.
+
+Ruling: sur téléphone, un filet fin sépare les heures de la phrase qui rend la soirée, et `Closes at` prend la taille de `Ready between` — la planche téléphone les montre ainsi, et la feuille du plan ne les portait pas — si c'est faux, deux règles de trop dans la feuille de l'écran.
+
+Ruling: `.clock.range`, le jeton `--display-window` et le test qui l'épingle disparaissent de `apps/web` — la fourchette a quitté la place d'honneur, plus aucun gabarit ne s'en sert, et leur commentaire devenait faux — si c'est faux, une échelle d'affichage est à redéclarer le jour où un écran en a besoin.
+
+Ruling: le commentaire de `apps/web/src/app/join/copy-button.component.ts` qui disait que la seconde est le seul mouvement de la page est récrit, hors des fichiers que les tâches nomment — cette story le rendait faux — si c'est faux, une ligne de commentaire a changé hors du périmètre annoncé.
+
+Ruling: la liste des mondes écoute `server/setup` comme l'écran d'un monde, et se republie à chaque avancement — une seule fonction publie un monde pour les deux, et trois ou quatre mondes ne le sentent pas — si c'est faux, la liste se redessine plusieurs fois par minute sans rien changer pendant qu'un monde se met en place.
+
+Ruling: la fonction de `fields.ts` qui lit l'étape seule devient `keptStepFrom`, et `keptSetupFrom` lit le document entier — chaque lecteur porte le nom du type qu'il rend — si c'est faux, un nom déjà fusionné a changé de sens, sans autre appelant que `setup-record.ts`.
+
+Ruling: le test de `world.spec.ts` qui interdisait toute animation en autorise une, dans `preparing.component.css`, et vérifie qu'elle s'arrête sous `prefers-reduced-motion` — le contrat de direction permet depuis le 2026-10-12 une longueur qui passe pendant une attente sans avancement — si c'est faux, une seconde animation ajoutée dans cette feuille passe le test.
+
+Ruling: la phrase `Five to eight minutes is what it has taken so far` quitte l'écran avec cette story, alors que la fourchette fixe reste — la variante C ne la porte pas, et la fourchette dit déjà ces deux durées — si c'est faux, l'écran ne dit plus d'où vient sa fourchette jusqu'à la story qui la tire des mises en place abouties.
+
+Ruling: le commentaire de `ServerView` ne cite pas `setup` parmi ce que la vue porte — la relecture de la dernière vague le relève, et le champ a son propre commentaire — si c'est faux, un commentaire d'interface énumère trois des quatre choses qu'elle porte.
+
+Technical design ruling: `shownSetup` ne reçoit pas la marque d'abandon et ne rend rien hors de la préparation — la marque n'existe qu'avec l'abandon déclaré, que la story du bloc sur l'abandon livre — si c'est faux, cette story-là change la signature de `shownSetup` et ses appelants.
+
+Technical design ruling: `Opened at` descend dans le pied, à côté du coût, sur les deux largeurs — la planche large l'omet et la planche téléphone le met là, et l'écran d'aujourd'hui l'affiche — si c'est faux, une heure de trop dans le pied de l'écran large.
+
+Technical design ruling: sur téléphone, les heures gardent la disposition des autres écrans, la clé au-dessus de la valeur, et non les lignes de la planche — les cinq écrans d'état partagent ce mobilier dans `styles.css` — si c'est faux, l'écran de préparation s'écarte de sa planche sur ce bloc.
+
+Ruling: les mots que les planches posent entrent tels quels à l'écran, `Waking the server`, `Getting the game`, `Bringing your world back`, `Starting the game`, `Downloading`, `Unpacking` et `No need to stay.` — le commanditaire les a validés, ce qu'il confirme à la revue, et `.impeccable/mocks/progress/README.md` les range encore sous ce qui reste à valider — si c'est faux, sept libellés sont à changer dans `format.ts` et dans le gabarit.
+
 ## Observed drift
+
+Aucune.
