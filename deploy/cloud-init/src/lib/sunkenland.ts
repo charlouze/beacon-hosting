@@ -153,8 +153,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       # trim.
       id=\${id%$'\\r'}
       # Written aside then renamed, never in place: a reader runs next to this
-      # every thirty seconds, and a rename within one filesystem is atomic — so
-      # what it reads is either absent or whole, never a line cut in half.
+      # on every turn of the agent, and a rename within one filesystem is atomic
+      # — so what it reads is either absent or whole, never a line cut in half.
       printf '%s\\n' "$id" > "$serverid.tmp" && mv "$serverid.tmp" "$serverid"
       ;;
   esac

@@ -3,7 +3,7 @@ import type { Readiness } from './readiness.js';
 
 /**
  * Bounded like every value this wire carries (§5) — a file something else
- * filled must not grow a report the Function accepts once a minute.
+ * filled must not grow a report the Function accepts on every turn.
  */
 const MAX_LENGTH = 1024;
 

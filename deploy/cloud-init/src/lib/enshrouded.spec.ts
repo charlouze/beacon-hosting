@@ -220,7 +220,7 @@ describe('the enshrouded catalogue entry', () => {
   // compose's own stop_grace_period, so the unit gives the world the same
   // grace to flush that the compose already promises it.
   // §7: the agent token is the only credential that rides to the machine, and
-  // the companion sends it back in an `authorization` header once a minute for
+  // the companion sends it back in an `authorization` header on every report for
   // the whole session. An http endpoint would put it on the wire in clear, and
   // nothing downstream would notice — the reports would succeed, the session
   // would run, and the leak would leave no trace.

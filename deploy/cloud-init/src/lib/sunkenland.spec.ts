@@ -332,7 +332,7 @@ describe('the sunkenland catalogue entry', () => {
   });
 
   // The filter that writes the one line leaving this container. A rename and
-  // not a write in place: a reader runs next to it every thirty seconds.
+  // not a write in place: a reader runs next to it on every turn of the agent.
   it('writes the identifier through a rename, never in place', () => {
     const rendered = renderCloudInit('sunkenland', REQUEST);
     expect(rendered).toContain(`marker="ServerID is '"`);
