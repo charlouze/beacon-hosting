@@ -83,7 +83,8 @@ export const onServerStateChange = onDocumentWritten(
  * session token, and nothing else. This wrapper holds no decision: everything
  * it does is tested next door, without a network.
  *
- * Called roughly once a minute by every live session's companion, and one of
+ * Called by every live session's companion — every ten seconds while a server
+ * follows its setup in the game's output, once a minute otherwise — and one of
  * the calls it can trigger, on a `saved` report with origin `pre-shutdown`
  * while STOPPING, is the instance's destruction (§6 étape 3) — moved here from
  * `onServerStateChange` so the machine gets a chance to push its final save
