@@ -1,5 +1,5 @@
 ---
-status: open
+status: closed
 ---
 
 # 03 — La mise en place dit où elle en est
