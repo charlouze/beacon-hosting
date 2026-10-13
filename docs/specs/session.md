@@ -71,6 +71,19 @@ Le nombre de mondes qui tournent en même temps n'a aucun plafond.
 Une session ouvre le monde sur sa dernière sauvegarde, quelle qu'ait été la
 cause de la fermeture de la précédente.
 
+Une mise en place qui aboutit traverse quatre étapes : le serveur se réveille,
+le jeu est installé, le monde est restauré, le jeu démarre. Le réveil du
+serveur commence à l'ouverture de la session et le démarrage du jeu vient en
+dernier ; l'ordre des deux autres dépend du jeu de la session.
+
+Pendant la mise en place, l'écran affiche l'étape en cours, son rang sur quatre
+et l'heure à laquelle cette étape a commencé.
+
+L'écran affiche l'avancement quand le serveur de jeu en déclare un.
+
+L'écran affiche l'activité de l'étape en cours quand le serveur de jeu en
+déclare une.
+
 Pendant la mise en place, l'écran annonce une fourchette de disponibilité,
 jamais une heure unique ni une durée.
 
