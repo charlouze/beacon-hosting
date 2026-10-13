@@ -182,6 +182,11 @@ export function reconcileWorld(
   for (const outcome of outcomes) {
     const { sessionId } = outcome.reclamation;
     if (!outcome.closed) {
+      // A setup the delay abandons failed whether or not its server could be
+      // closed: the refusal is a second fact, and never the only one.
+      if (abandonedBy(outcome.reclamation) !== null) {
+        events.push(CLOSED[outcome.reclamation.reason].event(outcome.reclamation, costEuros));
+      }
       events.push({ type: 'CleanupFailed', sessionId, detail: outcome.error });
       continue;
     }

@@ -109,6 +109,15 @@ describe('reconcileWorld', () => {
     const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], []);
     expect(correction.state).toBe('FAILED');
     expect(correction.clearFacts).toBe(false);
+    // The setup is abandoned whether or not its server could be closed.
+    expect(types(correction.events)).toEqual(['ProvisioningFailed', 'CleanupFailed']);
+  });
+
+  // Blocked, the session is tried again on every pass: that is a cleanup
+  // refused once more, not a setup abandoned once more.
+  it('does not say the setup failed again when the cleanup is refused again', () => {
+    const v = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', false)], []);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
