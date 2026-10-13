@@ -30,6 +30,7 @@ describe('InServiceComponent', () => {
       session,
       facts: { ip: null, joinInfo: null, lastError: null },
       stateSince: OPENED_AT,
+      setup: null,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
@@ -122,6 +123,7 @@ describe('InServiceComponent', () => {
         session: running('2026-09-13T00:14:00'),
         facts: { ip: null, joinInfo, lastError: null },
         stateSince: OPENED_AT,
+        setup: null,
       });
       fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
       await fixture.whenStable();

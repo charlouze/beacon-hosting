@@ -7,7 +7,7 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
  * port, and pasted with it.
  *
  * The label turns to `Copied` and comes back. That is a state changing, not an
- * animation: the page's one moving thing is the falling second.
+ * animation: the only things that move are the falling second and a length passing over a step.
  *
  * It wears `.small`, the world's own bordered control, rather than a sheet of
  * its own: the band of the world sets Rename and Leave this world beside this

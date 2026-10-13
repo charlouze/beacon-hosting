@@ -33,6 +33,7 @@ const summary = (
                 }),
           facts: NO_FACTS,
           stateSince: new Date('2026-09-12T20:14:00'),
+          setup: null,
         },
 });
 

@@ -5,12 +5,14 @@ import {
   isSetupActivity,
   isSetupProgress,
   isSetupStep,
+  isSetupStepOrder,
   isWorldId,
   SESSION_STATES,
   Session,
   World,
   type InstanceSize,
   type JoinInfo,
+  type KeptSetup,
   type KeptSetupStep,
   type SessionSettings,
   type SessionState,
@@ -33,11 +35,11 @@ export function setupDocPath(worldId: WorldId): string {
 }
 
 /**
- * `worlds/{worldId}/server/setup` as the domain reads it. Null means the
- * document names no step this vocabulary recognises. An activity or a
- * progress it does not recognise reads as none.
+ * The step `worlds/{worldId}/server/setup` is on, as the domain reads it. Null
+ * means the document names no step this vocabulary recognises. An activity or
+ * a progress it does not recognise reads as none.
  */
-export function keptSetupFrom(data: Record<string, unknown>): KeptSetupStep | null {
+export function keptStepFrom(data: Record<string, unknown>): KeptSetupStep | null {
   const step = data['step'];
   const since = toDate(data['stepSince']);
   if (!isSetupStep(step) || since === null) return null;
@@ -49,6 +51,20 @@ export function keptSetupFrom(data: Record<string, unknown>): KeptSetupStep | nu
     activity: isSetupActivity(activity) ? activity : null,
     progress: isSetupProgress(progress) ? progress : null,
   };
+}
+
+/**
+ * The whole of `worlds/{worldId}/server/setup`: whose setup it is and the
+ * order of its game, with the step it is on. Null as soon as one of the three
+ * is missing — the screen ranks the step in that order, and half of it would
+ * be a rank out of nothing.
+ */
+export function keptSetupFrom(data: Record<string, unknown>): KeptSetup | null {
+  const sessionId = data['sessionId'];
+  const order = data['stepOrder'];
+  const step = keptStepFrom(data);
+  if (typeof sessionId !== 'string' || !isSetupStepOrder(order) || step === null) return null;
+  return { sessionId, order, step };
 }
 
 /**

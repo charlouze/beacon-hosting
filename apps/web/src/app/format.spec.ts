@@ -1,5 +1,6 @@
-import { World } from '@beacon/session';
+import { SETUP_ACTIVITIES, SETUP_STEPS, World } from '@beacon/session';
 import {
+  activityLabel,
   BOOT_WINDOW_MS,
   euroLabel,
   gameLabel,
@@ -8,6 +9,7 @@ import {
   readyWindow,
   splitCountdown,
   stateLabel,
+  stepLabel,
 } from './format';
 
 describe('gameLabel', () => {
@@ -106,5 +108,22 @@ describe('inviteLink', () => {
     expect(inviteLink('https://beacon.charlouze.com', world)).toBe(
       'https://beacon.charlouze.com/join/les-copains/7f3a9c2e',
     );
+  });
+});
+
+describe('stepLabel', () => {
+  it('names each of the four steps the way the board says them', () => {
+    expect(SETUP_STEPS.map(stepLabel)).toEqual([
+      'Waking the server',
+      'Getting the game',
+      'Bringing your world back',
+      'Starting the game',
+    ]);
+  });
+});
+
+describe('activityLabel', () => {
+  it('names each activity a game server can declare', () => {
+    expect(SETUP_ACTIVITIES.map(activityLabel)).toEqual(['Downloading', 'Unpacking']);
   });
 });

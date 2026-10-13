@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, Session, World } from '@beacon/session';
 import {
   displayedFactsFrom,
   idleServerDocument,
+  keptSetupFrom,
   openingFields,
   playerDocument,
   serverDocPath,
@@ -202,5 +203,41 @@ describe('settingsFrom', () => {
 
   it('ignores a tariff that is not a number', () => {
     expect(settingsFrom({ tariffPerHour: { 'DEV1-L': 'free' } }).tariffPerHour).toEqual({});
+  });
+});
+
+describe('keptSetupFrom', () => {
+  const SINCE = new Date('2026-10-12T20:16:00Z');
+  const DOCUMENT = {
+    sessionId: 's1',
+    stepOrder: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+    step: 'fetching-game',
+    stepSince: SINCE,
+    activity: 'downloading',
+    progress: 37,
+  };
+
+  it('reads whose setup it is, the order of its game and the step it is on', () => {
+    expect(keptSetupFrom(DOCUMENT)).toEqual({
+      sessionId: 's1',
+      order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+      step: { step: 'fetching-game', since: SINCE, activity: 'downloading', progress: 37 },
+    });
+  });
+
+  it('reads nothing from a document that does not exist', () => {
+    expect(keptSetupFrom({})).toBeNull();
+  });
+
+  // An order the screen would rank a step in must hold the four steps: half
+  // an order is refused whole, like half a join point.
+  it('reads nothing from an order that is not the four steps', () => {
+    expect(keptSetupFrom({ ...DOCUMENT, stepOrder: ['waking', 'starting-game'] })).toBeNull();
+    expect(keptSetupFrom({ ...DOCUMENT, stepOrder: 'waking' })).toBeNull();
+  });
+
+  it('reads nothing from a step or a session it does not recognise', () => {
+    expect(keptSetupFrom({ ...DOCUMENT, step: 'booting' })).toBeNull();
+    expect(keptSetupFrom({ ...DOCUMENT, sessionId: 42 })).toBeNull();
   });
 });

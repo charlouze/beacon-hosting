@@ -1,9 +1,11 @@
 import {
   DEFAULT_SETTINGS,
   Session,
+  shownSetup,
   World,
   type Actor,
   type SessionSettings,
+  type ShownSetup,
   type WorldId,
 } from '@beacon/session';
 import {
@@ -25,6 +27,7 @@ import {
 import {
   displayedFactsFrom,
   EVENTS,
+  keptSetupFrom,
   openingFields,
   playerDocument,
   PLAYERS,
@@ -33,6 +36,7 @@ import {
   sessionFrom,
   settingsFrom,
   SETTINGS_DOC,
+  setupDocPath,
   toDate,
   TTL_DAYS,
   worldFrom,
@@ -49,7 +53,7 @@ export interface OpenRequest {
 }
 
 /**
- * One snapshot of a world's `server/current`, as the screen needs it: what the
+ * One snapshot of a world's server documents, as the screen needs it: what the
  * domain reads, the three facts §4 says are displayed, and the instant the
  * current state began.
  *
@@ -64,14 +68,16 @@ export interface ServerView {
   readonly session: Session;
   readonly facts: DisplayedFacts;
   readonly stateSince: Date | null;
+  /** What the screen shows of the setup, and null outside the preparation. */
+  readonly setup: ShownSetup | null;
 }
 
 /**
  * A world and the session context it holds, published together (T8). The
  * screen never sees a world without its state, the same discipline `watch`
  * once held for a session and its facts on a single document — except a world
- * and its `server/current` are two documents, so this is two subscriptions
- * merged into one publication rather than one.
+ * and its `server/current` are separate documents, so this is several
+ * subscriptions merged into one publication rather than one.
  *
  * `server` is null when the world's `server/current` is unreadable — a
  * document with no session on it is not this member's problem to interpret.
@@ -90,7 +96,7 @@ export interface WorldSummary {
 export interface ClientSessionRecord {
   /**
    * §8: a collection group query on `players` where `uid == uid`, then one
-   * subscription per world found — three or four, never thirty, which is why
+   * watch per world found — three or four, never thirty, which is why
    * one per world is the honest shape and not a scaling concern.
    */
   watchMyWorlds(uid: string, onWorlds: (worlds: readonly WorldSummary[]) => void): () => void;
@@ -220,6 +226,7 @@ export function clientSessionRecord(
     let worldData: Record<string, unknown> | null | undefined;
     let serverData: Record<string, unknown> | undefined;
     let playerUids: readonly string[] | undefined;
+    let setupData: Record<string, unknown> | undefined;
     let publishing = Promise.resolve();
 
     const publish = (): void => {
@@ -229,7 +236,12 @@ export function clientSessionRecord(
       // every publication that follows it on this subscription.
       publishing = publishing
         .then(async () => {
-          if (worldData === undefined || serverData === undefined || playerUids === undefined) {
+          if (
+            worldData === undefined ||
+            serverData === undefined ||
+            playerUids === undefined ||
+            setupData === undefined
+          ) {
             return;
           }
           if (worldData === null) {
@@ -251,6 +263,7 @@ export function clientSessionRecord(
                     session,
                     facts: displayedFactsFrom(serverData),
                     stateSince: toDate(serverData['stateSince']),
+                    setup: shownSetup(session, keptSetupFrom(setupData)),
                   },
           });
         })
@@ -261,7 +274,7 @@ export function clientSessionRecord(
 
     // A rules refusal completes the stream rather than rejecting a promise —
     // handled here the same way as an unreadable document, so that a world
-    // T9's rules start hiding from some members does not stall the other two
+    // T9's rules start hiding from some members does not stall the other
     // listeners' publications for ever.
     const unsubWorld = onSnapshot(
       worldDoc(worldId),
@@ -299,11 +312,26 @@ export function clientSessionRecord(
         publish();
       },
     );
+    // A document of its own, so a listener of its own: a progress is written
+    // several times a minute and moves no field of `server/current`. Absent or
+    // refused, it reads as nothing kept, and the screen shows the first step.
+    const unsubSetup = onSnapshot(
+      doc(db, setupDocPath(worldId)),
+      (snapshot) => {
+        setupData = snapshot.data() ?? {};
+        publish();
+      },
+      () => {
+        setupData = {};
+        publish();
+      },
+    );
 
     return () => {
       unsubWorld();
       unsubServer();
       unsubPlayers();
+      unsubSetup();
     };
   }
 

@@ -9,7 +9,7 @@ import {
   type WorldId,
 } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { keptSetupFrom, serverDocPath, setupDocPath } from './fields.js';
+import { keptStepFrom, serverDocPath, setupDocPath } from './fields.js';
 
 export interface SetupStore {
   /** Rewrites the whole document: nothing else ever erases the previous setup. */
@@ -66,7 +66,7 @@ export function setupStores(db: Firestore): SetupStores {
 
             const data = setup.data() ?? {};
             if (data['sessionId'] !== sessionId) return null;
-            const kept = keptSetupFrom(data);
+            const kept = keptStepFrom(data);
             if (kept === null) return null;
 
             const advance = advanceSetup(kept, declared, at);
