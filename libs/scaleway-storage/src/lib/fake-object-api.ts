@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import type { ObjectApi, ObjectSummary } from './object-api.js';
+import type { ObjectApi, ObjectSummary, TransferProgress } from './object-api.js';
 
 export interface FakeObjectApi extends ObjectApi {
   /** What the bucket holds, for an assertion no method of the port exposes. */
@@ -46,11 +46,12 @@ export function fakeObjectApi(): FakeObjectApi {
       times.set(key, new Date());
     },
 
-    async get(key: string, toFile: string): Promise<void> {
+    async get(key: string, toFile: string, onProgress?: TransferProgress): Promise<void> {
       check();
       const body = stored.get(key);
       if (body === undefined) throw new Error(`no such key: ${key}`);
       writeFileSync(toFile, body);
+      onProgress?.(body.byteLength, body.byteLength);
     },
   };
 }

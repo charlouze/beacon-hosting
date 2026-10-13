@@ -1,9 +1,9 @@
 import { createReadStream, createWriteStream, statSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
-import type { Readable } from 'node:stream';
+import { Transform, type Readable } from 'node:stream';
 import { GetObjectCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import type { ObjectApi, ObjectSummary } from './object-api.js';
+import type { ObjectApi, ObjectSummary, TransferProgress } from './object-api.js';
 import { partSizeFor } from './part-size.js';
 
 /**
@@ -76,14 +76,32 @@ export function fromS3(client: S3Client, bucket: string): ObjectApi {
       // to the end closes it.
     },
 
-    async get(key: string, toFile: string): Promise<void> {
+    async get(key: string, toFile: string, onProgress?: TransferProgress): Promise<void> {
       const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       if (response.Body === undefined) {
         throw new Error(`s3 returned no body for ${key}`);
       }
+      const body = response.Body as Readable;
+      const totalBytes = response.ContentLength;
       // Streamed to disk, and awaited: a save that arrives half-written is the
       // failure mode this whole tranche exists to prevent.
-      await pipeline(response.Body as Readable, createWriteStream(toFile));
+      if (onProgress === undefined || totalBytes === undefined) {
+        await pipeline(body, createWriteStream(toFile));
+        return;
+      }
+      await pipeline(body, countingBytes(totalBytes, onProgress), createWriteStream(toFile));
     },
   };
+}
+
+/** Passes every chunk through untouched, and says how many bytes have gone by. */
+function countingBytes(totalBytes: number, onProgress: TransferProgress): Transform {
+  let receivedBytes = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, done): void {
+      receivedBytes += chunk.byteLength;
+      onProgress(receivedBytes, totalBytes);
+      done(null, chunk);
+    },
+  });
 }
