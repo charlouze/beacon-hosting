@@ -2178,6 +2178,20 @@ ne peut pas télécharger (section J) rend quand même ses informations.
 SteamDB n'a pas été sondé : il n'expose aucune API et interdit la lecture
 automatique de ses pages.
 
+### Depuis le réseau de Google
+
+Même commande, lancée par le commanditaire dans Cloud Shell le 2026-10-13,
+Node 24.21.0.
+
+| Source | Build rendu | Durée |
+|---|---|---|
+| Steam en direct, session anonyme ouverte à chaque lecture | `25746735`, `timeupdated` `1791303546` | 1815, 752 et 642 ms |
+| `api.steamcmd.net` | `25746735`, `timeupdated` `1791303546` | 157, 111 et 39 ms |
+| API web de Steam, `ISteamApps/UpToDateCheck` | aucun, même réponse | — |
+
+Cloud Shell sort par le réseau de Google, comme une Function, mais n'en est pas
+une : ni la même sortie réseau, ni le même environnement d'exécution.
+
 ### Le manifeste local
 
 | Emplacement, installation faite par `steamcmd +force_install_dir` | Mesure |
@@ -2191,9 +2205,8 @@ locale, le 2026-10-08, et non celui de la publication.
 
 ### Ce qui reste ouvert
 
-- La lecture de Steam en direct depuis une Function : la mesure vient d'un
-  poste, et rien ne dit que la sortie réseau d'une Function atteint les
-  serveurs de Steam ni en combien de temps.
+- La lecture de Steam en direct depuis une Function elle-même : les mesures
+  viennent d'un poste et de Cloud Shell.
 - Le délai entre une publication de l'éditeur et le moment où chaque source la
   rend. `api.steamcmd.net` met ses réponses en cache.
 - Ce que chaque source répond à des lectures répétées sur des jours.
