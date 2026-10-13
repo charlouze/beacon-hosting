@@ -139,11 +139,6 @@ ci-dessous sont établis par lecture.
   règle ne dit qui doit pouvoir le faire, ni ce que le produit attend d'un jeu
   qu'on ne peut pas obtenir librement.
 
-- **Opening a session** — la fourchette de disponibilité n'existe que dans la
-  mise en forme de l'écran, qui la calcule depuis le début de la mise en place.
-  Le cœur de décision ne la porte pas, et le glossaire la lie donc à un nom
-  d'affichage. reserved by batch-03
-
 - **Joining** — quand une partie du point de jonction ne peut pas être publiée,
   la session continue et l'écran montre ce qui reste. Aucune règle ne dit si
   c'est voulu.
@@ -151,3 +146,26 @@ ci-dessous sont établis par lecture.
 - **Joining** — chaque jeu hébergé offre aujourd'hui un moyen principal de
   rejoindre et un recours. La spec n'en fixe plus le nombre, pour ne pas exclure
   un jeu qui n'en aurait qu'un ou qui en aurait quatre.
+
+- **Opening a session** — l'abandon au délai s'écrit sans relire la session.
+  Quand un serveur de jeu déclare son échec entre la lecture et l'écriture, sur
+  une session passée le délai, la mise en place est abandonnée deux fois : le
+  journal des événements porte deux `ProvisioningFailed`, et l'écran l'heure du
+  second abandon et la phrase du délai. Aucune règle ne dit ce qu'un abandon
+  arrivé trop tard garde de ses événements. Relevé par lecture pendant le lot
+  03.
+
+- **Opening a session** — quand un serveur de jeu déclare une étape antérieure
+  à celle qu'il avait déclarée, l'écran revient à cette étape, avec l'heure de
+  la déclaration. Aucune règle ne dit si l'écran doit reculer, et rien ne
+  mesure si le cas arrive.
+
+- **Opening a session** — un serveur de jeu cesse d'attendre la réponse à une
+  déclaration d'étape après 5 s et envoie la suivante. La première peut encore
+  être traitée après la seconde : l'écran affiche alors l'étape ou l'activité
+  quittée, jusqu'à la déclaration suivante. Aucune règle ne dit ce que l'écran
+  fait d'une déclaration arrivée après une plus récente.
+
+- **Aucune section** — à 390 px de large, la valeur de la plaque de l'écran
+  hors service paraît rognée après un abandon. Vu le 2026-10-13 sur un rendu
+  statique, sans l'enveloppe de l'application : à vérifier dans l'application.
