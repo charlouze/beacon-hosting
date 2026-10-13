@@ -9,7 +9,7 @@
  * day a new image is published there must be exactly two lines to change.
  */
 export const COMPANION_IMAGE =
-  'ghcr.io/charlouze/beacon-companion@sha256:4e62ac0791518759ad0981c8186293d5582ecb7dddf70e28e3df68e8550e4f96';
+  'ghcr.io/charlouze/beacon-companion@sha256:aaf1a5c57f8f3b2698e14e27ea309997cef4b0f14e080bc178c6f3ba64942e2e';
 
 /**
  * The sources that image was built from, so that a companion changed without
@@ -22,4 +22,4 @@ export const COMPANION_IMAGE =
  * `catalogue-pin.spec.ts` reads it.
  */
 export const COMPANION_SOURCES =
-  'sha256:e134d7a12eea4282358363bd4e4cd4e9b69c0ea65cb8276f1d207ae8decd848b';
+  'sha256:27bfb6477a191ad949340570f651d76021bf6cdd6b0eca7a6ccd3d828442bbfd';
