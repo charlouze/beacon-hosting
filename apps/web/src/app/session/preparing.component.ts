@@ -7,7 +7,7 @@ import {
 } from '@beacon/session';
 import type { ServerView } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
-import { activityLabel, euroLabel, hourLabel, readyWindow, stepLabel } from '../format';
+import { activityLabel, euroLabel, hourLabel, stepLabel, windowLabel } from '../format';
 
 /** One of the four lengths the rule under the step is cut in. */
 interface Length {
@@ -49,12 +49,11 @@ function lengthsOf(shown: ShownSetup, rank: number): Length[] {
  * progress no measure carries: a step with no figure gets a length that
  * passes, and no percentage.
  *
- * A window and never an hour, and it is the probe that imposes it: 4 min 49 s
- * then 7 min 58 s on the same size in the same zone. What earned the right to
- * come back with the measurement is a figure; not its precision.
- *
- * The window opens from `stateSince` and not from `startedAt`: the same
- * instant today, a different one the day a state precedes another.
+ * A window and never an hour: two setups of the same game end minutes apart,
+ * and an hour contradicted releases nobody. It is drawn from the last setups
+ * of the game that came into service, and this screen computes neither of
+ * its hours. While the game counts too few, the line goes and nothing stands
+ * in for it.
  */
 @Component({
   selector: 'beacon-preparing',
@@ -174,8 +173,8 @@ export class PreparingComponent {
   });
 
   readonly window = computed(() => {
-    const since = this.view().stateSince;
-    return since === null ? null : readyWindow(since);
+    const window = this.view().readyWindow;
+    return window === null ? null : windowLabel(window);
   });
 
   readonly closesAt = computed(() =>

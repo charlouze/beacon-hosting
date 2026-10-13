@@ -1,5 +1,11 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { DEFAULT_SETTINGS, Deadline, Session, type ShownSetup } from '@beacon/session';
+import {
+  DEFAULT_SETTINGS,
+  Deadline,
+  Session,
+  type ReadyWindow,
+  type ShownSetup,
+} from '@beacon/session';
 import { CLOCK } from '../clock';
 import { PreparingComponent } from './preparing.component';
 
@@ -19,6 +25,11 @@ describe('PreparingComponent', () => {
     abandonedAt: null,
   };
 
+  const WINDOW: ReadyWindow = {
+    from: new Date('2026-09-12T20:19:10'),
+    to: new Date('2026-09-12T20:22:05'),
+  };
+
   const fetching = (parts: Partial<ShownSetup['step']> = {}): ShownSetup => ({
     step: { step: 'fetching-game', since: stepSince, activity: null, progress: null, ...parts },
     order: DEPOT_FIRST,
@@ -27,7 +38,7 @@ describe('PreparingComponent', () => {
 
   const render = async (
     setup: ShownSetup | null = FIRST_STEP,
-    stateSince: Date | null = startedAt,
+    readyWindow: ReadyWindow | null = WINDOW,
   ) => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: clock }] });
@@ -46,9 +57,9 @@ describe('PreparingComponent', () => {
     fixture.componentRef.setInput('view', {
       session,
       facts: { ip: null, joinInfo: null, lastError: null },
-      stateSince,
+      stateSince: startedAt,
       setup,
-      readyWindow: null,
+      readyWindow,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
@@ -199,12 +210,8 @@ describe('PreparingComponent', () => {
     });
   });
 
-  /**
-   * probe/RESULTS.md §S: 4 min 49 s then 7 min 58 s on the same size in the
-   * same zone. A single hour would be three minutes wrong one time in two, and
-   * an hour contradicted releases nobody.
-   */
-  it('announces a window and never a single hour', async () => {
+  /** Two setups of the same game end minutes apart: an hour contradicted releases nobody. */
+  it('announces the window it is given, and never a single hour', async () => {
     const fixture = await render();
 
     expect(fixture.nativeElement.textContent).toContain('Ready between');
@@ -212,11 +219,26 @@ describe('PreparingComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Ready around');
   });
 
-  it('announces no window when it has no instant to open one from', async () => {
+  // The game counts too few completed setups to draw a window from: the line
+  // goes, and nothing stands in for it.
+  it('announces no window when it is given none, and nothing in its place', async () => {
     const fixture = await render(FIRST_STEP, null);
 
     expect(fixture.nativeElement.textContent).not.toContain('Ready between');
+    expect(field(fixture, 'ready-window')).toBeNull();
     expect(field(fixture, 'step-name')).toBe('Waking the server');
+    expect(field(fixture, 'closes-at')).toBe('00:14');
+  });
+
+  // The session opened at 20:14: the window shown is the one it is given, not
+  // one worked out from that hour.
+  it('computes no hour of the window itself', async () => {
+    const fixture = await render(FIRST_STEP, {
+      from: new Date('2026-09-12T20:31:00'),
+      to: new Date('2026-09-12T20:47:00'),
+    });
+
+    expect(field(fixture, 'ready-window')).toBe('20:31 – 20:47');
   });
 
   it('hands the evening back, in as many words', async () => {

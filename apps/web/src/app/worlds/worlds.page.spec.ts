@@ -1,7 +1,7 @@
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { DEFAULT_SETTINGS, Deadline, Session, World } from '@beacon/session';
+import { DEFAULT_SETTINGS, Deadline, Session, World, type ReadyWindow } from '@beacon/session';
 import type { WorldSummary } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
 import { WorldsPage } from './worlds.page';
@@ -44,6 +44,31 @@ const running = (worldId: string, name: string): WorldSummary => ({
 const idle = (worldId: string, name: string): WorldSummary => ({
   world: world(worldId, name),
   server: { session: Session.idle(), facts: NO_FACTS, stateSince: null, setup: null, readyWindow: null },
+});
+
+const preparing = (
+  worldId: string,
+  name: string,
+  readyWindow: ReadyWindow | null,
+): WorldSummary => ({
+  world: world(worldId, name),
+  server: {
+    session: Session.from({
+      state: 'PROVISIONING',
+      worldId,
+      sessionId: `s-${worldId}`,
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: STARTED_AT,
+      deadline: Deadline.at(new Date('2026-09-13T00:14:00')),
+      instanceSize: 'DEV1-L',
+      hasJoinInfo: false,
+    }),
+    facts: NO_FACTS,
+    stateSince: STARTED_AT,
+    setup: null,
+    readyWindow,
+  },
 });
 
 const unreadable = (worldId: string, name: string): WorldSummary => ({
@@ -89,6 +114,27 @@ describe('WorldsPage', () => {
     const dom = await render([running('a', 'Les bras cassés')]);
     expect(dom.querySelector('[data-field="world-state"]')?.textContent).toContain('In service');
     expect(dom.querySelector('[data-field="time-left"]')?.textContent).toBe('2:47:00');
+    expect(dom.querySelector('[data-field="closes-at"]')?.textContent).toContain('00:14');
+  });
+
+  it('reads the window it is given on a world that prepares', async () => {
+    const dom = await render([
+      preparing('p', 'Le camp du lac', {
+        from: new Date('2026-09-12T20:31:00'),
+        to: new Date('2026-09-12T20:47:00'),
+      }),
+    ]);
+
+    expect(dom.querySelector('[data-field="world-state"]')?.textContent).toContain('Preparing');
+    expect(dom.querySelector('[data-field="ready-window"]')?.textContent).toBe('20:31 – 20:47');
+    expect(dom.querySelector('[data-field="closes-at"]')?.textContent).toContain('00:14');
+  });
+
+  it('reads no window on a world that prepares and is given none', async () => {
+    const dom = await render([preparing('p', 'Le camp du lac', null)]);
+
+    expect(dom.querySelector('[data-field="ready-window"]')).toBeNull();
+    expect(dom.textContent).not.toContain('Ready between');
     expect(dom.querySelector('[data-field="closes-at"]')?.textContent).toContain('00:14');
   });
 
