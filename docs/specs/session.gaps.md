@@ -159,3 +159,7 @@ ci-dessous sont établis par lecture.
   à celle qu'il avait déclarée, l'écran revient à cette étape, avec l'heure de
   la déclaration. Aucune règle ne dit si l'écran doit reculer, et rien ne
   mesure si le cas arrive.
+
+- **Aucune section** — à 390 px de large, la valeur de la plaque de l'écran
+  hors service paraît rognée après un abandon. Vu le 2026-10-13 sur un rendu
+  statique, sans l'enveloppe de l'application : à vérifier dans l'application.
