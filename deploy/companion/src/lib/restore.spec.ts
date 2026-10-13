@@ -30,6 +30,13 @@ const saveOf = (createdAt: string, sizeBytes = 20_000) =>
     origin: 'auto',
   });
 
+/** The setups the restore declared, in the order it declared them. */
+const declared = () =>
+  (deps.report as ReturnType<typeof vi.fn>).mock.calls
+    .map((call) => call[0])
+    .filter((report) => report.setup !== undefined)
+    .map((report) => report.setup);
+
 beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'beacon-restore-'));
 
@@ -219,6 +226,55 @@ describe('runRestore', () => {
     await runRestore(deps);
     expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('les-copains'));
   });
+
+  it('declares that it restores the world before it looks for its last save', async () => {
+    const order: string[] = [];
+    deps = {
+      ...deps,
+      report: vi.fn(async (report) => {
+        if (report.setup !== undefined) order.push(report.setup.step);
+        return { state: 'PROVISIONING' as const, deadlineIso: null };
+      }),
+    };
+    deps.store.list = vi.fn(async () => {
+      order.push('listed');
+      return [saveOf('2026-09-06T19:00:00Z')];
+    });
+
+    await runRestore(deps);
+
+    expect(order).toEqual(['restoring-world', 'listed']);
+  });
+
+  it('declares that it restores the world of a world that has no save yet', async () => {
+    deps.store.list = vi.fn(async () => []);
+
+    await runRestore(deps);
+
+    expect(declared()).toEqual([{ step: 'restoring-world' }]);
+  });
+
+  // The game that downloads its own files: the restore knows nothing of that
+  // step, and the agent declares it.
+  it('declares no install of the game when it brings no game back', async () => {
+    await runRestore(deps);
+
+    expect(declared()).toEqual([{ step: 'restoring-world' }]);
+  });
+
+  // What is displayed must not cost a session: the world lands all the same.
+  it('restores the world when no declaration could be sent', async () => {
+    deps = {
+      ...deps,
+      report: vi.fn(async () => {
+        throw new Error('The operation was aborted due to timeout');
+      }),
+    };
+
+    await expect(runRestore(deps)).resolves.toBeUndefined();
+    expect(readFileSync(join(root, 'savegame', '3ad85aea')).byteLength).toBe(20_000);
+    expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('could not declare'));
+  });
 });
 
 describe('runRestore with game files', () => {
@@ -290,5 +346,94 @@ describe('runRestore with game files', () => {
     });
     await runRestore(deps);
     expect(order).toEqual(['game', 'world']);
+  });
+
+  it('declares the install of the game, its unpacking, then the world, in that order', async () => {
+    await runRestore(deps);
+
+    expect(declared()).toEqual([
+      { step: 'fetching-game', activity: 'downloading' },
+      { step: 'fetching-game', activity: 'unpacking' },
+      { step: 'restoring-world' },
+    ]);
+  });
+
+  it('declares the progress of the download from the bytes received, every ten seconds at most', async () => {
+    let elapsedMs = 0;
+    deps = { ...deps, clock: { now: () => new Date(NOW.getTime() + elapsedMs) } };
+    const originalGet = games.get.bind(games);
+    games.get = vi.fn(async (key, toFile, onProgress) => {
+      const arrivals = [
+        [4_000, 25],
+        [10_000, 50],
+        [12_000, 60],
+        [20_000, 90],
+      ] as const;
+      for (const [atMs, receivedBytes] of arrivals) {
+        elapsedMs = atMs;
+        onProgress?.(receivedBytes, 100);
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      await originalGet(key, toFile);
+    });
+
+    await runRestore(deps);
+
+    expect(declared()).toEqual([
+      { step: 'fetching-game', activity: 'downloading' },
+      { step: 'fetching-game', activity: 'downloading', progress: 50 },
+      { step: 'fetching-game', activity: 'downloading', progress: 90 },
+      { step: 'fetching-game', activity: 'unpacking' },
+      { step: 'restoring-world' },
+    ]);
+  });
+
+  it('declares a whole percentage, rounded down', async () => {
+    let elapsedMs = 0;
+    deps = { ...deps, clock: { now: () => new Date(NOW.getTime() + elapsedMs) } };
+    const originalGet = games.get.bind(games);
+    games.get = vi.fn(async (key, toFile, onProgress) => {
+      elapsedMs = 10_000;
+      onProgress?.(2, 3);
+      await new Promise((resolve) => setImmediate(resolve));
+      await originalGet(key, toFile);
+    });
+
+    await runRestore(deps);
+
+    expect(declared()[1]).toEqual({ step: 'fetching-game', activity: 'downloading', progress: 66 });
+  });
+
+  // An empty object: no progress to tell out of a total of zero.
+  it('declares no progress out of a total it does not know', async () => {
+    let elapsedMs = 0;
+    deps = { ...deps, clock: { now: () => new Date(NOW.getTime() + elapsedMs) } };
+    const originalGet = games.get.bind(games);
+    games.get = vi.fn(async (key, toFile, onProgress) => {
+      elapsedMs = 10_000;
+      onProgress?.(500, 0);
+      await new Promise((resolve) => setImmediate(resolve));
+      await originalGet(key, toFile);
+    });
+
+    await runRestore(deps);
+
+    expect(declared()).toEqual([
+      { step: 'fetching-game', activity: 'downloading' },
+      { step: 'fetching-game', activity: 'unpacking' },
+      { step: 'restoring-world' },
+    ]);
+  });
+
+  it('brings the game back when a declaration takes too long', async () => {
+    deps = {
+      ...deps,
+      report: vi.fn(async () => {
+        throw new Error('The operation was aborted due to timeout');
+      }),
+    };
+
+    await expect(runRestore(deps)).resolves.toBeUndefined();
+    expect(readdirSync(gameDir)).toContain('Sunkenland-DedicatedServer.exe');
   });
 });
