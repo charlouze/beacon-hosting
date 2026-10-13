@@ -5,7 +5,11 @@ const SECRET = 'a'.repeat(64);
 
 const recording = () => {
   const entries: JournalledFailure[] = [];
-  const journal: PlatformJournal = { failure: (entry) => entries.push(entry) };
+  const journal: PlatformJournal = {
+    failure: (entry) => entries.push(entry),
+    setupChanged: () => undefined,
+    discarded: () => undefined,
+  };
   return { entries, journal };
 };
 

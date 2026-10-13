@@ -182,6 +182,9 @@ export const enshrouded: GameCatalogEntry = {
   generatesWorlds: true,
   // Measured at 15 GB occupied, on a 40 GB volume.
   diskGb: 30,
+  // The restore brings the world back before the game's own container starts
+  // and downloads the game.
+  setupStepOrder: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
 
   hostname: hostnameFor,
 

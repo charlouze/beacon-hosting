@@ -1,8 +1,13 @@
-import { renderCloudInit, type SaveAccess } from '@beacon/cloud-init';
+import { catalogFor, renderCloudInit, type SaveAccess } from '@beacon/cloud-init';
 import { newAgentToken } from '@beacon/agent-protocol';
 import type { AdminMembershipRecord } from '@beacon/membership-record/admin';
-import type { Clock, ServerHost, Session, WorldId } from '@beacon/session';
-import type { AdminWorldRecord, SettingsStore, WorldStateStores } from '@beacon/session-record';
+import type { Clock, Game, ServerHost, Session, SessionId, WorldId } from '@beacon/session';
+import type {
+  AdminWorldRecord,
+  SettingsStore,
+  SetupStores,
+  WorldStateStores,
+} from '@beacon/session-record';
 import { sessionTag } from '@beacon/scaleway-compute';
 import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
@@ -12,6 +17,7 @@ export interface ProvisionDeps {
   readonly clock: Clock;
   readonly host: ServerHost;
   readonly states: WorldStateStores;
+  readonly setups: SetupStores;
   readonly settings: SettingsStore;
   readonly ledger: ProvisioningLedger;
   /** The world's own facts — its name, and the players it delimits itself to (§4). */
@@ -66,6 +72,8 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
   const claimed = await state.claimProvisioning(sessionId, now);
   if (!claimed) return false;
 
+  await beginSetup(deps, worldId, sessionId, game, session.startedAt ?? now);
+
   const size = session.instanceSize ?? (await deps.settings.read()).defaultInstanceSize;
 
   // §6 étape 4: both documents in strict create, before the provider. A
@@ -118,6 +126,24 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
   // §5: the intent carries the two ids **and** the address.
   await deps.ledger.record(sessionId, { ...opened.references, ip: opened.address });
   return true;
+}
+
+/**
+ * The setup is only ever displayed, so failing to begin it stops nothing: the
+ * screen stays on the first step for this session, and the operator reads why.
+ */
+async function beginSetup(
+  deps: ProvisionDeps,
+  worldId: WorldId,
+  sessionId: SessionId,
+  game: Game,
+  openedAt: Date,
+): Promise<void> {
+  try {
+    await deps.setups.for(worldId).begin(sessionId, catalogFor(game).setupStepOrder, openedAt);
+  } catch (error) {
+    deps.journal.failure({ source: 'provisioning.begin', sessionId, error: String(error) });
+  }
 }
 
 /**

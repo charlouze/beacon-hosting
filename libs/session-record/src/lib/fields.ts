@@ -2,12 +2,16 @@ import {
   Deadline,
   DEFAULT_SETTINGS,
   isGame,
+  isSetupActivity,
+  isSetupProgress,
+  isSetupStep,
   isWorldId,
   SESSION_STATES,
   Session,
   World,
   type InstanceSize,
   type JoinInfo,
+  type KeptSetupStep,
   type SessionSettings,
   type SessionState,
   type WorldId,
@@ -21,6 +25,30 @@ export const EVENTS = 'events';
 /** `worlds/{worldId}/server/current` — the one session context a world holds. */
 export function serverDocPath(worldId: WorldId): string {
   return `${WORLDS}/${worldId}/server/current`;
+}
+
+/** `worlds/{worldId}/server/setup` — the step the session's setup is on. */
+export function setupDocPath(worldId: WorldId): string {
+  return `${WORLDS}/${worldId}/server/setup`;
+}
+
+/**
+ * `worlds/{worldId}/server/setup` as the domain reads it. Null means the
+ * document names no step this vocabulary recognises. An activity or a
+ * progress it does not recognise reads as none.
+ */
+export function keptSetupFrom(data: Record<string, unknown>): KeptSetupStep | null {
+  const step = data['step'];
+  const since = toDate(data['stepSince']);
+  if (!isSetupStep(step) || since === null) return null;
+  const activity = data['activity'];
+  const progress = data['progress'];
+  return {
+    step,
+    since,
+    activity: isSetupActivity(activity) ? activity : null,
+    progress: isSetupProgress(progress) ? progress : null,
+  };
 }
 
 /**

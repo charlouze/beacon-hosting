@@ -28,6 +28,10 @@ La forme de l'interface appartient à `.impeccable/DIRECTION.md`.
 | jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité |
 | point de jonction | `JoinInfo`, affiché `How to join` | les moyens de rejoindre le serveur d'une session |
 | fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait devenir joignable |
+| mise en place | `setup` | ce qu'une session traverse entre son ouverture et son passage en service |
+| étape | `SetupStep` | l'une des quatre parties d'une mise en place |
+| activité | `SetupActivity` | ce qu'un serveur de jeu fait à l'intérieur d'une étape |
+| avancement | `SetupProgress` | la part déjà faite de l'activité en cours, ou de l'étape quand elle n'en a pas, en pourcentage |
 | réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
 | hors service | `IDLE`, affiché `Out of service` | le monde n'a aucun serveur de jeu |
 | en préparation | `PROVISIONING`, affiché `Preparing` | le serveur se met en place |

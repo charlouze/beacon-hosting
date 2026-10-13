@@ -56,6 +56,10 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
     read: vi.fn(async () => null),
     readSession: vi.fn(async () => null),
   };
+  const setup = {
+    begin: vi.fn(async () => undefined),
+    advance: vi.fn(async () => null),
+  };
   return {
     clock: { now: () => NOW },
     host: {
@@ -71,6 +75,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
     // The same object every call: a test that grabs it via `deps.states.for(...)`
     // and mutates one of its methods reaches the very instance `provision` uses.
     states: { for: vi.fn(() => state), all: vi.fn(async () => [WORLD_ID]) },
+    setups: { for: vi.fn(() => setup) },
     settings: { read: vi.fn(async () => DEFAULT_SETTINGS) },
     ledger: {
       open: vi.fn(async () => undefined),
@@ -96,7 +101,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
       read: vi.fn(async () => options.world ?? defaultWorld()),
       create: vi.fn(async () => undefined),
     },
-    journal: { failure: vi.fn() },
+    journal: { failure: vi.fn(), setupChanged: vi.fn(), discarded: vi.fn() },
   };
 };
 
@@ -107,6 +112,51 @@ beforeEach(() => {
 });
 
 describe('provisioning', () => {
+  it('begins the setup with the order of the game, since the opening of the session', async () => {
+    await runStateChange(deps, WORLD_ID, provisioning());
+
+    expect(deps.setups.for).toHaveBeenCalledWith(WORLD_ID);
+    expect(deps.setups.for(WORLD_ID).begin).toHaveBeenCalledWith(
+      's1',
+      ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+      NOW,
+    );
+  });
+
+  it('begins the setup of the other game with its own order', async () => {
+    await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+    expect(deps.setups.for(WORLD_ID).begin).toHaveBeenCalledWith(
+      's1',
+      ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+      NOW,
+    );
+  });
+
+  it('begins no setup for a session it did not claim', async () => {
+    vi.mocked(deps.states.for(WORLD_ID).claimProvisioning).mockResolvedValue(false);
+
+    await runStateChange(deps, WORLD_ID, provisioning());
+
+    expect(deps.setups.for(WORLD_ID).begin).not.toHaveBeenCalled();
+  });
+
+  // What is displayed must not cost a session: the server opens all the same,
+  // and the failure is kept where the operator reads it.
+  it('opens the server when the setup could not begin, and journals why', async () => {
+    vi.mocked(deps.setups.for(WORLD_ID).begin).mockRejectedValue(new Error('firestore is down'));
+
+    await runStateChange(deps, WORLD_ID, provisioning());
+
+    expect(deps.host.open).toHaveBeenCalledTimes(1);
+    expect(deps.journal.failure).toHaveBeenCalledWith({
+      source: 'provisioning.begin',
+      sessionId: 's1',
+      error: 'Error: firestore is down',
+    });
+    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
+  });
+
   // §6 étape 3, §8: triggers are delivered at least once. Without the claim, a
   // double delivery creates two billed machines.
   it('does nothing at all when another delivery already claimed it', async () => {

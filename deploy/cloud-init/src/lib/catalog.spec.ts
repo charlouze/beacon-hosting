@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Game } from '@beacon/session';
+import { isSetupStepOrder, type Game } from '@beacon/session';
 import { type BootRequest, catalogFor, refuseWorldLayout, renderCloudInit } from './catalog.js';
 import { REQUEST, request } from './catalogue-fixtures.spec-helper.js';
 
@@ -153,5 +153,31 @@ describe('the disk a game boots on', () => {
   it('gives each game its own size, in gigabytes', () => {
     expect(catalogFor('sunkenland').diskGb).toBe(40);
     expect(catalogFor('enshrouded').diskGb).toBe(30);
+  });
+});
+
+describe('the order a game goes through its setup', () => {
+  for (const game of GAMES) {
+    it(`holds the four steps once, waking first and starting-game last, for ${game}`, () => {
+      expect(isSetupStepOrder(catalogFor(game).setupStepOrder)).toBe(true);
+    });
+  }
+
+  it('restores the world before the container fetches the game, for enshrouded', () => {
+    expect(catalogFor('enshrouded').setupStepOrder).toEqual([
+      'waking',
+      'restoring-world',
+      'fetching-game',
+      'starting-game',
+    ]);
+  });
+
+  it('fetches the game from the depot before it restores the world, for sunkenland', () => {
+    expect(catalogFor('sunkenland').setupStepOrder).toEqual([
+      'waking',
+      'fetching-game',
+      'restoring-world',
+      'starting-game',
+    ]);
   });
 });

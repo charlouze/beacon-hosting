@@ -1,4 +1,13 @@
-import { SAVE_ORIGINS, type SaveOrigin, type SessionId, type SessionState } from '@beacon/session';
+import {
+  isSetupActivity,
+  isSetupProgress,
+  isSetupStep,
+  SAVE_ORIGINS,
+  type SaveOrigin,
+  type SessionId,
+  type SessionState,
+  type SetupDeclaration,
+} from '@beacon/session';
 
 /**
  * What the machine can say. Four words, and each one is a fact it alone can
@@ -48,6 +57,12 @@ export interface AgentReport {
    * gets lost.
    */
   readonly world?: { readonly name: string; readonly guid: string };
+  /**
+   * While the server sets itself up: the step it is on. Displayed and never
+   * acted upon, which is why a malformed one is discarded rather than
+   * refused.
+   */
+  readonly setup?: SetupDeclaration;
 }
 
 /**
@@ -75,6 +90,28 @@ const MAX_STRING = 1024;
 const isBoundedString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= MAX_STRING;
 
+/** A report the frontier accepted, and the fields it carried that were discarded. */
+export interface ParsedReport {
+  readonly report: AgentReport;
+  readonly discarded: readonly string[];
+}
+
+function setupFrom(value: unknown): SetupDeclaration | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  const { step, activity, progress } = raw;
+
+  if (!isSetupStep(step)) return null;
+  if (activity !== undefined && !isSetupActivity(activity)) return null;
+  if (progress !== undefined && !isSetupProgress(progress)) return null;
+
+  return {
+    step,
+    ...(activity === undefined ? {} : { activity }),
+    ...(progress === undefined ? {} : { progress }),
+  };
+}
+
 /**
  * The anti-corruption layer (§4). It reads a body that came from the least
  * trusted element of the system (§7) and answers a value the domain recognises,
@@ -83,8 +120,11 @@ const isBoundedString = (value: unknown): value is string =>
  * It never repairs and never passes an unknown field through. A parser that
  * coerced would make the endpoint's behaviour depend on what the machine felt
  * like sending, which is the opposite of what a frontier is for.
+ *
+ * One exception: a malformed `setup` is discarded and named, and the report
+ * stands. It is only ever displayed, and a `ready` report must not fall on it.
  */
-export function parseReport(body: unknown): AgentReport | null {
+export function parseReport(body: unknown): ParsedReport | null {
   if (typeof body !== 'object' || body === null) return null;
   const raw = body as Record<string, unknown>;
 
@@ -99,6 +139,7 @@ export function parseReport(body: unknown): AgentReport | null {
     save?: { objectKey: string; sizeBytes: number; origin: SaveOrigin };
     detail?: string;
     world?: { name: string; guid: string };
+    setup?: SetupDeclaration;
   } = { sessionId: raw['sessionId'], phase: raw['phase'] as AgentPhase };
 
   if (raw['ip'] !== undefined) {
@@ -140,5 +181,13 @@ export function parseReport(body: unknown): AgentReport | null {
     report.world = { name: world['name'], guid: world['guid'] };
   }
 
-  return report;
+  const discarded: string[] = [];
+
+  if (raw['setup'] !== undefined) {
+    const setup = setupFrom(raw['setup']);
+    if (setup === null) discarded.push('setup');
+    else report.setup = setup;
+  }
+
+  return { report, discarded };
 }

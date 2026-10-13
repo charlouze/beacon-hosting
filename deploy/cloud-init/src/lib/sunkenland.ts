@@ -510,6 +510,8 @@ export const sunkenland: GameCatalogEntry = {
   // Measured at 26 GB occupied, at the peak as at rest: a 20 GB volume fills
   // up before the download ends.
   diskGb: 40,
+  // The restore brings the game back from the depot first, then the world.
+  setupStepOrder: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
 
   /**
    * Nothing to point a record at: discovery goes through the game's own

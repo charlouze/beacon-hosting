@@ -3,7 +3,7 @@ import { parseReport } from './report.js';
 
 describe('parseReport', () => {
   it('reads the heartbeat, which carries nothing but a session', () => {
-    expect(parseReport({ sessionId: 's1', phase: 'alive' })).toEqual({
+    expect(parseReport({ sessionId: 's1', phase: 'alive' })?.report).toEqual({
       sessionId: 's1',
       phase: 'alive',
     });
@@ -12,7 +12,7 @@ describe('parseReport', () => {
   // §6 étape 7: the ip corroborates and is never followed. It travels because
   // a mismatch is an incident worth filing, not because anything acts on it.
   it('reads the readiness, and the address it merely corroborates', () => {
-    expect(parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7' })).toEqual({
+    expect(parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7' })?.report).toEqual({
       sessionId: 's1',
       phase: 'ready',
       ip: '51.15.42.7',
@@ -25,7 +25,7 @@ describe('parseReport', () => {
       sizeBytes: 50_000,
       origin: 'pre-shutdown',
     };
-    expect(parseReport({ sessionId: 's1', phase: 'saved', save })).toEqual({
+    expect(parseReport({ sessionId: 's1', phase: 'saved', save })?.report).toEqual({
       sessionId: 's1',
       phase: 'saved',
       save,
@@ -91,7 +91,7 @@ describe('parseReport', () => {
         sessionId: 's1',
         phase: 'ready',
         serverId: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b~639242318300625638',
-      }),
+      })?.report,
     ).toEqual({
       sessionId: 's1',
       phase: 'ready',
@@ -102,7 +102,7 @@ describe('parseReport', () => {
   // The game that publishes an address sends none, and the parser invents
   // nothing: an absent field stays absent.
   it('leaves the identifier out when the machine sent none', () => {
-    expect(parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7' })).toEqual({
+    expect(parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7' })?.report).toEqual({
       sessionId: 's1',
       phase: 'ready',
       ip: '51.15.42.7',
@@ -124,7 +124,7 @@ describe('parseReport', () => {
 
   it('lit le monde que la machine declare avoir restaure', () => {
     const world = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
-    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: `${world.guid}~12h`, world })).toEqual({
+    expect(parseReport({ sessionId: 's1', phase: 'ready', serverId: `${world.guid}~12h`, world })?.report).toEqual({
       sessionId: 's1',
       phase: 'ready',
       serverId: `${world.guid}~12h`,
@@ -148,5 +148,56 @@ describe('parseReport', () => {
     expect(
       parseReport({ sessionId: 's1', phase: 'ready', world: { name: 'x'.repeat(1025), guid: 'g' } }),
     ).toBeNull();
+  });
+
+  it('reads the setup a game server declares, with its activity and its progress', () => {
+    const setup = { step: 'fetching-game', activity: 'downloading', progress: 41 };
+
+    expect(parseReport({ sessionId: 's1', phase: 'alive', setup })).toEqual({
+      report: { sessionId: 's1', phase: 'alive', setup },
+      discarded: [],
+    });
+  });
+
+  it('reads a setup that declares a step and nothing else', () => {
+    const parsed = parseReport({ sessionId: 's1', phase: 'alive', setup: { step: 'waking' } });
+
+    expect(parsed?.report.setup).toEqual({ step: 'waking' });
+  });
+
+  it('says it discarded nothing when the report carries no setup', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'alive' })?.discarded).toEqual([]);
+  });
+
+  const MALFORMED_SETUPS: readonly (readonly [string, unknown])[] = [
+    ['a step outside the list', { step: 'booting' }],
+    ['no step at all', { activity: 'downloading' }],
+    ['an activity outside the list', { step: 'fetching-game', activity: 'compiling' }],
+    ['a progress above a hundred', { step: 'fetching-game', progress: 101 }],
+    ['a progress below zero', { step: 'fetching-game', progress: -1 }],
+    ['a progress that is not whole', { step: 'fetching-game', progress: 41.5 }],
+    ['a progress that is not a number', { step: 'fetching-game', progress: '41' }],
+    ['a setup that is not an object', 'fetching-game'],
+    ['a null setup', null],
+  ];
+
+  for (const [name, setup] of MALFORMED_SETUPS) {
+    it(`discards ${name} without refusing the report`, () => {
+      expect(parseReport({ sessionId: 's1', phase: 'alive', setup })).toEqual({
+        report: { sessionId: 's1', phase: 'alive' },
+        discarded: ['setup'],
+      });
+    });
+  }
+
+  // What is displayed must not cost a session: a server that became joinable
+  // is put into service whatever it said of its setup.
+  it('lets a ready report through with a malformed setup, and names what it discarded', () => {
+    expect(
+      parseReport({ sessionId: 's1', phase: 'ready', ip: '51.15.42.7', setup: { step: 42 } }),
+    ).toEqual({
+      report: { sessionId: 's1', phase: 'ready', ip: '51.15.42.7' },
+      discarded: ['setup'],
+    });
   });
 });

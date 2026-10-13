@@ -124,10 +124,29 @@ describe('the agentReport http wrapper', () => {
       state: 'RUNNING',
       deadlineIso: '2026-09-07T00:00:00.000Z',
     });
-    expect(mockRunAgentReport).toHaveBeenCalledWith(undefined, 'a'.repeat(64), {
-      sessionId: 's1',
-      phase: 'alive',
-    });
+    expect(mockRunAgentReport).toHaveBeenCalledWith(
+      undefined,
+      'a'.repeat(64),
+      { sessionId: 's1', phase: 'alive' },
+      [],
+    );
+  });
+
+  it('hands over the fields the frontier discarded, by name', async () => {
+    mockRunAgentReport.mockResolvedValueOnce({ state: 'PROVISIONING', deadlineIso: null });
+
+    const response = await post(
+      { sessionId: 's1', phase: 'alive', setup: { step: 'booting' } },
+      { authorization: `Bearer ${'a'.repeat(64)}` },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRunAgentReport).toHaveBeenLastCalledWith(
+      undefined,
+      'a'.repeat(64),
+      { sessionId: 's1', phase: 'alive' },
+      ['setup'],
+    );
   });
 });
 
