@@ -1,4 +1,4 @@
-import type { Game, SessionState, World } from '@beacon/session';
+import type { Game, SessionState, SetupActivity, SetupStep, World } from '@beacon/session';
 
 /**
  * How the screen renders what it is given. Pure functions, no Angular, and no
@@ -66,6 +66,28 @@ export function readyWindow(stateSince: Date): { from: string; to: string } {
     from: hourLabel(new Date(stateSince.getTime() + earliest)),
     to: hourLabel(new Date(stateSince.getTime() + latest)),
   };
+}
+
+/**
+ * The four steps of a setup, in the board's own words. A record and not a
+ * switch: a step added to the domain without its words here does not compile.
+ */
+export function stepLabel(step: SetupStep): string {
+  const steps: Record<SetupStep, string> = {
+    waking: 'Waking the server',
+    'fetching-game': 'Getting the game',
+    'restoring-world': 'Bringing your world back',
+    'starting-game': 'Starting the game',
+  };
+  return steps[step];
+}
+
+export function activityLabel(activity: SetupActivity): string {
+  const activities: Record<SetupActivity, string> = {
+    downloading: 'Downloading',
+    unpacking: 'Unpacking',
+  };
+  return activities[activity];
 }
 
 export type Tone = 'live' | 'off' | 'warn';

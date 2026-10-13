@@ -26,17 +26,20 @@
   --off-edge: #c9c5ba;
   --off-ink: #b3aea3;
 
+  /* What a step under way has not travelled yet: darker than the hairline of a
+     length to come, lighter than the ink of one travelled. */
+  --held: #8d8a82;
+
   /* Three weights, and only three. 4 px carries the state, 3 px opens a
      warning, 1 px separates values inside one field. */
   --rule-heavy: 4px;
   --rule-mid: 3px;
   --rule-thin: 1px;
 
-  /* FIRST VIEWPORT fixes both, so they are tokens and not component values.
-     The countdown is the only thing entitled to 172 px; the boot window
-     descends to 112 px because that screen has no countdown to show. */
+  /* FIRST VIEWPORT fixes this scale, so it is a token and not a component
+     value. Two figures wear it: the countdown and, while a session sets up,
+     the rank of the step under way. */
   --display-countdown: 172px;
-  --display-window: 112px;
 
   /* The name of a world on the index, which FIRST VIEWPORT of the list fixes
      at 72 px and 34 px. A third scale and not a reuse of the countdown's: the
@@ -204,8 +207,8 @@ a {
   white-space: nowrap;
 }
 
-/* The pip stays, its beat does not. The comp animated it; the contract says
-   the falling second is the only motion on the page, and the contract wins. */
+/* The pip stays, its beat does not. The comp animated it; the contract lets
+   nothing move to decorate, and the contract wins. */
 .status .dot {
   width: 10px;
   height: 10px;
@@ -286,7 +289,7 @@ a {
   padding: 40px 0 44px;
 }
 
-/** The one figure entitled to the display scale, and the only thing that moves. */
+/** Dresses the countdown and the rank of the step under way. */
 .clock {
   font:
     800 var(--display-countdown) / 0.82 var(--font-display);
@@ -297,17 +300,6 @@ a {
 
 .clock .sec {
   color: var(--red);
-}
-
-/* A window, not an hour. The contract pins the display scale to the time
-   left, and the screen that shows a window has no time left to show. */
-.clock.range {
-  font-size: var(--display-window);
-  letter-spacing: -0.035em;
-}
-
-.clock.range .to {
-  color: var(--mute);
 }
 
 .hero .right {
@@ -694,7 +686,6 @@ a {
 
   :root {
     --display-countdown: 84px;
-    --display-window: 52px;
     --display-index: 34px;
   }
 
@@ -800,17 +791,6 @@ a {
     line-height: 0.86;
     letter-spacing: -0.035em;
     margin-top: 10px;
-  }
-
-  /* Two hours and a dash do not fit 390 px at this weight, so they stack. */
-  .clock.range {
-    line-height: 1.04;
-    letter-spacing: -0.03em;
-  }
-
-  .clock.range .to {
-    display: block;
-    font-size: 0.5em;
   }
 
   .foot {
