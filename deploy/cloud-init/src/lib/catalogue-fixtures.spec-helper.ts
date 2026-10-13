@@ -51,3 +51,16 @@ export function serviceBlock(compose: string, name: string): string {
   while (end < lines.length && !/^ {2}\S/.test(lines[end])) end += 1;
   return lines.slice(start, end).join('\n');
 }
+
+/**
+ * The first line of a file a cloud-init writes, as the machine will read it.
+ * Read back out of the rendered document rather than from the value that went
+ * in: the template is what stands between the two.
+ */
+export function writtenLine(cloudInit: string, path: string): string {
+  const lines = cloudInit.split('\n');
+  const file = lines.indexOf(`  - path: ${path}`);
+  if (file === -1) throw new Error(`this cloud-init writes no file at ${path}`);
+  const content = lines.indexOf('    content: |', file);
+  return lines[content + 1].trim();
+}

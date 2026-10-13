@@ -9,7 +9,12 @@ import { readServerId } from './serverid.js';
  */
 export type Readiness = { readonly ready: false } | { readonly ready: true; readonly serverId?: string };
 
-/** Half the report interval: a probe must never be what makes a report late. */
+/**
+ * Half the report interval of an announced server. Longer than a turn of a
+ * server that follows its setup: measured, a game that listens on nothing yet
+ * refuses a probe in 15 ms, and what a game that listens without answering
+ * costs a turn is not measured.
+ */
 const PROBE_TIMEOUT_MS = Math.floor(REPORT_INTERVAL_MS / 2);
 
 const A2S_URL = /^a2s:\/\/([^:/]+):(\d+)$/;

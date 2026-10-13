@@ -1,4 +1,4 @@
-import { renderCloudInit, renderCompose } from './lib/catalog.js';
+import { renderCloudInit, renderCompose, renderSetupMarkers } from './lib/catalog.js';
 import { SERVERID_FILTER } from './lib/sunkenland.js';
 import { isGame } from '@beacon/session';
 
@@ -18,6 +18,7 @@ function render(): string {
   const game = process.env['GAME'] ?? 'enshrouded';
   if (!isGame(game)) throw new Error(`GAME must name a game, got "${game}"`);
   if (process.env['WHAT'] === 'compose') return renderCompose(game);
+  if (process.env['WHAT'] === 'setup-markers') return renderSetupMarkers(game);
 
   const serverPassword = process.env['SERVER_PASSWORD'];
   if (!serverPassword) throw new Error('SERVER_PASSWORD is required');

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { REPORT_INTERVAL_MS } from '@beacon/agent-protocol';
+import {
+  GAME_LOG_MAX_CHARS,
+  REPORT_INTERVAL_MS,
+  SETUP_REPORT_INTERVAL_MS,
+} from '@beacon/agent-protocol';
 import { runAgentLoop, type AgentLoopDeps } from './agent-loop.js';
 
 let deps: AgentLoopDeps;
@@ -20,6 +24,11 @@ beforeEach(() => {
     reportIntervalMs: REPORT_INTERVAL_MS,
     pushIntervalMs: 600_000,
     readWorld: () => null,
+    setup: {
+      declared: vi.fn(() => ({ step: 'starting-game' as const })),
+      intervalMs: SETUP_REPORT_INTERVAL_MS,
+    },
+    readGameLog: vi.fn(() => ''),
   };
 });
 
@@ -36,9 +45,9 @@ describe('runAgentLoop', () => {
     expect(phases.filter((phase: string) => phase === 'ready')).toHaveLength(1);
   });
 
-  // Every minute, whatever the server is doing. §6 hangs two guarantees on this
-  // cadence: an extension is learned in under a minute, and the watchdog can
-  // tell a slow machine from a mute one.
+  // On every turn, whatever the server is doing. Two guarantees hang on the
+  // cadence of an announced server: an extension is learned in under a minute,
+  // and the watchdog can tell a slow machine from a mute one.
   it('reports on every turn, ready or not', async () => {
     // The turn counter lives in `probeReady`, not in `until`: a stop predicate
     // that mutates the very count it is asserted on would make the loop's
@@ -138,7 +147,12 @@ describe('runAgentLoop', () => {
       until: () => ++turns >= 2,
     });
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    expect(phases[0]).toEqual({ phase: 'ready', serverId: `${guid}~1`, world: { name: 'w', guid } });
+    expect(phases[0]).toEqual({
+      phase: 'ready',
+      serverId: `${guid}~1`,
+      world: { name: 'w', guid },
+      setup: { step: 'starting-game' },
+    });
   });
 
   // `ready` once and only once: a second would rewrite `stateSince`, and the
@@ -169,12 +183,188 @@ describe('runAgentLoop', () => {
       until: () => ++turns >= 2,
     });
     const phases = (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    expect(phases[0]).toEqual({ phase: 'ready' });
+    expect(phases[0]).toEqual({ phase: 'ready', setup: { step: 'starting-game' } });
   });
 
   const WORLD = { name: "Beacon's World", guid: '4db51c84-24cf-459e-9e9e-88b8c3a7ce3b' };
   const phasesOf = (report: AgentLoopDeps['report']): string[] =>
     (report as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0].phase);
+
+  describe('before the server is announced', () => {
+    const reports = () => (deps.report as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+
+    it('declares on every turn the step the output of the game decides', async () => {
+      let turns = 0;
+      const steps = ['fetching-game', 'fetching-game', 'starting-game'] as const;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: false };
+      });
+      const setup = { ...deps.setup, declared: () => ({ step: steps[turns - 1] }) };
+
+      await runAgentLoop({ ...deps, probeReady, setup, until: () => turns >= 3 });
+
+      expect(reports()).toEqual([
+        { phase: 'alive', setup: { step: 'fetching-game' } },
+        { phase: 'alive', setup: { step: 'fetching-game' } },
+        { phase: 'alive', setup: { step: 'starting-game' } },
+      ]);
+    });
+
+    it('declares the step in the report that announces the server, and in none after it', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: turns >= 2 };
+      });
+
+      await runAgentLoop({ ...deps, probeReady, until: () => turns >= 4 });
+
+      expect(reports()).toEqual([
+        { phase: 'alive', setup: { step: 'starting-game' } },
+        { phase: 'ready', setup: { step: 'starting-game' } },
+        { phase: 'alive' },
+        { phase: 'alive' },
+      ]);
+    });
+
+    it('stops reading the output of the game once the server is announced', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: true };
+      });
+
+      await runAgentLoop({ ...deps, probeReady, until: () => turns >= 4 });
+
+      expect(deps.setup.declared).toHaveBeenCalledTimes(1);
+      expect(deps.readGameLog).not.toHaveBeenCalled();
+    });
+
+    it('waits the setup interval between two turns, then the report interval', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: turns >= 3 };
+      });
+
+      await runAgentLoop({ ...deps, probeReady, until: () => turns >= 4 });
+
+      expect((deps.sleep as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toEqual([
+        SETUP_REPORT_INTERVAL_MS,
+        SETUP_REPORT_INTERVAL_MS,
+        REPORT_INTERVAL_MS,
+        REPORT_INTERVAL_MS,
+      ]);
+    });
+
+    it('waits the interval of the setup it follows, whatever it is', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: false };
+      });
+
+      await runAgentLoop({
+        ...deps,
+        probeReady,
+        setup: { ...deps.setup, intervalMs: REPORT_INTERVAL_MS },
+        until: () => turns >= 2,
+      });
+
+      expect(deps.sleep).toHaveBeenNthCalledWith(1, REPORT_INTERVAL_MS);
+    });
+
+    it('waits the setup interval after a report that failed to be sent', async () => {
+      let turns = 0;
+      const report = vi.fn(async () => {
+        if (++turns === 1) throw new Error('ECONNRESET');
+        return { state: 'PROVISIONING' as const, deadlineIso: null };
+      });
+
+      await runAgentLoop({
+        ...deps,
+        probeReady: async () => ({ ready: false }),
+        report,
+        until: () => turns >= 2,
+      });
+
+      expect(deps.sleep).toHaveBeenNthCalledWith(1, SETUP_REPORT_INTERVAL_MS);
+    });
+
+    it('joins the end of the output of the game to a failure it declares', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: true, serverId: '00000000-0000-0000-0000-000000000000~1' };
+      });
+      const readGameLog = vi.fn(() => 'last line of the game\n');
+
+      await runAgentLoop({
+        ...deps,
+        probeReady,
+        readGameLog,
+        readWorld: () => WORLD,
+        until: () => turns >= 1,
+      });
+
+      expect(reports()[0]).toEqual({
+        phase: 'failed',
+        detail: expect.stringContaining('serverId does not name the world'),
+        setup: { step: 'starting-game' },
+        gameLog: 'last line of the game\n',
+      });
+    });
+
+    it('joins no more of the output than a report carries, and its end', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: true, serverId: '00000000-0000-0000-0000-000000000000~1' };
+      });
+      const readGameLog = () => `${'x'.repeat(GAME_LOG_MAX_CHARS)}the end`;
+
+      await runAgentLoop({
+        ...deps,
+        probeReady,
+        readGameLog,
+        readWorld: () => WORLD,
+        until: () => turns >= 1,
+      });
+
+      expect(reports()[0].gameLog).toHaveLength(GAME_LOG_MAX_CHARS);
+      expect(reports()[0].gameLog.endsWith('the end')).toBe(true);
+    });
+
+    it('joins nothing to a failure when the game has printed nothing', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: true, serverId: '00000000-0000-0000-0000-000000000000~1' };
+      });
+
+      await runAgentLoop({ ...deps, probeReady, readWorld: () => WORLD, until: () => turns >= 1 });
+
+      expect(reports()[0]).not.toHaveProperty('gameLog');
+    });
+
+    it('joins the output of the game to no report that is not a failure', async () => {
+      let turns = 0;
+      const probeReady = vi.fn(async () => {
+        turns++;
+        return { ready: false };
+      });
+
+      await runAgentLoop({
+        ...deps,
+        probeReady,
+        readGameLog: vi.fn(() => 'last line of the game\n'),
+        until: () => turns >= 2,
+      });
+
+      for (const report of reports()) expect(report).not.toHaveProperty('gameLog');
+    });
+  });
 
   it('remonte le monde restaure avec la disponibilite', async () => {
     let turns = 0;

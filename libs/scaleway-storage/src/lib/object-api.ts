@@ -12,11 +12,18 @@ export interface ObjectSummary {
   readonly lastModified: Date;
 }
 
+/** Called as an object arrives: how many bytes so far, out of how many. */
+export type TransferProgress = (receivedBytes: number, totalBytes: number) => void;
+
 export interface ObjectApi {
   /** Every object under a prefix. Paged through by the implementation. */
   list(prefix: string): Promise<ObjectSummary[]>;
   /** Write a local file under this key. */
   put(key: string, fromFile: string): Promise<void>;
-  /** Write this key's content to a local file. */
-  get(key: string, toFile: string): Promise<void>;
+  /**
+   * Write this key's content to a local file. `onProgress` is called as the
+   * bytes arrive, and never when the bucket does not say how large the object
+   * is.
+   */
+  get(key: string, toFile: string, onProgress?: TransferProgress): Promise<void>;
 }

@@ -1,7 +1,7 @@
-import { createReadStream, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromS3 } from './from-sdk.js';
@@ -110,5 +110,53 @@ describe('putting a file larger than a single S3 part', () => {
     expect(commandNames()).toContain('CreateMultipartUploadCommand');
     expect(commandNames()).toContain('CompleteMultipartUploadCommand');
     expect(commandNames()).not.toContain('PutObjectCommand');
+  });
+});
+
+/** A client that answers one object, in the chunks given, with or without its size. */
+function servingClient(chunks: readonly Buffer[], contentLength?: number): S3Client {
+  const client = {
+    config: {},
+    send: () => Promise.resolve({ Body: Readable.from(chunks), ContentLength: contentLength }),
+  };
+  return client as unknown as S3Client;
+}
+
+describe('getting an object', () => {
+  const CHUNKS = [Buffer.alloc(1_000, 1), Buffer.alloc(3_000, 2)];
+
+  it('writes the object to the file, whole', async () => {
+    const toFile = join(folder, 'fetched.tar');
+
+    await fromS3(servingClient(CHUNKS, 4_000), 'beacon-games').get('sunkenland/game.tar', toFile);
+
+    expect(readFileSync(toFile).byteLength).toBe(4_000);
+  });
+
+  it('says how much arrived, out of the size the bucket answered', async () => {
+    const seen: [number, number][] = [];
+
+    await fromS3(servingClient(CHUNKS, 4_000), 'beacon-games').get(
+      'sunkenland/game.tar',
+      join(folder, 'fetched.tar'),
+      (received, total) => seen.push([received, total]),
+    );
+
+    expect(seen).toEqual([
+      [1_000, 4_000],
+      [4_000, 4_000],
+    ]);
+  });
+
+  // A progress out of an unknown total is no progress: nothing is said, and
+  // the object still lands whole.
+  it('says nothing when the bucket did not answer a size', async () => {
+    const onProgress = vi.fn();
+    const toFile = join(folder, 'fetched.tar');
+
+    await fromS3(servingClient(CHUNKS), 'beacon-games').get('sunkenland/game.tar', toFile, onProgress);
+
+    expect(onProgress).not.toHaveBeenCalled();
+    expect(readFileSync(toFile).byteLength).toBe(4_000);
   });
 });

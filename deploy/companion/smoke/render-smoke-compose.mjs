@@ -46,6 +46,13 @@ const saveDir = process.env.SAVE_DIR ?? '/opt/enshrouded/server/savegame';
 // and only one of the two files can be the source of it.
 const readyProbe = process.env.READY_PROBE ?? '';
 const serverId = process.env.SERVER_ID ?? '';
+// Where the stub writes what the game prints (`BEACON_GAME_LOG`): the file the
+// agent reads, through the mount the catalogue's own compose gives it.
+const gameLog = process.env.GAME_LOG ?? '';
+if (gameLog === '') {
+  throw new Error('render-smoke-compose: GAME_LOG is required');
+}
+const gameLogDir = gameLog.slice(0, gameLog.lastIndexOf('/'));
 const gameHeader = headers.find((header) => header.name === game);
 if (!gameHeader) {
   throw new Error(`rendered compose has no "${game}" service — cloud-init changed shape`);
@@ -99,8 +106,13 @@ const stubBlock = [
   // `a2s://enshrouded:15637` is a YAML mapping, not a string.
   `      READY_PROBE: "${readyProbe}"`,
   `      SERVER_ID: "${serverId}"`,
+  `      GAME_LOG: ${gameLog}`,
   ...volumesBlock,
   '      - ../stub-game.mjs:/opt/stub-game.mjs:ro',
+  // The folder the agent mounts read-only, written here by the stub: on a real
+  // machine a unit of the host fills it.
+  `      - ./log:${gameLogDir}`,
+  `      - ../${game}.output:/opt/game-output.txt:ro`,
   '',
 ];
 

@@ -48,6 +48,13 @@ export interface CompanionConfig {
   /** Where archives are built. Not the save folder: never write inside a world. */
   readonly workDir: string;
   /**
+   * Where a unit of the host copies what the game prints. The agent has no
+   * docker socket: this file is the only form that output reaches it in.
+   */
+  readonly gameLog: string;
+  /** What in that output says where the setup is — the catalogue's, read once at launch. */
+  readonly setupMarkers: string;
+  /**
    * Only the game whose 2.3 GB cannot come from SteamCMD writes this pair —
    * the other downloads its own files and leaves both variables unset.
    * Absent, `runRestore` moves the world alone; present, both members are
@@ -122,6 +129,8 @@ export function readConfig(env: Env): CompanionConfig {
     stopFlag: required(env, 'BEACON_STOP_FLAG'),
     pushIntervalMs: requiredNumber(env, 'BEACON_PUSH_INTERVAL_MS'),
     workDir: env['BEACON_WORK_DIR'] ?? '/tmp/beacon',
+    gameLog: required(env, 'BEACON_GAME_LOG'),
+    setupMarkers: required(env, 'BEACON_SETUP_MARKERS'),
     gameFiles: readGameFiles(env),
   };
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { declaredByMarkers } from '@beacon/agent-protocol';
 import { catalogFor, renderCloudInit, renderCompose } from './catalog.js';
 import { REQUEST, request, serviceBlock } from './catalogue-fixtures.spec-helper.js';
+import { ENSHROUDED_OUTPUT } from './enshrouded-output.spec-helper.js';
 import { enshrouded } from './enshrouded.js';
 
 describe('the enshrouded catalogue entry', () => {
@@ -218,7 +220,7 @@ describe('the enshrouded catalogue entry', () => {
   // compose's own stop_grace_period, so the unit gives the world the same
   // grace to flush that the compose already promises it.
   // §7: the agent token is the only credential that rides to the machine, and
-  // the companion sends it back in an `authorization` header once a minute for
+  // the companion sends it back in an `authorization` header on every report for
   // the whole session. An http endpoint would put it on the wire in clear, and
   // nothing downstream would notice — the reports would succeed, the session
   // would run, and the leak would leave no trace.
@@ -283,6 +285,51 @@ describe('the enshrouded catalogue entry', () => {
     const rendered = renderCloudInit('enshrouded', REQUEST);
     expect(rendered).toContain('BEACON_SAVE_DIR=/opt/enshrouded/server/savegame');
   });
+
+  // The agent holds no docker socket, so the game's output reaches it as a
+  // file: a unit on the host follows the game's service and writes it there.
+  it('gives the host a unit that copies the output of the game into a file', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('  - path: /etc/systemd/system/beacon-game-log.service');
+    expect(rendered).toContain(
+      "ExecStart=/bin/sh -c 'exec /usr/bin/docker compose -f /opt/beacon/docker-compose.yml --env-file /opt/beacon/.env logs -f --no-color --no-log-prefix enshrouded > /opt/beacon/log/game.log'",
+    );
+  });
+
+  // Measured: launched before the game's container exists, the command returns
+  // at once and without an error. What calls it again is the unit.
+  it('starts that unit again every two seconds, without ever giving up', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('Restart=always');
+    expect(rendered).toContain('RestartSec=2');
+    expect(rendered).toContain('StartLimitIntervalSec=0');
+  });
+
+  it('starts following the output before it starts the compose', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    const made = rendered.indexOf('/opt/beacon/log ]');
+    const followed = rendered.indexOf('[ systemctl, enable, --now, beacon-game-log.service ]');
+    const started = rendered.indexOf('[ docker, compose,');
+    expect(made).toBeGreaterThan(-1);
+    expect(followed).toBeGreaterThan(made);
+    expect(started).toBeGreaterThan(followed);
+  });
+
+  it('lets the agent read the output and its markers, and write neither', () => {
+    const compose = renderCompose('enshrouded');
+    expect(serviceBlock(compose, 'agent')).toContain('./log:/opt/beacon/log:ro');
+    expect(serviceBlock(compose, 'agent')).toContain(
+      './setup-markers.json:/opt/beacon/setup-markers.json:ro',
+    );
+    expect(serviceBlock(compose, 'enshrouded')).not.toContain('/opt/beacon/log');
+    expect(serviceBlock(compose, 'restore')).not.toContain('/opt/beacon/log');
+  });
+
+  it('tells the companion where the output and the markers are', () => {
+    const rendered = renderCloudInit('enshrouded', REQUEST);
+    expect(rendered).toContain('BEACON_GAME_LOG=/opt/beacon/log/game.log');
+    expect(rendered).toContain('BEACON_SETUP_MARKERS=/opt/beacon/setup-markers.json');
+  });
 });
 
 describe('worldLayoutRefusal', () => {
@@ -305,5 +352,36 @@ describe('worldLayoutRefusal', () => {
 
   it('refuse une archive vide', () => {
     expect(enshrouded.worldLayoutRefusal([])).not.toBeNull();
+  });
+});
+
+describe('the markers of the enshrouded entry, on the output the probe measured', () => {
+  const FETCHING = { step: 'fetching-game' };
+  const STARTING = { step: 'starting-game' };
+
+  /** What is declared once each line of the output has been printed, in turn. */
+  const EXPECTED = [
+    // `ERROR!` is printed on a start that succeeds: no marker stops on it.
+    null,
+    FETCHING,
+    { step: 'fetching-game', activity: 'downloading', progress: 36 },
+    FETCHING,
+    FETCHING,
+    FETCHING,
+    // Only a `downloading` line gives a progress: this one says zero once the
+    // download is over.
+    FETCHING,
+    STARTING,
+    STARTING,
+    STARTING,
+    STARTING,
+  ];
+
+  ENSHROUDED_OUTPUT.forEach((line, index) => {
+    it(`declares the right step after line ${index + 1}: ${line}`, () => {
+      const printed = ENSHROUDED_OUTPUT.slice(0, index + 1).join('\n');
+
+      expect(declaredByMarkers(enshrouded.agentSetup, printed)).toEqual(EXPECTED[index]);
+    });
   });
 });

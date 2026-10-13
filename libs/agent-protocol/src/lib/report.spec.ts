@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseReport } from './report.js';
+import {
+  GAME_LOG_MAX_CHARS,
+  parseReport,
+  REPORT_INTERVAL_MS,
+  SETUP_REPORT_INTERVAL_MS,
+} from './report.js';
 
 describe('parseReport', () => {
   it('reads the heartbeat, which carries nothing but a session', () => {
@@ -199,5 +204,53 @@ describe('parseReport', () => {
       report: { sessionId: 's1', phase: 'ready', ip: '51.15.42.7' },
       discarded: ['setup'],
     });
+  });
+
+  it('reads the end of the game output a failed report carries', () => {
+    const body = { sessionId: 's1', phase: 'failed', detail: 'boom', gameLog: 'line 1\nline 2' };
+
+    expect(parseReport(body)).toEqual({ report: body, discarded: [] });
+  });
+
+  it('takes a game output of exactly the bound', () => {
+    const gameLog = 'x'.repeat(GAME_LOG_MAX_CHARS);
+
+    expect(parseReport({ sessionId: 's1', phase: 'failed', gameLog })?.report.gameLog).toBe(gameLog);
+  });
+
+  // The cause of a failure must reach the control plane whatever the machine
+  // attached to it.
+  it('discards a game output over the bound without refusing the report', () => {
+    const gameLog = 'x'.repeat(GAME_LOG_MAX_CHARS + 1);
+
+    expect(parseReport({ sessionId: 's1', phase: 'failed', detail: 'boom', gameLog })).toEqual({
+      report: { sessionId: 's1', phase: 'failed', detail: 'boom' },
+      discarded: ['gameLog'],
+    });
+  });
+
+  it('discards a game output that is not a string', () => {
+    expect(parseReport({ sessionId: 's1', phase: 'failed', gameLog: ['line 1'] })).toEqual({
+      report: { sessionId: 's1', phase: 'failed' },
+      discarded: ['gameLog'],
+    });
+  });
+
+  it('names every field it discarded', () => {
+    const parsed = parseReport({
+      sessionId: 's1',
+      phase: 'failed',
+      setup: { step: 'booting' },
+      gameLog: 42,
+    });
+
+    expect(parsed?.discarded).toEqual(['setup', 'gameLog']);
+  });
+});
+
+describe('the cadences of the protocol', () => {
+  it('reports every ten seconds while a setup is followed, and once a minute otherwise', () => {
+    expect(SETUP_REPORT_INTERVAL_MS).toBe(10_000);
+    expect(REPORT_INTERVAL_MS).toBe(60_000);
   });
 });

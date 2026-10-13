@@ -18,9 +18,24 @@ const ENV = {
   BEACON_READY_PROBE: 'a2s://enshrouded:15637',
   BEACON_STOP_FLAG: '/opt/beacon/control/stop',
   BEACON_PUSH_INTERVAL_MS: '600000',
+  BEACON_GAME_LOG: '/opt/beacon/log/game.log',
+  BEACON_SETUP_MARKERS: '/opt/beacon/setup-markers.json',
 };
 
 describe('readConfig', () => {
+  it('reads where the output of the game and its markers are', () => {
+    const config = readConfig(ENV);
+    expect(config.gameLog).toBe('/opt/beacon/log/game.log');
+    expect(config.setupMarkers).toBe('/opt/beacon/setup-markers.json');
+  });
+
+  it('requires both paths', () => {
+    expect(() => readConfig({ ...ENV, BEACON_GAME_LOG: undefined })).toThrow(/BEACON_GAME_LOG/);
+    expect(() => readConfig({ ...ENV, BEACON_SETUP_MARKERS: undefined })).toThrow(
+      /BEACON_SETUP_MARKERS/,
+    );
+  });
+
   it('reads what the cloud-init wrote', () => {
     const config = readConfig(ENV);
     expect(config.sessionId).toBe('s1');

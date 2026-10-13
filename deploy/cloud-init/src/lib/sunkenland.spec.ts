@@ -239,8 +239,8 @@ describe('the sunkenland catalogue entry', () => {
     expect(serviceBlock(compose, 'sunkenland')).toContain('./game:/sunkenland/game:ro');
   });
 
-  // The identifier crosses a frontier and the log crosses none: the game
-  // writes, the agent reads, and nothing else passes.
+  // The game writes the identifier, the agent reads it, and nothing else
+  // passes through this folder.
   it('gives the game a folder to announce itself in, and the agent only reading rights on it', () => {
     const compose = renderCompose('sunkenland');
     expect(serviceBlock(compose, 'sunkenland')).toContain('./ready:/opt/beacon/ready\n');
@@ -332,7 +332,7 @@ describe('the sunkenland catalogue entry', () => {
   });
 
   // The filter that writes the one line leaving this container. A rename and
-  // not a write in place: a reader runs next to it every thirty seconds.
+  // not a write in place: a reader runs next to it on every turn of the agent.
   it('writes the identifier through a rename, never in place', () => {
     const rendered = renderCloudInit('sunkenland', REQUEST);
     expect(rendered).toContain(`marker="ServerID is '"`);
@@ -441,6 +441,47 @@ describe('the sunkenland catalogue entry', () => {
   // more.
   it('mounts no docker socket anywhere', () => {
     expect(renderCloudInit('sunkenland', REQUEST)).not.toContain('docker.sock');
+  });
+
+  it('gives the host a unit that copies the output of the game into a file', () => {
+    const rendered = renderCloudInit('sunkenland', REQUEST);
+    expect(rendered).toContain('  - path: /etc/systemd/system/beacon-game-log.service');
+    expect(rendered).toContain(
+      "ExecStart=/bin/sh -c 'exec /usr/bin/docker compose -f /opt/beacon/docker-compose.yml --env-file /opt/beacon/.env logs -f --no-color --no-log-prefix sunkenland > /opt/beacon/log/game.log'",
+    );
+  });
+
+  it('starts that unit again every two seconds, without ever giving up', () => {
+    const rendered = renderCloudInit('sunkenland', REQUEST);
+    expect(rendered).toContain('Restart=always');
+    expect(rendered).toContain('RestartSec=2');
+    expect(rendered).toContain('StartLimitIntervalSec=0');
+  });
+
+  it('starts following the output before it starts the compose', () => {
+    const rendered = renderCloudInit('sunkenland', REQUEST);
+    const made = rendered.indexOf('/opt/beacon/log ]');
+    const followed = rendered.indexOf('[ systemctl, enable, --now, beacon-game-log.service ]');
+    const started = rendered.indexOf('[ docker, compose,');
+    expect(made).toBeGreaterThan(-1);
+    expect(followed).toBeGreaterThan(made);
+    expect(started).toBeGreaterThan(followed);
+  });
+
+  it('lets the agent read the output and its markers, and write neither', () => {
+    const compose = renderCompose('sunkenland');
+    expect(serviceBlock(compose, 'agent')).toContain('./log:/opt/beacon/log:ro');
+    expect(serviceBlock(compose, 'agent')).toContain(
+      './setup-markers.json:/opt/beacon/setup-markers.json:ro',
+    );
+    expect(serviceBlock(compose, 'sunkenland')).not.toContain('/opt/beacon/log');
+    expect(serviceBlock(compose, 'restore')).not.toContain('/opt/beacon/log');
+  });
+
+  it('tells the companion where the output and the markers are', () => {
+    const rendered = renderCloudInit('sunkenland', REQUEST);
+    expect(rendered).toContain('BEACON_GAME_LOG=/opt/beacon/log/game.log');
+    expect(rendered).toContain('BEACON_SETUP_MARKERS=/opt/beacon/setup-markers.json');
   });
 
   // A marker left behind is a hole in a document that still looks like a

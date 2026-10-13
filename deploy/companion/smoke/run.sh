@@ -92,12 +92,34 @@ assert_game_files() {
     { echo "smoke: $1 — $BEACON_GAME_DIR does not hold $GAME_FILES_MARKER" >&2; exit 1; }
 }
 
+# The steps `<game>.setup` lists must all have been declared, in that order —
+# other declarations may sit between them, and a step is declared on every turn
+# it lasts. Read from a file per game for the reason everything else is: this
+# script names no game, and which steps a restore and an agent declare is the
+# catalogue's knowledge.
+assert_setup_steps() {
+  local from=1 expected found
+  while IFS= read -r expected || [ -n "$expected" ]; do
+    expected=${expected%$'\r'}
+    [ -n "$expected" ] || continue
+    found=$(tail -n "+$from" "$SETUP_LOG" | grep -nxF -m1 -- "$expected" | cut -d: -f1) || true
+    if [ -z "$found" ]; then
+      echo "smoke: no report declared \"$expected\" in its turn — declared instead: $(tr '\n' '/' < "$SETUP_LOG")" >&2
+      exit 1
+    fi
+    from=$((from + found))
+  done < "./${GAME}.setup"
+}
+
 # Relative, and matching `fake-endpoint.mjs`'s own path: an absolute `/tmp`
 # is not the same place for a native Windows node and an MSYS bash on the
 # machine of whoever runs this outside CI.
 PHASES_LOG=./tmp/beacon-smoke-phases.log
+SETUP_LOG=./tmp/beacon-smoke-setup.log
 clean_tmp
-mkdir -p ./tmp
+# `./tmp/log` too: the compose mounts it into the agent, and a folder docker
+# made itself would belong to root on a Linux runner.
+mkdir -p ./tmp/log
 rm -f /tmp/roundtrip.tar.gz
 
 # Every `docker compose` call below reads these instead of a hand-maintained
@@ -131,8 +153,14 @@ export COMPOSE_PROJECT_NAME=beacon-companion-smoke
 # literally.
 GAME="$GAME" FORCE_COLOR=1 npx nx run cloud-init:render-compose |
   MSYS_NO_PATHCONV=1 GAME="$GAME" SAVE_DIR="$BEACON_SAVE_DIR" \
-    READY_PROBE="$BEACON_READY_PROBE" SERVER_ID="$SERVER_ID" \
+    READY_PROBE="$BEACON_READY_PROBE" SERVER_ID="$SERVER_ID" GAME_LOG="$BEACON_GAME_LOG" \
     node ./render-smoke-compose.mjs > "$COMPOSE_FILE"
+
+# What the agent reads when it starts, rendered from the catalogue like the
+# compose above and written where that compose mounts it from: a marker changed
+# in the catalogue changes what this stack declares.
+GAME="$GAME" FORCE_COLOR=1 npx nx run cloud-init:render-setup-markers |
+  node ./nx-target-output.mjs > ./tmp/setup-markers.json
 
 # A hard kill of a previous run (Ctrl-C, a crashed runner) can leave this
 # stack's containers behind. A stale control flag in particular would carry
@@ -288,6 +316,10 @@ test "$(stat -c%s /tmp/roundtrip.tar.gz)" -gt 1024
 grep -qx "ready${SERVER_ID:+ $SERVER_ID}" "$PHASES_LOG" ||
   { echo "smoke: no report said ready${SERVER_ID:+ carrying $SERVER_ID} — reported instead: $(tr '\n' '/' < "$PHASES_LOG")" >&2; exit 1; }
 
+# By the time the server is announced the agent has declared everything it
+# will: it declares nothing once announced.
+assert_setup_steps
+
 original=$(docker compose exec -T "$GAME" sh -c "sha256sum $BEACON_SAVE_DIR/3ad85aea $BEACON_SAVE_DIR/3ad85aea-index" | tr -d '\r')
 docker compose stop agent
 
@@ -295,7 +327,7 @@ docker compose stop agent
 # run in this script that has a save to fetch *and* an archive to unpack, so a
 # game folder left populated would let the second source pass without ever
 # being restored once.
-clear_sources="rm -f $BEACON_SAVE_DIR/*"
+clear_sources="rm -rf $BEACON_SAVE_DIR/*"
 if [ -n "${BEACON_GAME_DIR:-}" ]; then
   clear_sources="$clear_sources; rm -rf $BEACON_GAME_DIR/*"
 fi
@@ -313,7 +345,7 @@ docker compose up -d agent
 # an agent that had simply died would also leave the object count unchanged.
 before=$(docker compose exec -T s3 rclone lsf -R --files-only local:beacon-saves | wc -l)
 test "$before" -ge 1
-docker compose exec -T agent sh -c "rm -f $BEACON_SAVE_DIR/*"
+docker compose exec -T agent sh -c "rm -rf $BEACON_SAVE_DIR/*"
 sleep 90
 after=$(docker compose exec -T s3 rclone lsf -R --files-only local:beacon-saves | wc -l)
 test "$before" -eq "$after"

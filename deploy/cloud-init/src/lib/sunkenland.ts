@@ -1,6 +1,14 @@
+import { renderAgentSetup, type AgentSetup } from '@beacon/agent-protocol';
 import type { JoinInfo } from '@beacon/session';
 import type { BootRequest, GameCatalogEntry, JoinFacts } from './catalog.js';
 import { COMPANION_IMAGE } from './companion-image.js';
+import {
+  GAME_LOG_DIR,
+  GAME_LOG_FILE,
+  GAME_LOG_UNIT,
+  gameLogUnit,
+  SETUP_MARKERS_FILE,
+} from './game-log.js';
 import { fill, indent } from './template.js';
 
 /**
@@ -87,10 +95,14 @@ const READY_FILE = `${READY_DIR}/serverid`;
 const SERVER_OWNER = '7000:7000';
 
 /**
- * The one line that leaves the game container, and the whole reason this
- * filter exists. §7 forbids the docker socket, so the companion cannot read
- * this container's log — and it must not: the log carries the password three
- * times, once per joining player. So the entry point pipes its own output
+ * The restore has brought the game back by the time the agent starts, and
+ * nothing measures what this game's output says of its start.
+ */
+const AGENT_SETUP: AgentSetup = { startStep: 'starting-game', markers: [] };
+
+/**
+ * The one value the agent reads to know this server can be joined, and the
+ * whole reason this filter exists: the entry point pipes its own output
  * through this, which copies it back byte for byte and extracts nothing but
  * the identifier.
  *
@@ -120,8 +132,8 @@ serverid=\${1:?the path to write the identifier to}
 # lines, section V has them on one. Anchoring on the sentence bets on one of
 # them being right; if the other is what comes out, this never matches, no file
 # is written, the probe stays "not ready", and the session dies of the
-# provisioning delay with nothing saying why — by design, this container's log
-# crosses no boundary. This fragment appears in both, so nothing here depends
+# provisioning delay with nothing on the screen saying why. This fragment
+# appears in both, so nothing here depends
 # on which of the two sections is right.
 #
 # Section J's third line carries \`ServerID:\`, never \`ServerID is '\`: it does
@@ -141,8 +153,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       # trim.
       id=\${id%$'\\r'}
       # Written aside then renamed, never in place: a reader runs next to this
-      # every thirty seconds, and a rename within one filesystem is atomic — so
-      # what it reads is either absent or whole, never a line cut in half.
+      # on every turn of the agent, and a rename within one filesystem is atomic
+      # — so what it reads is either absent or whole, never a line cut in half.
       printf '%s\\n' "$id" > "$serverid.tmp" && mv "$serverid.tmp" "$serverid"
       ;;
   esac
@@ -210,9 +222,7 @@ GAME_PASSWORD=\${GAME_PASSWORD:-}
 
 # Everything this script and the server print goes through the filter, which
 # copies it back unchanged: \`docker logs\` stays what it was. The one thing the
-# filter does besides copying is write the identifier where the agent can read
-# it — the agent has no docker socket (§7), and this log carries the password
-# three times.
+# filter does besides copying is write the identifier where the agent reads it.
 exec > >(/opt/beacon/serverid-filter.sh ${READY_FILE}) 2>&1
 
 # The world comes off the disk and no longer from a compiled constant: the
@@ -394,6 +404,10 @@ const COMPOSE = `services:
       # The one channel to the host, and it carries one verb. A docker socket
       # here would have been root on the machine (§7).
       - ./control:/opt/beacon/control
+      # What the game prints, copied here by a unit of the host, and what this
+      # game's output says of its setup. Read-only: the agent observes both.
+      - ./log:${GAME_LOG_DIR}:ro
+      - ./setup-markers.json:${SETUP_MARKERS_FILE}:ro
 `;
 
 const CLOUD_INIT = `#cloud-config
@@ -456,6 +470,8 @@ write_files:
       BEACON_PUSH_INTERVAL_MS=${PUSH_INTERVAL_MS}
       BEACON_GAME_FILES_KEY=${GAME_FILES_KEY}
       BEACON_GAME_DIR=${GAME_DIR}
+      BEACON_GAME_LOG=${GAME_LOG_FILE}
+      BEACON_SETUP_MARKERS=${SETUP_MARKERS_FILE}
   # What the companion can ask of the host, and the whole of it. A path unit
   # watches one file; the service it starts runs one command. §7: a compromised
   # companion obtains a stopped container, not the docker api.
@@ -487,16 +503,26 @@ write_files:
       # clear, so the flag is gone whether the stop succeeded or not.
       ExecStart=-/usr/bin/docker stop -t 90 ${GAME_CONTAINER}
       ExecStartPost=-/bin/rm -f /opt/beacon/control/stop
+  # What the agent declares of this game's setup, read once when it starts.
+  - path: ${SETUP_MARKERS_FILE}
+    permissions: "0644"
+    content: |
+      __SETUP_MARKERS__
+  - path: /etc/systemd/system/${GAME_LOG_UNIT}
+    permissions: "0644"
+    content: |
+      __GAME_LOG_UNIT__
 
 runcmd:
   - [ systemctl, enable, --now, docker ]
-  - [ mkdir, -p, /opt/beacon/game, /opt/beacon/worlds, /opt/beacon/ready, /opt/beacon/control ]
+  - [ mkdir, -p, /opt/beacon/game, /opt/beacon/worlds, /opt/beacon/ready, /opt/beacon/control, ${GAME_LOG_DIR} ]
   # Measured 2026-09-05, and the failure is mute: the server runs as an
   # unprivileged uid and cloud-init just made these folders as root, so without
   # an owner it announces nothing and saves nothing. The restore takes the
   # other two folders itself; this one it never touches, so it is taken here.
   - [ chown, '${SERVER_OWNER}', /opt/beacon/ready ]
   - [ systemctl, enable, --now, beacon-stop.path ]
+  - [ systemctl, enable, --now, ${GAME_LOG_UNIT} ]
   - [ docker, compose, -f, /opt/beacon/docker-compose.yml, --env-file, /opt/beacon/.env, up, -d ]
 `;
 
@@ -512,6 +538,7 @@ export const sunkenland: GameCatalogEntry = {
   diskGb: 40,
   // The restore brings the game back from the depot first, then the world.
   setupStepOrder: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+  agentSetup: AGENT_SETUP,
 
   /**
    * Nothing to point a record at: discovery goes through the game's own
@@ -526,6 +553,8 @@ export const sunkenland: GameCatalogEntry = {
     let rendered = fill(CLOUD_INIT, '__START_SH__', indent(startSh(request.adminSteamIds)));
     rendered = fill(rendered, '__SERVERID_FILTER__', indent(SERVERID_FILTER));
     rendered = fill(rendered, '__DOCKER_COMPOSE__', indent(COMPOSE));
+    rendered = fill(rendered, '__SETUP_MARKERS__', renderAgentSetup(AGENT_SETUP));
+    rendered = fill(rendered, '__GAME_LOG_UNIT__', indent(gameLogUnit(GAME_CONTAINER)));
     rendered = fill(rendered, '__WORLD_ID__', request.world.worldId);
     rendered = fill(rendered, '__SERVER_PASSWORD__', request.serverPassword);
     rendered = fill(rendered, '__SLOT_COUNT__', String(request.slotCount));

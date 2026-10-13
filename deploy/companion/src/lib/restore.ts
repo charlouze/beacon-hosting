@@ -1,9 +1,16 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import { newestSave, type Clock, type Save, type SaveStore } from '@beacon/session';
+import {
+  newestSave,
+  type Clock,
+  type Save,
+  type SaveStore,
+  type SetupDeclaration,
+} from '@beacon/session';
 import { clearDirectory, unpackInto } from './archive.js';
 import type { CompanionConfig } from './config.js';
+import { setupDeclarer, type SetupDeclarer } from './declare-setup.js';
 import type { Reporter } from './reporter.js';
 
 export interface RestoreDeps {
@@ -47,13 +54,21 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
     throw error;
   }
 
+  // The restore says which operation it begins, and knows nothing of the
+  // order a game goes through its steps.
+  const declarer = setupDeclarer(deps);
+
   // The bigger transfer first, and not merely in this function's own order:
   // §6 étape 6 makes this run before the game container even exists, so a
   // failure here throws before the world's much smaller download has spent
   // any time at all.
   if (deps.gameFiles !== undefined) {
-    await restoreGameFiles(deps, deps.gameFiles);
+    await restoreGameFiles(deps, deps.gameFiles, declarer);
   }
+
+  // Before the listing, and whatever it answers: a world with no save yet is
+  // still a world being restored.
+  await declarer.declare({ step: 'restoring-world' });
 
   let newest: Save | undefined;
   try {
@@ -123,6 +138,7 @@ export async function runRestore(deps: RestoreDeps): Promise<void> {
 async function restoreGameFiles(
   deps: RestoreDeps,
   gameFiles: NonNullable<RestoreDeps['gameFiles']>,
+  declarer: SetupDeclarer,
 ): Promise<void> {
   // `.tar` and not `.tar.gz` like the world's: `pushGameFiles` deliberately
   // builds this one without gzip, because an install's files are already
@@ -131,7 +147,13 @@ async function restoreGameFiles(
   const archive = join(deps.config.workDir, 'game-files.tar');
   try {
     mkdirSync(gameFiles.directory, { recursive: true });
-    await gameFiles.api.get(gameFiles.objectKey, archive);
+    await declarer.declare({ step: 'fetching-game', activity: 'downloading' });
+    await gameFiles.api.get(gameFiles.objectKey, archive, (receivedBytes, totalBytes) => {
+      if (totalBytes <= 0) return;
+      declarer.declareIfDue(downloading(Math.floor((receivedBytes / totalBytes) * 100)));
+    });
+    // No progress from here on: nothing says how far an unpacking is.
+    await declarer.declare({ step: 'fetching-game', activity: 'unpacking' });
     await unpackInto(archive, gameFiles.directory);
     // Same reprise as the world's own chown, and for the same reason measured
     // 2026-09-05: the server reads this folder as an unprivileged uid, the
@@ -144,6 +166,12 @@ async function restoreGameFiles(
   }
   deps.log(`unpacked game files from ${gameFiles.objectKey}`);
 }
+
+const downloading = (progress: number): SetupDeclaration => ({
+  step: 'fetching-game',
+  activity: 'downloading',
+  progress: Math.min(100, Math.max(0, progress)),
+});
 
 /**
  * Best effort, and deliberately swallowed: the control plane not hearing why is

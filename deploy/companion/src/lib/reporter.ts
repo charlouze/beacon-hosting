@@ -1,9 +1,17 @@
 import type { AgentInstructions, AgentReport } from '@beacon/agent-protocol';
 import type { CompanionConfig } from './config.js';
 
+export interface SendOptions {
+  /**
+   * How long to wait for the answer. Only a setup declaration sets it: it is
+   * only ever displayed, and must not hold back what the machine is doing.
+   */
+  readonly timeoutMs?: number;
+}
+
 /** What the machine says, and what it is told back. Nothing else crosses. */
 export interface Reporter {
-  send(report: Omit<AgentReport, 'sessionId'>): Promise<AgentInstructions>;
+  send(report: Omit<AgentReport, 'sessionId'>, options?: SendOptions): Promise<AgentInstructions>;
 }
 
 /**
@@ -13,7 +21,10 @@ export interface Reporter {
  */
 export function httpReporter(config: CompanionConfig): Reporter {
   return {
-    async send(report: Omit<AgentReport, 'sessionId'>): Promise<AgentInstructions> {
+    async send(
+      report: Omit<AgentReport, 'sessionId'>,
+      options: SendOptions = {},
+    ): Promise<AgentInstructions> {
       const response = await fetch(config.endpoint, {
         method: 'POST',
         headers: {
@@ -21,6 +32,8 @@ export function httpReporter(config: CompanionConfig): Reporter {
           authorization: `Bearer ${config.token}`,
         },
         body: JSON.stringify({ ...report, sessionId: config.sessionId }),
+        signal:
+          options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs),
       });
 
       if (!response.ok) {

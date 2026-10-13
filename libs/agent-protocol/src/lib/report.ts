@@ -63,16 +63,32 @@ export interface AgentReport {
    * refused.
    */
   readonly setup?: SetupDeclaration;
+  /**
+   * On `failed`, before the server was announced: the end of what the game
+   * printed. Kept for the operator alone, never for a member — which is why a
+   * malformed one is discarded rather than refused.
+   */
+  readonly gameLog?: string;
 }
 
 /**
- * One report a minute (§6), and it lives here rather than in a catalogue entry
- * because it is not a per-game value: two measured guarantees of the spec hang
- * on this number — the machine learns an extension or a stop in under a minute,
- * and the watchdog can tell a slow machine from a mute one. A game that could
- * set it would be a game that can break the protocol.
+ * One report a minute once the server is announced, and it lives here rather
+ * than in a catalogue entry because it is not a per-game value: two measured
+ * guarantees of the spec hang on this number — the machine learns an extension
+ * or a stop in under a minute, and the watchdog can tell a slow machine from a
+ * mute one. A game that could set it would be a game that can break the
+ * protocol.
  */
 export const REPORT_INTERVAL_MS = 60_000;
+
+/**
+ * The cadence of a server that follows its own setup in the game's output,
+ * until it is announced: a step is only worth displaying while it is current.
+ */
+export const SETUP_REPORT_INTERVAL_MS = 10_000;
+
+/** The most a report carries of the game's output. The machine cuts to it, the frontier checks it. */
+export const GAME_LOG_MAX_CHARS = 16_384;
 
 /** What the control plane answers, on every report (§6). */
 export interface AgentInstructions {
@@ -121,8 +137,9 @@ function setupFrom(value: unknown): SetupDeclaration | null {
  * coerced would make the endpoint's behaviour depend on what the machine felt
  * like sending, which is the opposite of what a frontier is for.
  *
- * One exception: a malformed `setup` is discarded and named, and the report
- * stands. It is only ever displayed, and a `ready` report must not fall on it.
+ * One exception: a malformed `setup` or `gameLog` is discarded and named, and
+ * the report stands. Neither is ever acted upon, and a `ready` or a `failed`
+ * report must not fall on it.
  */
 export function parseReport(body: unknown): ParsedReport | null {
   if (typeof body !== 'object' || body === null) return null;
@@ -140,6 +157,7 @@ export function parseReport(body: unknown): ParsedReport | null {
     detail?: string;
     world?: { name: string; guid: string };
     setup?: SetupDeclaration;
+    gameLog?: string;
   } = { sessionId: raw['sessionId'], phase: raw['phase'] as AgentPhase };
 
   if (raw['ip'] !== undefined) {
@@ -187,6 +205,15 @@ export function parseReport(body: unknown): ParsedReport | null {
     const setup = setupFrom(raw['setup']);
     if (setup === null) discarded.push('setup');
     else report.setup = setup;
+  }
+
+  if (raw['gameLog'] !== undefined) {
+    const gameLog = raw['gameLog'];
+    if (typeof gameLog === 'string' && gameLog.length <= GAME_LOG_MAX_CHARS) {
+      report.gameLog = gameLog;
+    } else {
+      discarded.push('gameLog');
+    }
   }
 
   return { report, discarded };

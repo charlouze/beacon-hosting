@@ -138,6 +138,14 @@ option destructrice à se retenir d'employer. Le seul cas qui réclame un outil 
 transfert parallèle est les 2,3 Go de fichiers de Sunkenland, en 247 objets, et
 il arrive avec le jeu qui les demande.
 
+**Aucun conteneur ne reçoit le socket Docker**, et le compagnon lit pourtant la
+sortie du jeu : une unité systemd du serveur de jeu, `beacon-game-log.service`,
+suit le service du jeu par `docker compose logs -f` et recopie sa sortie dans
+`/opt/beacon/log/game.log`, que l'agent monte en lecture seule. L'unité démarre
+avant le compose et se relance toutes les deux secondes, parce que la commande
+rend la main tant que le conteneur du jeu n'existe pas — mesuré les 2026-10-11
+et 2026-10-12, section P de `probe/RESULTS.md`.
+
 Toutes sont référencées par un **tag immuable, jamais `latest`**. Le
 `cloud-init` est écrit au moment du provisionnement : avec un tag mobile, la
 session de ce soir pourrait tirer une image différente de celle qui a été

@@ -1,3 +1,4 @@
+import { renderAgentSetup, type AgentSetup } from '@beacon/agent-protocol';
 import type { Game, JoinInfo, SetupStepOrder, WorldId } from '@beacon/session';
 import { enshrouded } from './enshrouded.js';
 import { sunkenland } from './sunkenland.js';
@@ -108,6 +109,12 @@ export interface GameCatalogEntry {
    */
   readonly setupStepOrder: SetupStepOrder;
   /**
+   * What the agent declares of this game's setup once the game's own
+   * container runs: the step it starts on, and what in the game's output
+   * moves it. No marker at all for a game whose output says nothing of it.
+   */
+  readonly agentSetup: AgentSetup;
+  /**
    * The name a dns record points at, derived from the world so that two
    * worlds of the same game never contend for one hostname — or null when
    * nothing does. Null is not a missing value: one of the two games announces
@@ -215,7 +222,7 @@ const refuseAnythingButDigits = (adminSteamIds: readonly string[]): void => {
  * The only place `endpoint` enters the system. It comes from
  * `config/settings.agentEndpoint`, which the deployment stamps with the url it
  * just published (§4), and it is the url the machine sends its token to — in an
- * `authorization` header, once a minute, for the whole session. Over plain http
+ * `authorization` header, on every report, for the whole session. Over plain http
  * that token crosses the internet in clear, and **nothing downstream notices**:
  * the reports succeed, the session runs, and the leak leaves no trace.
  *
@@ -255,6 +262,10 @@ export const renderCloudInit = (game: Game, request: BootRequest): string => {
 };
 
 export const renderCompose = (game: Game): string => catalogFor(game).compose();
+
+/** The file the agent reads its markers from, as a machine of this game receives it. */
+export const renderSetupMarkers = (game: Game): string =>
+  renderAgentSetup(catalogFor(game).agentSetup);
 
 /**
  * `tar tzf` lists every entry with a leading `./`, and no entry has to know
