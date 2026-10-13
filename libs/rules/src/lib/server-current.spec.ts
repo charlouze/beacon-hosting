@@ -21,7 +21,15 @@ import {
   useRulesEnvironment,
 } from './harness.js';
 
-const RESERVED = ['instanceId', 'ipId', 'ip', 'joinInfo', 'provisionClaimedAt', 'lastError'];
+const RESERVED = [
+  'instanceId',
+  'ipId',
+  'ip',
+  'joinInfo',
+  'provisionClaimedAt',
+  'lastError',
+  'abandonedSetup',
+];
 
 useRulesEnvironment();
 
@@ -172,6 +180,39 @@ describe('server/current', () => {
         ip: '51.15.42.7',
       }),
     );
+  });
+
+  // The mark is erased by the claim of the next setup, not by its opening: a
+  // member opens over it, and must be neither refused nor able to touch it.
+  it('accepts an opening on a world that still carries the mark of an abandoned setup', async () => {
+    await given(env, 'worlds/w1/server/current', {
+      state: 'IDLE',
+      stateSince: null,
+      sessionId: 's0',
+      startedBy: ALICE,
+      startedAt: null,
+      deadline: null,
+      lastError: null,
+      abandonedSetup: { sessionId: 's0', at: Timestamp.fromMillis(1_790_000_000_000) },
+    });
+
+    await assertSucceeds(opening(ALICE));
+  });
+
+  it('refuses a member who erases or rewrites that mark', async () => {
+    await given(env, 'worlds/w1/server/current', {
+      state: 'IDLE',
+      stateSince: null,
+      sessionId: 's0',
+      startedBy: ALICE,
+      startedAt: null,
+      deadline: null,
+      lastError: null,
+      abandonedSetup: { sessionId: 's0', at: Timestamp.fromMillis(1_790_000_000_000) },
+    });
+
+    await assertFails(updateDoc(server(ALICE), { abandonedSetup: null }));
+    await assertFails(opening(ALICE, { abandonedSetup: null }));
   });
 
   it('refuses a field nobody declared', async () => {

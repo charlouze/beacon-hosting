@@ -120,6 +120,7 @@ const seed = async (): Promise<void> => {
     joinInfo: null,
     provisionClaimedAt: null,
     lastError: null,
+    abandonedSetup: null,
   });
   await given(env, 'worlds/w2', {
     game: 'enshrouded',
@@ -145,6 +146,7 @@ const seed = async (): Promise<void> => {
     joinInfo: null,
     provisionClaimedAt: null,
     lastError: null,
+    abandonedSetup: null,
   });
   await given(env, 'config/settings', {
     sessionDurationMs: null,
