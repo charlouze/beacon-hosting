@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type AbandonedSetup,
   advanceSetup,
   firstSetupStep,
   isSetupProgress,
@@ -140,7 +141,9 @@ describe('isSetupStepOrder', () => {
 
 describe('shownSetup', () => {
   const ORDER = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
+  const ABANDONED = new Date('2026-10-12T20:05:00Z');
   const PREPARING = { state: 'PROVISIONING', sessionId: 's1', startedAt: OPENED } as const;
+  const OUT_OF_SERVICE = { ...PREPARING, state: 'IDLE' } as const;
 
   const keptFor = (sessionId: string): KeptSetup => ({
     sessionId,
@@ -148,38 +151,81 @@ describe('shownSetup', () => {
     step: kept({ since: LATER, activity: 'downloading', progress: 37 }),
   });
 
+  const markOf = (sessionId: string): AbandonedSetup => ({ sessionId, at: ABANDONED });
+
   it('shows the kept step and the order of its game, while its own session prepares', () => {
-    expect(shownSetup(PREPARING, keptFor('s1'))).toEqual({
+    expect(shownSetup(PREPARING, null, keptFor('s1'))).toEqual({
       step: { step: 'fetching-game', since: LATER, activity: 'downloading', progress: 37 },
       order: ORDER,
+      abandonedAt: null,
     });
   });
 
   it('shows the first step since the opening, and no order, while nothing is kept', () => {
-    expect(shownSetup(PREPARING, null)).toEqual({
+    expect(shownSetup(PREPARING, null, null)).toEqual({
       step: { step: 'waking', since: OPENED, activity: null, progress: null },
       order: null,
+      abandonedAt: null,
     });
   });
 
   // Nothing erases what a setup left: the next session finds the previous one
   // there until its own is begun.
   it('shows the first step when what is kept belongs to another session', () => {
-    expect(shownSetup(PREPARING, keptFor('s0'))).toEqual({
+    expect(shownSetup(PREPARING, null, keptFor('s0'))).toEqual({
       step: { step: 'waking', since: OPENED, activity: null, progress: null },
       order: null,
+      abandonedAt: null,
     });
   });
 
+  // The mark of the setup before is erased when the next one is claimed, not
+  // when it is opened: a session that prepares is never shown as abandoned.
+  it('shows a session that prepares as under way, whatever mark is left', () => {
+    expect(shownSetup(PREPARING, markOf('s0'), keptFor('s1'))?.abandonedAt).toBeNull();
+    expect(shownSetup(PREPARING, markOf('s1'), keptFor('s1'))?.abandonedAt).toBeNull();
+  });
+
   for (const state of ['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const) {
-    it(`shows nothing of a session that is ${state}`, () => {
-      expect(shownSetup({ ...PREPARING, state }, keptFor('s1'))).toBeNull();
+    it(`shows nothing of a session that is ${state} and abandoned no setup`, () => {
+      expect(shownSetup({ ...PREPARING, state }, null, keptFor('s1'))).toBeNull();
     });
   }
 
-  it('shows nothing of a session that names no opening', () => {
-    expect(shownSetup({ ...PREPARING, startedAt: null }, keptFor('s1'))).toBeNull();
-    expect(shownSetup({ ...PREPARING, sessionId: null }, null)).toBeNull();
+  it('shows the step an abandoned setup stopped at, and the instant it was abandoned', () => {
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s1'))).toEqual({
+      step: { step: 'fetching-game', since: LATER, activity: 'downloading', progress: 37 },
+      order: ORDER,
+      abandonedAt: ABANDONED,
+    });
+  });
+
+  it('shows it too while what is left of the session is not cleared', () => {
+    expect(
+      shownSetup({ ...PREPARING, state: 'FAILED' }, markOf('s1'), keptFor('s1'))?.abandonedAt,
+    ).toEqual(ABANDONED);
+  });
+
+  it('shows the first step of an abandoned setup whose kept step belongs to another session', () => {
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s0'))).toEqual({
+      step: { step: 'waking', since: OPENED, activity: null, progress: null },
+      order: null,
+      abandonedAt: ABANDONED,
+    });
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), null)?.step.step).toBe('waking');
+  });
+
+  // A session opened then stopped before it was claimed leaves the mark of
+  // the session before it: that mark no longer names the last one opened.
+  it('shows nothing when the mark names another session than the last one opened', () => {
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s0'), keptFor('s0'))).toBeNull();
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s0'), keptFor('s1'))).toBeNull();
+  });
+
+  it('shows nothing of a world that names no opening', () => {
+    expect(shownSetup({ ...PREPARING, startedAt: null }, null, keptFor('s1'))).toBeNull();
+    expect(shownSetup({ ...PREPARING, sessionId: null }, null, null)).toBeNull();
+    expect(shownSetup({ ...OUT_OF_SERVICE, sessionId: null }, markOf('s1'), null)).toBeNull();
   });
 });
 
@@ -191,12 +237,14 @@ describe('setupStepRank', () => {
       setupStepRank({
         step,
         order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+        abandonedAt: null,
       }),
     ).toBe(3);
     expect(
       setupStepRank({
         step,
         order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+        abandonedAt: null,
       }),
     ).toBe(2);
   });
@@ -206,11 +254,12 @@ describe('setupStepRank', () => {
       setupStepRank({
         step: kept({ step: 'starting-game' }),
         order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+        abandonedAt: null,
       }),
     ).toBe(4);
   });
 
   it('ranks the first step first while no order is known', () => {
-    expect(setupStepRank({ step: firstSetupStep(OPENED), order: null })).toBe(1);
+    expect(setupStepRank({ step: firstSetupStep(OPENED), order: null, abandonedAt: null })).toBe(1);
   });
 });

@@ -1,5 +1,4 @@
-import type { Session } from './session-aggregate.js';
-import type { SessionId } from './session.js';
+import type { SessionId, SessionState } from './session.js';
 
 /**
  * What a session goes through between its opening and its coming into
@@ -116,28 +115,60 @@ export interface KeptSetup {
   readonly step: KeptSetupStep;
 }
 
+/**
+ * The last session a world opened, whatever became of it: a world out of
+ * service still names the session it last opened.
+ */
+export interface LastOpening {
+  readonly state: SessionState;
+  readonly sessionId: SessionId | null;
+  readonly startedAt: Date | null;
+}
+
+/** The mark an abandoned setup leaves: whose it was, and the instant it was abandoned. */
+export interface AbandonedSetup {
+  readonly sessionId: SessionId;
+  readonly at: Date;
+}
+
 /** What the screen shows of a setup. No order until the game's own is known. */
 export interface ShownSetup {
   readonly step: KeptSetupStep;
   readonly order: SetupStepOrder | null;
+  /** The instant the setup was abandoned, and null while it is under way. */
+  readonly abandonedAt: Date | null;
 }
 
 /**
- * What the screen shows of a session's setup, and null outside the
- * preparation. What is kept counts only when it belongs to this session:
- * nothing erases it, so the next session finds the previous one's there until
- * its own is begun, and shows the first step since its opening meanwhile.
+ * What the screen shows of a world's last setup: the step it is on while its
+ * session prepares, the step it stopped at once it was abandoned, and null
+ * otherwise.
+ *
+ * What is kept counts only when it belongs to that session: nothing erases
+ * it, so the next session finds the previous one's there until its own is
+ * begun, and shows the first step since its opening meanwhile. The mark
+ * counts on the same condition: a session stopped before it was claimed
+ * leaves the mark of the session before it.
  */
 export function shownSetup(
-  session: Pick<Session, 'state' | 'sessionId' | 'startedAt'>,
+  opening: LastOpening,
+  abandoned: AbandonedSetup | null,
   kept: KeptSetup | null,
 ): ShownSetup | null {
-  if (session.state !== 'PROVISIONING') return null;
-  if (session.sessionId === null || session.startedAt === null) return null;
-  if (kept !== null && kept.sessionId === session.sessionId) {
-    return { step: kept.step, order: kept.order };
+  if (opening.sessionId === null || opening.startedAt === null) return null;
+
+  const abandonedAt = abandonedAtOf(opening, abandoned);
+  if (opening.state !== 'PROVISIONING' && abandonedAt === null) return null;
+
+  if (kept !== null && kept.sessionId === opening.sessionId) {
+    return { step: kept.step, order: kept.order, abandonedAt };
   }
-  return { step: firstSetupStep(session.startedAt), order: null };
+  return { step: firstSetupStep(opening.startedAt), order: null, abandonedAt };
+}
+
+function abandonedAtOf(opening: LastOpening, abandoned: AbandonedSetup | null): Date | null {
+  if (opening.state === 'PROVISIONING') return null;
+  return abandoned !== null && abandoned.sessionId === opening.sessionId ? abandoned.at : null;
 }
 
 /** The rank of the shown step in the order of its game, from one. */

@@ -263,7 +263,7 @@ export function clientSessionRecord(
                     session,
                     facts: displayedFactsFrom(serverData),
                     stateSince: toDate(serverData['stateSince']),
-                    setup: shownSetup(session, keptSetupFrom(setupData)),
+                    setup: shownSetup(session, null, keptSetupFrom(setupData)),
                   },
           });
         })

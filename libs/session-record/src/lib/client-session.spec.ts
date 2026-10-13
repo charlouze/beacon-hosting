@@ -301,6 +301,7 @@ describe('the setup of a session that prepares', () => {
   const FIRST_STEP = {
     step: { step: 'waking', since: OPENED, activity: null, progress: null },
     order: null,
+    abandonedAt: null,
   };
 
   async function preparingServer(worldId: string, sessionId: string): Promise<void> {
@@ -333,6 +334,7 @@ describe('the setup of a session that prepares', () => {
     expect((await view())?.server?.setup).toEqual({
       step: { step: 'fetching-game', since: AT, activity: 'downloading', progress: 37 },
       order: [...ORDER],
+      abandonedAt: null,
     });
   });
 
