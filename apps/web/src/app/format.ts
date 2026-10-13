@@ -1,4 +1,13 @@
-import type { Game, SessionState, SetupActivity, SetupStep, World } from '@beacon/session';
+import {
+  SETUP_STEPS,
+  setupStepRank,
+  type Game,
+  type SessionState,
+  type SetupActivity,
+  type SetupStep,
+  type ShownSetup,
+  type World,
+} from '@beacon/session';
 
 /**
  * How the screen renders what it is given. Pure functions, no Angular, and no
@@ -88,6 +97,28 @@ export function activityLabel(activity: SetupActivity): string {
     unpacking: 'Unpacking',
   };
   return activities[activity];
+}
+
+/** Where an abandoned setup stopped, in the board's own words. */
+export interface StoppedAt {
+  readonly at: string;
+  readonly rank: number;
+  readonly total: number;
+  readonly name: string;
+}
+
+/**
+ * Null for a setup under way and for none at all. The step alone: what it was
+ * doing when it stopped, and how far it had got, is not where it stopped.
+ */
+export function stoppedAt(shown: ShownSetup | null): StoppedAt | null {
+  if (shown === null || shown.abandonedAt === null) return null;
+  return {
+    at: hourLabel(shown.abandonedAt),
+    rank: setupStepRank(shown),
+    total: SETUP_STEPS.length,
+    name: stepLabel(shown.step.step),
+  };
 }
 
 export type Tone = 'live' | 'off' | 'warn';

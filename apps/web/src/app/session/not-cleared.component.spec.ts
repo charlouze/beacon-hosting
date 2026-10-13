@@ -1,12 +1,15 @@
 import { TestBed } from '@angular/core/testing';
-import { DEFAULT_SETTINGS, Deadline, Session } from '@beacon/session';
+import { DEFAULT_SETTINGS, Deadline, Session, type ShownSetup } from '@beacon/session';
 import { CLOCK } from '../clock';
 import { NotClearedComponent } from './not-cleared.component';
 
 const clock = { now: () => new Date('2026-09-13T00:31:00') };
 
 describe('NotClearedComponent', () => {
-  const render = async (lastError: string | null = 'the machine will not delete') => {
+  const render = async (
+    lastError: string | null = 'the machine will not delete',
+    setup: ShownSetup | null = null,
+  ) => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: clock }] });
     const fixture = TestBed.createComponent(NotClearedComponent);
@@ -24,7 +27,7 @@ describe('NotClearedComponent', () => {
       }),
       facts: { ip: null, joinInfo: null, lastError },
       stateSince: new Date('2026-09-13T00:31:00'),
-      setup: null,
+      setup,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
@@ -69,5 +72,27 @@ describe('NotClearedComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-field="cost"]').dataset.climbing).toBe(
       'true',
     );
+  });
+
+  it('says where an abandoned setup stopped, and at what hour', async () => {
+    const fixture = await render('api unreachable', {
+      step: {
+        step: 'restoring-world',
+        since: new Date('2026-09-12T20:16:00'),
+        activity: null,
+        progress: null,
+      },
+      order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
+      abandonedAt: new Date('2026-09-12T20:19:00'),
+    });
+    const text = fixture.nativeElement.querySelector('[data-field="stopped-at"]').textContent;
+    expect(text).toContain('Where it stopped, at 20:19');
+    expect(text).toContain('Step 3 of 4');
+    expect(text).toContain('Bringing your world back');
+    expect(fixture.nativeElement.textContent).toContain('api unreachable');
+  });
+
+  it('says nothing of it when what was left behind is not an abandoned setup', async () => {
+    expect((await render()).nativeElement.querySelector('[data-field="stopped-at"]')).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import {
   splitCountdown,
   stateLabel,
   stepLabel,
+  stoppedAt,
 } from './format';
 
 describe('gameLabel', () => {
@@ -125,5 +126,39 @@ describe('stepLabel', () => {
 describe('activityLabel', () => {
   it('names each activity a game server can declare', () => {
     expect(SETUP_ACTIVITIES.map(activityLabel)).toEqual(['Downloading', 'Unpacking']);
+  });
+});
+
+describe('stoppedAt', () => {
+  const step = (name: 'waking' | 'fetching-game') => ({
+    step: name,
+    since: new Date('2026-09-12T20:16:00'),
+    activity: null,
+    progress: null,
+  });
+
+  it('says the hour, the rank in the order of the game and the name of the step', () => {
+    expect(
+      stoppedAt({
+        step: step('fetching-game'),
+        order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+        abandonedAt: new Date('2026-09-12T20:19:00'),
+      }),
+    ).toEqual({ at: '20:19', rank: 3, total: 4, name: 'Getting the game' });
+  });
+
+  it('ranks the first step first when no order is known', () => {
+    expect(
+      stoppedAt({
+        step: step('waking'),
+        order: null,
+        abandonedAt: new Date('2026-09-12T20:19:00'),
+      }),
+    ).toEqual({ at: '20:19', rank: 1, total: 4, name: 'Waking the server' });
+  });
+
+  it('says nothing of a setup under way, nor of none', () => {
+    expect(stoppedAt({ step: step('waking'), order: null, abandonedAt: null })).toBeNull();
+    expect(stoppedAt(null)).toBeNull();
   });
 });
