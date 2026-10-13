@@ -146,3 +146,11 @@ ci-dessous sont établis par lecture.
 - **Joining** — chaque jeu hébergé offre aujourd'hui un moyen principal de
   rejoindre et un recours. La spec n'en fixe plus le nombre, pour ne pas exclure
   un jeu qui n'en aurait qu'un ou qui en aurait quatre.
+
+- **Opening a session** — l'abandon au délai s'écrit sans relire la session.
+  Quand un serveur de jeu déclare son échec entre la lecture et l'écriture, sur
+  une session passée le délai, la mise en place est abandonnée deux fois : le
+  journal des événements porte deux `ProvisioningFailed`, et l'écran l'heure du
+  second abandon et la phrase du délai. Aucune règle ne dit ce qu'un abandon
+  arrivé trop tard garde de ses événements. Relevé par lecture pendant le lot
+  03.
