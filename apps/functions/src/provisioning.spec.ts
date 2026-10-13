@@ -59,6 +59,7 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
   const setup = {
     begin: vi.fn(async () => undefined),
     advance: vi.fn(async () => null),
+    read: vi.fn(async () => null),
   };
   return {
     clock: { now: () => NOW },

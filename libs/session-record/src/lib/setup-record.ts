@@ -1,6 +1,7 @@
 import {
   advanceSetup,
   firstSetupStep,
+  type KeptSetup,
   type KeptSetupStep,
   type SessionId,
   type SetupAdvance,
@@ -9,7 +10,7 @@ import {
   type WorldId,
 } from '@beacon/session';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { keptStepFrom, serverDocPath, setupDocPath } from './fields.js';
+import { keptSetupFrom, keptStepFrom, serverDocPath, setupDocPath } from './fields.js';
 
 export interface SetupStore {
   /** Rewrites the whole document: nothing else ever erases the previous setup. */
@@ -24,6 +25,8 @@ export interface SetupStore {
     declared: SetupDeclaration,
     at: Date,
   ): Promise<SetupAdvance | null>;
+  /** What is kept, whichever session it belongs to. Null when the document holds no readable setup. */
+  read(): Promise<KeptSetup | null>;
 }
 
 export interface SetupStores {
@@ -75,6 +78,10 @@ export function setupStores(db: Firestore): SetupStores {
             }
             return advance;
           });
+        },
+
+        async read(): Promise<KeptSetup | null> {
+          return keptSetupFrom((await setupDoc().get()).data() ?? {});
         },
       };
     },
