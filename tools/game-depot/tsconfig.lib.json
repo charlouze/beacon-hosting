@@ -17,6 +17,9 @@
       "path": "../../libs/session/tsconfig.lib.json"
     },
     {
+      "path": "../../deploy/cloud-init/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/admin-key/tsconfig.lib.json"
     }
   ],

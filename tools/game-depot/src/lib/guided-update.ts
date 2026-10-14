@@ -12,6 +12,7 @@ import {
   steamcmdCommandFor,
   suggestedInstallDir,
 } from './steam-install.js';
+import { copySteamAppOf } from './steam-manifest.js';
 
 /**
  * Four states rather than two, because the caller turns them into an exit code
@@ -155,7 +156,7 @@ function sayHowToInstall(ports: GuidedUpdatePorts, libraries: readonly string[])
   say('');
   say('        Run this in another window, then come back here:');
   say('');
-  say(`          ${steamcmdCommandFor({ installDir: suggestedInstallDir(libraries), account })}`);
+  say(`          ${steamcmdCommandFor({ installDir: suggestedInstallDir(libraries), account, app: copySteamAppOf(ports.game) })}`);
   say('');
   say('        +force_install_dir comes before +login on purpose. Steam fixes its install');
   say('        root at login: placed after, the option is not refused, it is ignored, and');

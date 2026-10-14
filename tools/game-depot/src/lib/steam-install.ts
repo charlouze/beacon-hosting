@@ -22,14 +22,6 @@ export interface LocalFiles {
   measure(path: string): InstallMeasure;
 }
 
-/**
- * Sunkenland's *dedicated server* on Steam. A different application from the
- * game client, installed separately, and confusing the two is the mistake this
- * tool exists to catch: the client is already on the administrator's machine
- * and weighs three times as much.
- */
-export const DEDICATED_SERVER_APP_ID = '2667530';
-
 /** Where steamcmd is told to put it, when nothing says otherwise. */
 const DEDICATED_SERVER_FOLDER = 'Sunkenland Dedicated Server';
 
@@ -127,12 +119,16 @@ export function discoverSteamAccount(files: LocalFiles, steamRoot: string): Disc
  * history, a plaintext file nothing ever cleans. steamcmd prompts for it, and
  * Steam Guard prompts again regardless, so the argument buys nothing.
  */
-export function steamcmdCommandFor(target: { readonly installDir: string; readonly account: string }): string {
+export function steamcmdCommandFor(target: {
+  readonly installDir: string;
+  readonly account: string;
+  readonly app: string;
+}): string {
   return [
     'steamcmd',
     `+force_install_dir "${target.installDir}"`,
     `+login ${target.account}`,
-    `+app_update ${DEDICATED_SERVER_APP_ID} validate`,
+    `+app_update ${target.app} validate`,
     '+quit',
   ].join(' ');
 }
