@@ -2,7 +2,7 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
 /**
- * The identity `adopt` writes with, and never a new secret (§8): the very
+ * The identity a tool writes to Firestore with, and never a new secret (§8): the very
  * credential `gcloud auth application-default login` already left on this
  * machine. Against the emulator, nothing here changes — the sdk itself reads
  * `FIRESTORE_EMULATOR_HOST` and never asks the credential for a token.
@@ -18,6 +18,6 @@ export function adminFirestore(env: Record<string, string | undefined>): Firesto
       'BEACON_FIREBASE_PROJECT is required: name the project, there is no default (production has no twin)',
     );
   }
-  const app = initializeApp({ credential: applicationDefault(), projectId }, `world-depot-${projectId}`);
+  const app = initializeApp({ credential: applicationDefault(), projectId }, `admin-firestore-${projectId}`);
   return getFirestore(app);
 }

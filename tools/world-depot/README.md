@@ -141,9 +141,8 @@ Ce qui s'éprouve est dans `src/lib/` — les arguments, le seau, le choix de la
 sauvegarde, l'archive et l'identité du monde — sans réseau et sans seau réel.
 
 **Ce qui ne s'éprouve pas**, et il vaut mieux le lire ici que le croire
-couvert : `admin-store.ts`, `admin-firestore.ts`, `retrieve.ts` et `adopt.ts`
-n'ont aucun test au niveau du magasin (seul le refus sans
-`BEACON_FIREBASE_PROJECT` l'est, sans emulateur). Personne n'a encore branché
+couvert : `admin-store.ts`, `retrieve.ts` et `adopt.ts`
+n'ont aucun test au niveau du magasin. Personne n'a encore branché
 le `FakeObjectApi` de `@beacon/scaleway-storage` sous cet outil, donc
 l'enchaînement complet des deux gestes n'est vérifié que par la main qui les
 lance.

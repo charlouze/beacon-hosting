@@ -59,8 +59,8 @@ lecture du plan de contrôle en dépendent.
 Le sens de l'alignement compte : c'est le poste qui se cale sur la CI et la
 prod, jamais l'inverse.
 
-`gcloud` porte aussi l'identité par laquelle `tools/world-depot` écrit dans
-Firestore, par `gcloud auth application-default login` : le même poste, le
+`gcloud` porte aussi l'identité par laquelle `tools/world-depot` et
+`tools/game-depot` écrivent dans Firestore, par `gcloud auth application-default login` : le même poste, le
 même compte, pas un secret de plus.
 
 Deux outils s'y ajoutent, et pour la même raison l'un que l'autre : ils touchent

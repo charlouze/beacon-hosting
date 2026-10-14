@@ -11,9 +11,6 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../../libs/admin-key/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/scaleway-storage/tsconfig.lib.json"
     },
     {
@@ -24,6 +21,12 @@
     },
     {
       "path": "../../deploy/cloud-init/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/admin-key/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/admin-firestore/tsconfig.lib.json"
     }
   ],
   "exclude": [
