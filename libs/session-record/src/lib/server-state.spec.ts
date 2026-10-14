@@ -40,6 +40,7 @@ const correction = (parts: Partial<StateCorrection> = {}): StateCorrection => ({
   state: null,
   lastError: null,
   clearFacts: false,
+  clearLastError: false,
   deadline: null,
   closeIntents: [],
   abandonedSetup: null,
@@ -137,6 +138,22 @@ describe('serverStateStore', () => {
     const after = (await db.doc(SERVER_DOC).get()).data();
     expect(after?.['state']).toBe('IDLE');
     expect(after?.['lastError']).toBe('scaleway refused');
+  });
+
+  it('empties the recorded error when the correction says nothing failed', async () => {
+    await db.doc(SERVER_DOC).set({ state: 'STOPPING', lastError: 'scaleway refused' });
+
+    await apply({ state: 'IDLE', clearFacts: true, clearLastError: true });
+
+    expect((await db.doc(SERVER_DOC).get()).data()?.['lastError']).toBeNull();
+  });
+
+  it('writes the error a correction carries, even when it also says to empty it', async () => {
+    await db.doc(SERVER_DOC).set({ state: 'STOPPING', lastError: 'scaleway refused' });
+
+    await apply({ state: 'IDLE', lastError: 'gone', clearLastError: true });
+
+    expect((await db.doc(SERVER_DOC).get()).data()?.['lastError']).toBe('gone');
   });
 
   it('empties every reserved field without touching the session', async () => {
@@ -331,6 +348,7 @@ describe('applying a deadline', () => {
         state: null,
         lastError: null,
         clearFacts: false,
+        clearLastError: false,
         deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
         closeIntents: [],
         abandonedSetup: null,

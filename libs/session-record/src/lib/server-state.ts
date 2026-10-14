@@ -151,6 +151,8 @@ export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateSt
         // "clear it": the interface has to keep saying that the previous
         // attempt failed until a next attempt answers for itself.
         patch['lastError'] = correction.lastError;
+      } else if (correction.clearLastError) {
+        patch['lastError'] = null;
       }
       if (correction.clearFacts) {
         for (const field of RESERVED_FACTS) {
