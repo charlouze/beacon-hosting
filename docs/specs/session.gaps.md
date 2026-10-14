@@ -133,6 +133,7 @@ ci-dessous sont établis par lecture.
   Le 2026-09-21, une heure a été payée pour un serveur périmé que personne ne
   pouvait voir venir. L'ancre existe déjà et ne coûte rien à lire : le manifeste
   de la plateforme voyage dans l'archive déposée et porte un numéro de version.
+  reserved by batch-04
 
 - **Running a game** — un jeu que seul son propriétaire peut obtenir est déposé
   par un administrateur, depuis son poste et jamais depuis l'interface. Aucune
