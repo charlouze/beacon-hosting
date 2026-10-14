@@ -1,7 +1,10 @@
 import { S3Client } from '@aws-sdk/client-s3';
+import { adminFirestore } from '@beacon/admin-firestore';
 import { fromS3 } from '@beacon/scaleway-storage';
+import { gameCopyRecord } from '@beacon/session-record';
 import { isGame } from '@beacon/session';
 import { gameArchiveKeyFor, pushGameFiles } from './lib/game-depot.js';
+import { recordDestinationFrom } from './lib/record-destination.js';
 
 function argValue(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -45,8 +48,13 @@ try {
     forcePathStyle: false,
   });
 
-  await pushGameFiles({ api: fromS3(client, requiredEnv('BEACON_GAMES_BUCKET')), game, from });
-  console.log(`beacon: pushed ${gameArchiveKeyFor(game)}`);
+  const version = await pushGameFiles({
+    api: fromS3(client, requiredEnv('BEACON_GAMES_BUCKET')),
+    record: gameCopyRecord(adminFirestore(process.env)),
+    game,
+    from,
+  });
+  console.log(`beacon: pushed ${gameArchiveKeyFor(game)}, build ${version} recorded in ${recordDestinationFrom(process.env)}`);
 } catch (error) {
   console.error(`beacon: ${String(error)}`);
   process.exitCode = 1;

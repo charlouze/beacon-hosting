@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { SERVER_BINARY } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import {
-  DEDICATED_SERVER_APP_ID,
   discoverSteamAccount,
   findDedicatedServer,
   steamLibraries,
@@ -183,7 +182,7 @@ describe('the Steam account', () => {
 
 describe('the steamcmd command an operator is handed', () => {
   const command = (): string =>
-    steamcmdCommandFor({ installDir: 'D:\\SteamLibrary\\steamapps\\common\\srv', account: 'someone' });
+    steamcmdCommandFor({ installDir: 'D:\\SteamLibrary\\steamapps\\common\\srv', account: 'someone', app: '2667530' });
 
   // Steam fixes its install root at login. A `+force_install_dir` that comes
   // after is not refused — it is ignored, and the 2.3 GB land in steamcmd's own
@@ -192,8 +191,7 @@ describe('the steamcmd command an operator is handed', () => {
     expect(command().indexOf('+force_install_dir')).toBeLessThan(command().indexOf('+login'));
   });
 
-  it('names the dedicated server application, and validates what it downloaded', () => {
-    expect(DEDICATED_SERVER_APP_ID).toBe('2667530');
+  it('installs the application it is given', () => {
     expect(command()).toContain('+app_update 2667530 validate');
   });
 
@@ -205,7 +203,7 @@ describe('the steamcmd command an operator is handed', () => {
   });
 
   it('quotes the install folder, which holds spaces on every Windows machine', () => {
-    expect(steamcmdCommandFor({ installDir: 'C:\\Program Files\\x', account: 'a' })).toContain(
+    expect(steamcmdCommandFor({ installDir: 'C:\\Program Files\\x', account: 'a', app: '2667530' })).toContain(
       '+force_install_dir "C:\\Program Files\\x"',
     );
   });

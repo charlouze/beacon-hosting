@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import type { AdminCredentials } from '@beacon/admin-key';
+import { gameVersionFrom } from '@beacon/session';
 import { SERVER_BINARY, gameArchiveKeyFor } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import { type GuidedUpdatePorts, runGuidedUpdate } from './guided-update.js';
@@ -57,6 +58,14 @@ const LOGIN_USERS_TWO_UNFLAGGED = `"users"
 }
 `;
 
+const SERVER_MANIFEST = `"AppState"
+{
+\t"appid"\t\t"2667530"
+\t"StateFlags"\t\t"4"
+\t"buildid"\t\t"25746735"
+}
+`;
+
 /** A machine where Steam is logged in and the *client* is installed. */
 function steamWithoutTheServer(): Record<string, number | string> {
   return {
@@ -70,14 +79,19 @@ function steamWithTheServer(): Record<string, number | string> {
     ...steamWithoutTheServer(),
     [join(SERVER_DIR, SERVER_BINARY)]: 60_000_000,
     [join(SERVER_DIR, 'Sunkenland_Data', 'data.pak')]: 2_240_000_000,
+    [join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')]: SERVER_MANIFEST,
   };
 }
+
+const RECORD_DESTINATION = 'Firestore of project beacon-test';
 
 interface Harness {
   readonly said: string[];
   readonly asked: string[];
   readonly opened: AdminCredentials[];
   readonly bucket: Map<string, number>;
+  readonly recorded: string[];
+  readonly reached: string[];
   readonly ports: GuidedUpdatePorts;
 }
 
@@ -85,6 +99,7 @@ function harness(options: {
   readonly tree?: Record<string, number | string>;
   readonly configDump?: string;
   readonly installDir?: string;
+  readonly reach?: () => Promise<void>;
   readonly answer?: (question: string, tree: Record<string, number | string>) => boolean;
 }): Harness {
   const tree = options.tree ?? steamWithTheServer();
@@ -92,6 +107,8 @@ function harness(options: {
   const asked: string[] = [];
   const opened: AdminCredentials[] = [];
   const bucket = new Map<string, number>();
+  const recorded: string[] = [];
+  const reached: string[] = [];
 
   const api: ObjectApi = {
     async list(prefix: string) {
@@ -112,10 +129,13 @@ function harness(options: {
     asked,
     opened,
     bucket,
+    recorded,
+    reached,
     ports: {
       game: 'sunkenland',
       bucketName: 'beacon-games',
       steamRoot: DEFAULT_STEAM,
+      recordDestination: RECORD_DESTINATION,
       installDir: options.installDir,
       files: inMemoryFiles(tree),
       rcloneConfigDump: async () => options.configDump ?? DUMP_WITH_BOTH_REMOTES,
@@ -123,8 +143,21 @@ function harness(options: {
         opened.push(credentials);
         return api;
       },
-      pushArchive: async ({ game }) => {
+      record: {
+        reach: async (game) => {
+          reached.push(game);
+          await options.reach?.();
+        },
+        recordDeposit: async (_game, version) => {
+          recorded.push(version);
+        },
+      },
+      pushArchive: async ({ game, record }) => {
         bucket.set(gameArchiveKeyFor(game), 2_480_000_000);
+        const version = gameVersionFrom('25746735');
+        if (version === null) throw new Error('unreachable');
+        await record.recordDeposit(game, version);
+        return version;
       },
       ask: async (question) => {
         asked.push(question);
@@ -198,7 +231,10 @@ describe('when the dedicated server is not installed', () => {
     const flow = harness({
       tree: steamWithoutTheServer(),
       answer: (question, tree) => {
-        if (/re-check/i.test(question)) tree[join(SERVER_DIR, SERVER_BINARY)] = 2_300_000_000;
+        if (/re-check/i.test(question)) {
+          tree[join(SERVER_DIR, SERVER_BINARY)] = 2_300_000_000;
+          tree[join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')] = SERVER_MANIFEST;
+        }
         return true;
       },
     });
@@ -215,7 +251,7 @@ describe('what it says it found before it deposits anything', () => {
     const printed = flow.said.join('\n');
 
     expect(printed).toContain(SERVER_DIR);
-    expect(printed).toContain('2 files');
+    expect(printed).toContain('3 files');
     expect(printed).toMatch(/2\.\d\d GB/);
   });
 
@@ -224,7 +260,14 @@ describe('what it says it found before it deposits anything', () => {
   // Matched on the warning's own wording, not on "client" alone: that word is
   // also in the fixed step-2 title, which any run prints regardless of size.
   it('warns when the folder weighs what the client weighs', async () => {
-    const flow = harness({ installDir: CLIENT_DIR, tree: { ...steamWithTheServer(), [join(CLIENT_DIR, SERVER_BINARY)]: 1_000 } });
+    const flow = harness({
+      installDir: CLIENT_DIR,
+      tree: {
+        ...steamWithTheServer(),
+        [join(CLIENT_DIR, SERVER_BINARY)]: 1_000,
+        [join(CLIENT_DIR, 'steamapps', 'appmanifest_2667530.acf')]: SERVER_MANIFEST,
+      },
+    });
     await runGuidedUpdate(flow.ports);
     const printed = flow.said.join('\n');
     expect(printed).toMatch(/far past the 2\.3 GB a dedicated server weighs/i);
@@ -303,5 +346,68 @@ describe('the credentials', () => {
     // And it did read them, so the assertion above is not passing on an
     // output that never held anything at all.
     expect(flow.opened[0]?.secretAccessKey).toBe(ADMIN_SECRET);
+  });
+});
+
+describe('the version of the copy', () => {
+  it('says the build it is about to deposit, before asking', async () => {
+    const flow = harness({});
+    await runGuidedUpdate(flow.ports);
+
+    const beforeTheQuestion = flow.said.slice(0, flow.said.findIndex((line) => line.startsWith('4.')));
+    expect(beforeTheQuestion.join('\n')).toContain('25746735');
+  });
+
+  it('announces the version it recorded', async () => {
+    const flow = harness({});
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+
+    expect(flow.recorded).toEqual(['25746735']);
+    expect(flow.said.join('\n')).toMatch(/25746735 recorded/);
+  });
+
+  it('announces where the record lives', async () => {
+    const flow = harness({});
+    await runGuidedUpdate(flow.ports);
+
+    const printed = flow.said.join('\n');
+    expect(printed).toContain(`the record of the copy answers, in ${RECORD_DESTINATION}`);
+    expect(printed).toContain(`recorded as the copy of sunkenland, in ${RECORD_DESTINATION}`);
+  });
+
+  it('refuses an install whose version cannot be read, without asking', async () => {
+    const tree = steamWithTheServer();
+    delete tree[join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')];
+    const flow = harness({ tree });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(flow.said.join('\n')).toContain('appmanifest_2667530.acf');
+    expect(flow.said.join('\n')).toContain('+app_update 2667530 validate');
+    expect(flow.said.join('\n')).toContain(SERVER_DIR);
+    expect(flow.asked).toEqual([]);
+    expect(flow.bucket.size).toBe(0);
+  });
+
+  it('refuses when the record cannot be reached, without asking', async () => {
+    const flow = harness({ reach: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(flow.said.join('\n')).toMatch(/record/i);
+    expect(flow.asked).toEqual([]);
+    expect(flow.bucket.size).toBe(0);
+  });
+
+  it('checks the record is reachable before asking', async () => {
+    const flow = harness({});
+    await runGuidedUpdate(flow.ports);
+
+    expect(flow.reached).toEqual(['sunkenland']);
+  });
+
+  it('records nothing when the operator declines', async () => {
+    const flow = harness({ answer: (question) => !/deposit/i.test(question) });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('declined');
+    expect(flow.recorded).toEqual([]);
   });
 });
