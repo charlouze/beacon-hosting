@@ -2203,6 +2203,30 @@ Le manifeste est donc dans le dossier que `game-depot` archive, et son `buildid`
 est celui que Steam publie. `LastUpdated` est l'instant de la mise à jour
 locale, le 2026-10-08, et non celui de la publication.
 
+### Ce que `steamcmd` rend
+
+Mesuré le 2026-10-14 par le commanditaire, depuis le même poste, `steamcmd`
+version `1791918946` installé par scoop.
+
+| Commande | Ce qu'elle rend |
+|---|---|
+| `steamcmd +login compte-qui-n-existe-pas-beacon +quit`, sans terminal pour répondre | `Cached credentials not found.`, une invite `password:` restée vide, `ERROR (Invalid Password)`, puis le code de sortie `5` |
+| `steamcmd +force_install_dir "<installation>" +login <compte du commanditaire> +app_update 2667530 validate +quit`, dans un terminal PowerShell, sur une installation déjà au build `25746735` | `Logging in using cached credentials.`, connexion sans aucune question, relecture des 9 328 880 561 octets, `Success! App '2667530' fully installed.`, puis le code de sortie `0` |
+
+Après la seconde commande, le manifeste porte toujours `buildid` `25746735`,
+`StateFlags` `4` et le même `LastUpdated` : une installation à jour n'est pas
+réécrite. Le compte a été nommé par son adresse e-mail, et Steam l'a accepté.
+
+Le premier des deux lancements a d'abord téléchargé et installé une mise à jour
+de `steamcmd` lui-même, 29 961 Ko. Le second l'a seulement vérifiée.
+
+### Le poids du serveur dédié
+
+Le 2026-10-14, l'installation du build `25746735` pèse 8,69 Gio en 257
+fichiers, dont 6,0 Gio sous `Sunkenland-DedicatedServer_Data/StreamingAssets`.
+Son manifeste porte `SizeOnDisk` `9328880561`. Les 2,3 Gio relevés au début du
+projet ne tiennent plus : le serveur a grossi avec les mises à jour du jeu.
+
 ### Ce qui reste ouvert
 
 - La lecture de Steam en direct depuis une Function elle-même : les mesures
@@ -2214,3 +2238,6 @@ locale, le 2026-10-08, et non celui de la publication.
   `steamcmd`.
 - Si deux builds différents sont toujours incompatibles en jeu. Un seul cas est
   relevé (section A).
+- Ce que `steamcmd` rend sur un `app_update` sans `validate`, sur un
+  `app_update` qui télécharge un nouveau build, sur un lancement qu'il fait
+  suivre de sa propre mise à jour, et sur un code Steam Guard refusé.
