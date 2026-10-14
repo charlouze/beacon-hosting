@@ -2,8 +2,9 @@ import type { SessionId, SessionState } from './session.js';
 
 /**
  * What a session goes through between its opening and its coming into
- * service. The first step starts at the opening and the last one is the game
- * starting; the order of the two others depends on the game.
+ * service. The first step starts when the preflight check has passed and the
+ * last one is the game starting; the order of the two others depends on the
+ * game.
  */
 export const SETUP_STEPS = ['waking', 'fetching-game', 'restoring-world', 'starting-game'] as const;
 
@@ -66,8 +67,8 @@ export interface SetupAdvance {
   readonly left: { readonly step: SetupStep; readonly since: Date } | null;
 }
 
-export function firstSetupStep(openedAt: Date): KeptSetupStep {
-  return { step: SETUP_STEPS[0], since: openedAt, activity: null, progress: null };
+export function firstSetupStep(since: Date): KeptSetupStep {
+  return { step: SETUP_STEPS[0], since, activity: null, progress: null };
 }
 
 /**
@@ -131,22 +132,35 @@ export interface AbandonedSetup {
   readonly at: Date;
 }
 
-/** What the screen shows of a setup. No order until the game's own is known. */
-export interface ShownSetup {
-  readonly step: KeptSetupStep;
-  readonly order: SetupStepOrder | null;
+/** The preflight check, before any step. */
+export interface ShownPreflight {
+  readonly stage: 'preflight';
+  /** The opening of the session: the check begins with it. */
+  readonly since: Date;
   /** The instant the setup was abandoned, and null while it is under way. */
   readonly abandonedAt: Date | null;
 }
 
+/** A step, in the order of its game. */
+export interface ShownStep {
+  readonly stage: 'step';
+  readonly step: KeptSetupStep;
+  readonly order: SetupStepOrder;
+  /** The instant the setup was abandoned, and null while it is under way. */
+  readonly abandonedAt: Date | null;
+}
+
+/** What the screen shows of a setup: its preflight check, or one of its steps. */
+export type ShownSetup = ShownPreflight | ShownStep;
+
 /**
- * What the screen shows of a world's last setup: the step it is on while its
- * session prepares, the step it stopped at once it was abandoned, and null
+ * What the screen shows of a world's last setup: where it is while its
+ * session prepares, where it stopped once it was abandoned, and null
  * otherwise.
  *
  * What is kept counts only when it belongs to that session: nothing erases
  * it, so the next session finds the previous one's there until its own is
- * begun, and shows the first step since its opening meanwhile. The mark
+ * begun, and shows the preflight check since its opening meanwhile. The mark
  * counts on the same condition: a session stopped before it was claimed
  * leaves the mark of the session before it.
  */
@@ -161,9 +175,11 @@ export function shownSetup(
   if (opening.state !== 'PROVISIONING' && abandonedAt === null) return null;
 
   if (kept !== null && kept.sessionId === opening.sessionId) {
-    return { step: kept.step, order: kept.order, abandonedAt };
+    return { stage: 'step', step: kept.step, order: kept.order, abandonedAt };
   }
-  return { step: firstSetupStep(opening.startedAt), order: null, abandonedAt };
+  // No step kept for this session: it has not passed its preflight check, or
+  // was abandoned before it did.
+  return { stage: 'preflight', since: opening.startedAt, abandonedAt };
 }
 
 function abandonedAtOf(opening: LastOpening, abandoned: AbandonedSetup | null): Date | null {
@@ -172,7 +188,6 @@ function abandonedAtOf(opening: LastOpening, abandoned: AbandonedSetup | null): 
 }
 
 /** The rank of the shown step in the order of its game, from one. */
-export function setupStepRank(shown: ShownSetup): number {
-  // No order is shown with the first step only, whatever the game.
-  return shown.order === null ? 1 : shown.order.indexOf(shown.step.step) + 1;
+export function setupStepRank(shown: ShownStep): number {
+  return shown.order.indexOf(shown.step.step) + 1;
 }

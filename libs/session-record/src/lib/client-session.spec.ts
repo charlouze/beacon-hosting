@@ -299,11 +299,7 @@ describe('the setup of a session that prepares', () => {
   const OPENED = new Date('2026-10-12T20:14:00Z');
   const AT = new Date('2026-10-12T20:16:00Z');
   const ORDER = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
-  const FIRST_STEP = {
-    step: { step: 'waking', since: OPENED, activity: null, progress: null },
-    order: null,
-    abandonedAt: null,
-  };
+  const PREFLIGHT = { stage: 'preflight', since: OPENED, abandonedAt: null };
 
   async function preparingServer(worldId: string, sessionId: string): Promise<void> {
     await getFirestore()
@@ -333,27 +329,28 @@ describe('the setup of a session that prepares', () => {
     await setups().advance('s1', { step: 'fetching-game', activity: 'downloading', progress: 37 }, AT);
 
     expect((await view())?.server?.setup).toEqual({
+      stage: 'step',
       step: { step: 'fetching-game', since: AT, activity: 'downloading', progress: 37 },
       order: [...ORDER],
       abandonedAt: null,
     });
   });
 
-  it('publishes the first step since the opening while no setup is kept', async () => {
+  it('publishes the preflight check since the opening while no setup is kept', async () => {
     await seedWorld('les-copains', { players: ['alice'] });
     await preparingServer('les-copains', 's1');
 
-    expect((await view())?.server?.setup).toEqual(FIRST_STEP);
+    expect((await view())?.server?.setup).toEqual(PREFLIGHT);
   });
 
-  it('publishes the first step while the kept setup is still the previous session’s', async () => {
+  it('publishes the preflight check while the kept setup is still the previous session’s', async () => {
     await seedWorld('les-copains', { players: ['alice'] });
     await preparingServer('les-copains', 's0');
     await setups().begin('s0', ORDER, new Date('2026-10-11T20:00:00Z'));
     await setups().advance('s0', { step: 'starting-game' }, new Date('2026-10-11T20:05:00Z'));
     await preparingServer('les-copains', 's1');
 
-    expect((await view())?.server?.setup).toEqual(FIRST_STEP);
+    expect((await view())?.server?.setup).toEqual(PREFLIGHT);
   });
 
   it('publishes no setup for a world out of service, whatever is kept', async () => {
@@ -397,20 +394,21 @@ describe('the setup of a session that prepares', () => {
 
       expect(seen?.server?.session.state).toBe('IDLE');
       expect(seen?.server?.setup).toEqual({
+        stage: 'step',
         step: { step: 'fetching-game', since: AT, activity: null, progress: null },
         order: [...ORDER],
         abandonedAt: ABANDONED,
       });
     });
 
-    it('publishes the first step when the setup it kept is another session’s', async () => {
+    it('publishes the preflight check when the setup it kept is another session’s', async () => {
       await seedWorld('les-copains', { players: ['alice'] });
       await preparingServer('les-copains', 's0');
       await setups().begin('s0', ORDER, OPENED);
       await preparingServer('les-copains', 's1');
       await abandonedServer('s1');
 
-      expect((await view())?.server?.setup).toEqual({ ...FIRST_STEP, abandonedAt: ABANDONED });
+      expect((await view())?.server?.setup).toEqual({ ...PREFLIGHT, abandonedAt: ABANDONED });
     });
 
     // A session opened and stopped before it was claimed: the mark is still
@@ -514,7 +512,11 @@ describe('the setup of a session that prepares', () => {
     await setups().begin('s1', ORDER, OPENED);
     const seen: (WorldSummary | null)[] = [];
     const stop = record().watchWorld('les-copains', (summary) => seen.push(summary));
-    await vi.waitFor(() => expect(seen.at(-1)?.server?.setup?.step.step).toBe('waking'), {
+    const keptStep = () => {
+      const setup = seen.at(-1)?.server?.setup;
+      return setup?.stage === 'step' ? setup.step : null;
+    };
+    await vi.waitFor(() => expect(keptStep()?.step).toBe('waking'), {
       timeout: 5_000,
     });
 
@@ -522,7 +524,7 @@ describe('the setup of a session that prepares', () => {
 
     await vi.waitFor(
       () =>
-        expect(seen.at(-1)?.server?.setup?.step).toEqual({
+        expect(keptStep()).toEqual({
           step: 'restoring-world',
           since: AT,
           activity: null,

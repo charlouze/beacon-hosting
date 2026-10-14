@@ -4,6 +4,11 @@ import { CLOCK } from '../clock';
 import { NotClearedComponent } from './not-cleared.component';
 
 const clock = { now: () => new Date('2026-09-13T00:31:00') };
+const OPENED = new Date('2026-09-12T20:14:00');
+const STOPPED_AT = new Date('2026-09-12T20:39:00');
+
+const text = (element: HTMLElement, selector: string): string | undefined =>
+  element.querySelector(selector)?.textContent?.trim();
 
 describe('NotClearedComponent', () => {
   const render = async (
@@ -77,6 +82,7 @@ describe('NotClearedComponent', () => {
 
   it('says where an abandoned setup stopped, and at what hour', async () => {
     const fixture = await render('api unreachable', {
+      stage: 'step',
       step: {
         step: 'restoring-world',
         since: new Date('2026-09-12T20:16:00'),
@@ -91,6 +97,13 @@ describe('NotClearedComponent', () => {
     expect(text).toContain('Step 3 of 4');
     expect(text).toContain('Bringing your world back');
     expect(fixture.nativeElement.textContent).toContain('api unreachable');
+  });
+
+  it('says the setup stopped at the preflight check, with no rank', async () => {
+    const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+
+    expect(text(element, '[data-field="stopped-at"] .said')).toBe('Preflight check · before the first step');
+    expect(element.textContent).not.toContain('Step 1 of 4');
   });
 
   it('says nothing of it when what was left behind is not an abandoned setup', async () => {

@@ -72,9 +72,9 @@ export interface ServerView {
   readonly facts: DisplayedFacts;
   readonly stateSince: Date | null;
   /**
-   * What the screen shows of the world's last setup: the step under way while
-   * the session prepares, the step it stopped at once it was abandoned, and
-   * null otherwise.
+   * What the screen shows of the world's last setup: where it is while the
+   * session prepares, where it stopped once it was abandoned, and null
+   * otherwise.
    */
   readonly setup: ShownSetup | null;
   /**

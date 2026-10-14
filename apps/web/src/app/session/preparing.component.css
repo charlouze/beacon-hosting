@@ -37,6 +37,18 @@
   grid-area: rank;
 }
 
+/* No rank before the first step: the check takes the whole place. */
+.stephero.preflight {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    'key'
+    'what';
+}
+
+.stephero.preflight .name {
+  margin-top: 16px;
+}
+
 .clock .of,
 .right .v .to {
   color: var(--mute);
@@ -168,6 +180,13 @@
     display: contents;
   }
 
+  .stephero.preflight {
+    grid-template-areas:
+      'key'
+      'name'
+      'meta';
+  }
+
   .name {
     grid-area: name;
     font-size: 24px;
@@ -175,6 +194,16 @@
     letter-spacing: -0.015em;
     max-width: none;
     padding-bottom: 4px;
+  }
+
+  /* In place of the rank, the check takes a size between the rank's and a
+     step's name: it is a word, not a figure. */
+  .stephero.preflight .name {
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    margin-top: 10px;
+    padding-bottom: 0;
   }
 
   .meta {
