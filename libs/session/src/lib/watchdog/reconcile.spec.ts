@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Deadline } from '../deadline.js';
+import { endedWithoutServer } from '../ended-without-server.js';
 import type { HostedServer, UnclaimedSweep } from '../ports.js';
 import { Session } from '../session-aggregate.js';
 import type { SessionState } from '../session.js';
@@ -20,10 +21,15 @@ const record = (
 
 // The one-world shape most scenarios need — a world named 'w' carrying
 // whatever record and session that scenario is about.
-const singleWorld = (server: ServerRecord | null, session: Session | null = null): WorldView => ({
+const singleWorld = (
+  server: ServerRecord | null,
+  session: Session | null = null,
+  stepKept = true,
+): WorldView => ({
   worldId: 'w',
   server,
   session,
+  stepKept,
 });
 
 const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
@@ -64,7 +70,7 @@ const types = (events: readonly { type: string }[]) => events.map((e) => e.type)
 describe('reconcileWorld', () => {
   it('corrects nothing when nothing happened', () => {
     const v = view();
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(false);
     expect(correction.events).toEqual([]);
@@ -73,7 +79,7 @@ describe('reconcileWorld', () => {
 
   it('leaves the state alone when server/current does not exist', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', true)], [], []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['SessionReclaimed']);
     expect(correction.closeIntents).toEqual(['s1']);
@@ -81,21 +87,21 @@ describe('reconcileWorld', () => {
 
   it('closes the intent of a session it destroyed', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', true)], [], []);
     expect(correction.closeIntents).toEqual(['s1']);
   });
 
   // Leaving the intent open is what brings the watchdog back to it next pass.
   it('leaves the intent open when the destruction failed', () => {
     const v = view({ hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', false)], [], []);
     expect(correction.closeIntents).toEqual([]);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
   it('sends a timed-out PROVISIONING back to IDLE once destroyed', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(correction.lastError).toContain('provisioning');
@@ -106,7 +112,7 @@ describe('reconcileWorld', () => {
   // ordinary failure — §5.
   it('sends a PROVISIONING whose cleanup failed to FAILED, keeping the facts', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], [], []);
     expect(correction.state).toBe('FAILED');
     expect(correction.clearFacts).toBe(false);
     // The setup is abandoned whether or not its server could be closed.
@@ -117,20 +123,20 @@ describe('reconcileWorld', () => {
   // refused once more, not a setup abandoned once more.
   it('does not say the setup failed again when the cleanup is refused again', () => {
     const v = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', false)], [], []);
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
 
   it('gives the session whose setup the delay abandons, once it is closed', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.abandonedSetup).toBe('s1');
   });
 
   it('gives it too when the close is refused', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], [], []);
     expect(correction.state).toBe('FAILED');
     expect(correction.abandonedSetup).toBe('s1');
   });
@@ -140,27 +146,27 @@ describe('reconcileWorld', () => {
   it('abandons no setup for any other reason, nor when nothing happened', () => {
     const stopping = view({ worlds: [singleWorld(record('STOPPING', 's1', true))], hosted: [hosted('s1')] });
     expect(
-      reconcileWorld(stopping, stopping.worlds[0], [outcome('s1', 'stopping-timeout', true)], [])
+      reconcileWorld(stopping, stopping.worlds[0], [outcome('s1', 'stopping-timeout', true)], [], [])
         .abandonedSetup,
     ).toBeNull();
 
     const failed = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
     expect(
-      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', true)], [])
+      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', true)], [], [])
         .abandonedSetup,
     ).toBeNull();
     expect(
-      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', false)], [])
+      reconcileWorld(failed, failed.worlds[0], [outcome('s1', 'failed-retry', false)], [], [])
         .abandonedSetup,
     ).toBeNull();
 
     const quietView = view();
-    expect(reconcileWorld(quietView, quietView.worlds[0], [], []).abandonedSetup).toBeNull();
+    expect(reconcileWorld(quietView, quietView.worlds[0], [], [], []).abandonedSetup).toBeNull();
   });
 
   it('sends a timed-out STOPPING back to IDLE and says the session stopped', () => {
     const v = view({ worlds: [singleWorld(record('STOPPING', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'stopping-timeout', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'stopping-timeout', true)], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionStopped']);
@@ -168,7 +174,7 @@ describe('reconcileWorld', () => {
 
   it('leaves FAILED once the retried destruction succeeds', () => {
     const v = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', true)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', true)], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionReclaimed']);
@@ -178,7 +184,7 @@ describe('reconcileWorld', () => {
   // failed-retry reclamation above has already answered for it.
   it('leaves FAILED when the record names no session to retry', () => {
     const v = view({ worlds: [singleWorld(record('FAILED', null, true))] });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
   });
@@ -187,12 +193,12 @@ describe('reconcileWorld', () => {
   // that the previous attempt failed once the state is back to IDLE.
   it('does not erase the recorded error on its way out of FAILED', () => {
     const v = view({ worlds: [singleWorld(record('FAILED', null, true))] });
-    expect(reconcileWorld(v, v.worlds[0], [], []).lastError).toBeNull();
+    expect(reconcileWorld(v, v.worlds[0], [], [], []).lastError).toBeNull();
   });
 
   it('stays in FAILED while the destruction keeps failing', () => {
     const v = view({ worlds: [singleWorld(record('FAILED', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'failed-retry', false)], [], []);
     expect(correction.state).toBe('FAILED');
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
@@ -202,7 +208,7 @@ describe('reconcileWorld', () => {
   // next pass retries it through the tag.
   it('does not send an IDLE record to FAILED when a residual cleanup fails', () => {
     const v = view({ worlds: [singleWorld(record('IDLE', 's1', true))], hosted: [hosted('s1')] });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'no-open-session', false)], [], []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
@@ -210,7 +216,7 @@ describe('reconcileWorld', () => {
   // §5's state diagram: RUNNING --> IDLE, the machine vanished at the provider.
   it('sends RUNNING back to IDLE when the provider holds nothing for it', () => {
     const v = view({ worlds: [singleWorld(record('RUNNING', 's1', true))] });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.clearFacts).toBe(true);
     expect(types(correction.events)).toEqual(['SessionStopped']);
@@ -222,7 +228,7 @@ describe('reconcileWorld', () => {
   // the sweep. §4: no Scaleway resource outlives its session.
   it('closes the intent of the session whose machine vanished', () => {
     const v = view({ worlds: [singleWorld(record('RUNNING', 's1', true))], openSessions: ['s1'] });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBe('IDLE');
     expect(correction.closeIntents).toEqual(['s1']);
   });
@@ -237,7 +243,7 @@ describe('reconcileWorld', () => {
       hosted: [hosted('s1'), hosted('s2')],
       openSessions: ['s1'],
     });
-    const correction = reconcileWorld(v, v.worlds[0], [outcome('s2', 'no-open-session', false)], []);
+    const correction = reconcileWorld(v, v.worlds[0], [outcome('s2', 'no-open-session', false)], [], []);
     expect(correction.state).toBeNull();
     expect(types(correction.events)).toEqual(['CleanupFailed']);
   });
@@ -248,14 +254,14 @@ describe('reconcileWorld', () => {
       hosted: [hosted('s1')],
       openSessions: ['s1'],
     });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(false);
   });
 
   it('empties the reserved facts left over on an IDLE record', () => {
     const v = view({ worlds: [singleWorld(record('IDLE', null, true))] });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.state).toBeNull();
     expect(correction.clearFacts).toBe(true);
     expect(correction.closeIntents).toEqual([]);
@@ -266,7 +272,7 @@ describe('reconcileWorld', () => {
   // alone would leave the id open for every pass to come.
   it('closes the intent of an IDLE record it empties', () => {
     const v = view({ worlds: [singleWorld(record('IDLE', 's1', true))], openSessions: ['s1'] });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.clearFacts).toBe(true);
     expect(correction.closeIntents).toEqual(['s1']);
   });
@@ -282,7 +288,7 @@ describe('reconcileWorld', () => {
       hosted: [hosted('s1')],
       now: new Date('2026-09-06T20:00:00Z'),
     });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.deadline?.at).toEqual(new Date('2026-09-07T00:00:00Z'));
     expect(correction.events).toEqual([
       { type: 'DeadlineClamped', sessionId: 's1', detail: 'brought back from 12:00 UTC to 00:00 UTC' },
@@ -295,7 +301,7 @@ describe('reconcileWorld', () => {
       hosted: [hosted('s1')],
       now: new Date('2026-09-06T20:00:00Z'),
     });
-    const correction = reconcileWorld(v, v.worlds[0], [], []);
+    const correction = reconcileWorld(v, v.worlds[0], [], [], []);
     expect(correction.deadline).toBeNull();
     expect(correction.events).toEqual([]);
   });
@@ -310,7 +316,7 @@ describe('reconcileWorld', () => {
     const outcomes: ReclaimOutcome[] = [
       { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
     ];
-    const stopped = reconcileWorld(v, v.worlds[0], outcomes, []).events.find(
+    const stopped = reconcileWorld(v, v.worlds[0], outcomes, [], []).events.find(
       (e) => e.type === 'SessionStopped',
     );
     // Five started hours between 20:00 and 00:03, at the DEV1-L rate.
@@ -322,7 +328,7 @@ describe('reconcileWorld', () => {
     const outcomes: ReclaimOutcome[] = [
       { reclamation: { sessionId: 's1', reason: 'stopping-timeout', detail: 'server x' }, closed: true },
     ];
-    const stopped = reconcileWorld(v, v.worlds[0], outcomes, []).events.find(
+    const stopped = reconcileWorld(v, v.worlds[0], outcomes, [], []).events.find(
       (e) => e.type === 'SessionStopped',
     );
     expect(stopped).toMatchObject({ costEuros: 0 });
@@ -348,14 +354,14 @@ describe('reconcileWorld', () => {
     const expensive = stoppingSession('s-b', '2026-09-04T10:00:00Z'); // onze
     const v = view({
       worlds: [
-        { worldId: 'a', server: record('STOPPING', 's-a', true), session: cheap },
-        { worldId: 'b', server: record('STOPPING', 's-b', true), session: expensive },
+        { worldId: 'a', server: record('STOPPING', 's-a', true), session: cheap, stepKept: true },
+        { worldId: 'b', server: record('STOPPING', 's-b', true), session: expensive, stepKept: true },
       ],
       hosted: [],
       openSessions: [],
     });
-    const stopA = reconcileWorld(v, v.worlds[0], [outcome('s-a', 'stopping-timeout', true)], []);
-    const stopB = reconcileWorld(v, v.worlds[1], [outcome('s-b', 'stopping-timeout', true)], []);
+    const stopA = reconcileWorld(v, v.worlds[0], [outcome('s-a', 'stopping-timeout', true)], [], []);
+    const stopB = reconcileWorld(v, v.worlds[1], [outcome('s-b', 'stopping-timeout', true)], [], []);
     const cost = (c: StateCorrection) =>
       (c.events.find((e) => e.type === 'SessionStopped') as { costEuros: number }).costEuros;
     expect(cost(stopB)).toBeGreaterThan(cost(stopA));
@@ -372,7 +378,7 @@ describe('reconcileWorld', () => {
 
     it('writes STOPPING and files SessionExpired for a session the provider still holds', () => {
       const v = view({ worlds: [singleWorld(record('RUNNING', 's1'))], hosted: [hosted('s1')] });
-      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s1'));
+      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s1'), []);
       expect(correction.state).toBe('STOPPING');
       expect(correction.clearFacts).toBe(false);
       expect(correction.events).toEqual([
@@ -387,7 +393,7 @@ describe('reconcileWorld', () => {
     // the ten-minute net to file later, doubling the cost §11 sums.
     it('grounds a vanished session to IDLE even when its deadline has also passed', () => {
       const v = view({ worlds: [singleWorld(record('RUNNING', 's1'))] });
-      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s1'));
+      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s1'), []);
       expect(correction.state).toBe('IDLE');
       expect(correction.clearFacts).toBe(true);
       expect(types(correction.events)).toEqual(['SessionStopped']);
@@ -395,9 +401,30 @@ describe('reconcileWorld', () => {
 
     it('leaves an unrelated session alone', () => {
       const v = view({ worlds: [singleWorld(record('RUNNING', 's1'))], hosted: [hosted('s1')] });
-      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s2'));
+      const correction = reconcileWorld(v, v.worlds[0], [], expiring('s2'), []);
       expect(correction.state).toBeNull();
     });
+  });
+});
+
+describe('a session closed before any server', () => {
+  const closed = Session.from({
+    state: 'STOPPING',
+    sessionId: 's1',
+    worldId: 'w',
+    game: 'enshrouded',
+    startedBy: 'u1',
+    startedAt: new Date('2026-09-04T20:45:00Z'),
+    deadline: Deadline.at(new Date('2026-09-05T01:00:00Z')),
+    instanceSize: null,
+    hasJoinInfo: false,
+  });
+
+  it('writes it out of service, with no error and a stop at no cost', () => {
+    const v = view({ worlds: [singleWorld(record('STOPPING', 's1'), closed, false)] });
+    expect(reconcileWorld(v, v.worlds[0], [], [], [{ worldId: 'w', sessionId: 's1' }])).toEqual(
+      endedWithoutServer(closed),
+    );
   });
 });
 

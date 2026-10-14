@@ -17,7 +17,14 @@ import {
   scwServer,
   sessionTag,
 } from '@beacon/scaleway-compute';
-import { adminWorldRecord, settingsStore, systemEvents, worldStateStores } from '@beacon/session-record';
+import { catalogFor } from '@beacon/cloud-init';
+import {
+  adminWorldRecord,
+  settingsStore,
+  setupStores,
+  systemEvents,
+  worldStateStores,
+} from '@beacon/session-record';
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -119,6 +126,18 @@ async function seedWorld(worldId: string, fields: Record<string, unknown>): Prom
   await db.doc(`worlds/${worldId}/server/current`).set({ ...defaults, ...fields });
 }
 
+/** The first step, kept the only way it can be: while the session is still preparing. */
+async function seedSetup(worldId: string, sessionId: string): Promise<void> {
+  const current = db.doc(`worlds/${worldId}/server/current`);
+  const closing = (await current.get()).data() ?? {};
+  await current.update({ state: 'PROVISIONING' });
+  const begun = await setupStores(db)
+    .for(worldId)
+    .begin(sessionId, catalogFor('enshrouded').setupStepOrder, NOW);
+  expect(begun).toBe(true);
+  await current.set(closing);
+}
+
 /**
  * Makes the order of the reads a structural fact instead of a race. Watching
  * the effect — a machine born mid-pass and spared — needs the intent write to
@@ -143,6 +162,7 @@ const deps = (): WatchdogDeps => ({
   clock: { now: () => NOW },
   host,
   states: worldStateStores(db),
+  setups: setupStores(db),
   events: systemEvents(db),
   ledger: afterTheInventory(ledger),
   health: watchdogHealth(db),
@@ -188,6 +208,9 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
       applyIf: vi.fn(async () => false),
     })),
     all: vi.fn(async () => ['w1']),
+  },
+  setups: {
+    for: vi.fn(() => ({ begin: vi.fn(), advance: vi.fn(), read: vi.fn(async () => null) })),
   },
   events: { file: vi.fn() },
   ledger: {
@@ -704,6 +727,78 @@ describe('runWatchdog', () => {
     expect(events.docs.map((d) => [d.get('type'), d.get('sessionId'), d.get('worldId')])).toEqual(
       [['SessionReclaimed', 'ghost', null]],
     );
+  });
+});
+
+describe('a session closed before any server', () => {
+  beforeEach(() =>
+    seedWorld('w1', {
+      state: 'STOPPING',
+      sessionId: 's1',
+      stateSince: minutesAgo(11),
+      deadline: minutesAhead(200),
+      provisionClaimedAt: minutesAgo(12),
+    }),
+  );
+
+  it('ends a session closed during its preflight check without asking the provider to close anything', async () => {
+    // No setup document for s1: no step was kept.
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual([]);
+    const server = (await db.doc('worlds/w1/server/current').get()).data() ?? {};
+    expect(server['state']).toBe('IDLE');
+    expect(server['lastError'] ?? null).toBeNull();
+    const events = (await db.collection('events').get()).docs.map((d) => d.data());
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'SessionStopped', sessionId: 's1', costEuros: 0 }),
+    );
+  });
+
+  it('files the stop once when two passes overlap', async () => {
+    // The second pass runs whole between the first one's read and its write.
+    const real = worldStateStores(db);
+    let overlapped = false;
+    const overlap = async () => {
+      if (overlapped) return;
+      overlapped = true;
+      await runWatchdog(deps());
+    };
+    const late: WatchdogDeps = {
+      ...deps(),
+      states: {
+        ...real,
+        for: (worldId) => {
+          const store = real.for(worldId);
+          return {
+            ...store,
+            apply: async (correction, at) => {
+              await overlap();
+              return store.apply(correction, at);
+            },
+            applyIf: async (expected, correction, at) => {
+              await overlap();
+              return store.applyIf(expected, correction, at);
+            },
+          };
+        },
+      },
+    };
+
+    await runWatchdog(late);
+
+    const stops = (await db.collection('events').get()).docs.filter(
+      (d) => d.get('type') === 'SessionStopped' && d.get('sessionId') === 's1',
+    );
+    expect(stops).toHaveLength(1);
+  });
+
+  it('closes as today a session whose step was kept', async () => {
+    await seedSetup('w1', 's1');
+
+    await runWatchdog(deps());
+
+    expect(host.closed).toEqual(['s1']);
   });
 });
 

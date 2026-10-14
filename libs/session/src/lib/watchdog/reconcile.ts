@@ -1,8 +1,9 @@
 import type { Deadline } from '../deadline.js';
+import { endedWithoutServer } from '../ended-without-server.js';
 import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
-import type { Expiration, Reclamation } from './reclamations.js';
+import type { EndWithoutServer, Expiration, Reclamation } from './reclamations.js';
 import type { WatchdogView, WorldView } from './view.js';
 
 export type ReclaimOutcome =
@@ -149,7 +150,8 @@ export function sweepEvents(
  * written by a second call from the caller: a session `reclamations()` marks
  * expired can, in the same pass, also be a machine the provider already holds
  * nothing for — and only one function may decide what such a session becomes,
- * or the two can disagree about it in the same breath.
+ * or the two can disagree about it in the same breath. `endWithoutServer` is
+ * folded in for the same reason.
  *
  * `outcomes` must already be this world's own: every entry the loop below
  * walks becomes a `CleanupFailed` or a `CLOSED[...]` event, with no filter by
@@ -171,6 +173,7 @@ export function reconcileWorld(
   world: WorldView,
   outcomes: readonly ReclaimOutcome[],
   expired: readonly Expiration[],
+  endWithoutServer: readonly EndWithoutServer[],
 ): StateCorrection {
   const events: DomainEvent[] = [];
   const closeIntents: SessionId[] = [];
@@ -239,6 +242,16 @@ export function reconcileWorld(
       deadline: null,
       abandonedSetup: abandonedBy(own.reclamation),
     };
+  }
+
+  if (
+    record.state === 'STOPPING' &&
+    world.session !== null &&
+    world.session.state === 'STOPPING' &&
+    endWithoutServer.some((e) => e.sessionId === record.sessionId)
+  ) {
+    const ending = endedWithoutServer(world.session);
+    return { ...ending, closeIntents, events: [...events, ...ending.events] };
   }
 
   const stillHeld = isStillHeld(view, record.sessionId);

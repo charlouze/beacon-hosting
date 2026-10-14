@@ -79,6 +79,7 @@ function buildFirestoreDeps() {
   return {
     clock: { now: () => new Date() },
     states: worldStateStores(db),
+    setups: setupStores(db),
     events: systemEvents(db),
     ledger: provisioningLedger(db),
     health: watchdogHealth(db),
