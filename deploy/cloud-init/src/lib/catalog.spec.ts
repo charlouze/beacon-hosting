@@ -228,3 +228,13 @@ describe('what the agent declares of a game', () => {
     });
   });
 });
+
+describe('the copy a game goes through', () => {
+  it('names the Steam application whose files the copy of sunkenland holds', () => {
+    expect(catalogFor('sunkenland').copySteamApp).toBe('2667530');
+  });
+
+  it('names none for enshrouded, whose server fetches the game itself', () => {
+    expect(catalogFor('enshrouded').copySteamApp).toBeNull();
+  });
+});

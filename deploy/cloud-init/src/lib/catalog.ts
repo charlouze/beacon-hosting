@@ -96,6 +96,13 @@ export interface GameCatalogEntry {
    */
   readonly generatesWorlds: boolean;
   /**
+   * The Steam application whose files the copy of this game holds, or null for
+   * a game that goes through no copy because its server fetches it. Steam's own
+   * identifier, and named as such: another platform would need a field of its
+   * own.
+   */
+  readonly copySteamApp: string | null;
+  /**
    * The disk a server of this game boots on, in gigabytes: what the system,
    * the containers, the game and its archive occupy together, with room to
    * spare. A constant — a game that outgrows it stalls its own restore.

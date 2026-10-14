@@ -533,6 +533,8 @@ export const sunkenland: GameCatalogEntry = {
   // `<name>~<guid>` folder already on disk (§8) — this game never lays one
   // down on its own, so `world-depot adopt` cannot skip `--from` for it.
   generatesWorlds: false,
+  // The dedicated server, a Steam application distinct from the game client.
+  copySteamApp: '2667530',
   // Measured at 26 GB occupied, at the peak as at rest: a 20 GB volume fills
   // up before the download ends.
   diskGb: 40,
