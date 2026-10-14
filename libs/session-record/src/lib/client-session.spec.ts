@@ -358,7 +358,9 @@ describe('the setup of a session that prepares', () => {
 
   it('publishes no setup for a world out of service, whatever is kept', async () => {
     await seedWorld('les-copains', { players: ['alice'] });
+    await preparingServer('les-copains', 's0');
     await setups().begin('s0', ORDER, OPENED);
+    await getFirestore().doc(serverDocPath('les-copains')).set(idleServerDocument(NOW));
 
     const seen = await view();
 
@@ -403,8 +405,9 @@ describe('the setup of a session that prepares', () => {
 
     it('publishes the first step when the setup it kept is another session’s', async () => {
       await seedWorld('les-copains', { players: ['alice'] });
-      await preparingServer('les-copains', 's1');
+      await preparingServer('les-copains', 's0');
       await setups().begin('s0', ORDER, OPENED);
+      await preparingServer('les-copains', 's1');
       await abandonedServer('s1');
 
       expect((await view())?.server?.setup).toEqual({ ...FIRST_STEP, abandonedAt: ABANDONED });

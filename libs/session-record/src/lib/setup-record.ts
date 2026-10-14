@@ -13,8 +13,12 @@ import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { keptSetupFrom, keptStepFrom, serverDocPath, setupDocPath } from './fields.js';
 
 export interface SetupStore {
-  /** Rewrites the whole document: nothing else ever erases the previous setup. */
-  begin(sessionId: SessionId, order: SetupStepOrder, openedAt: Date): Promise<void>;
+  /**
+   * Keeps the first step from `since`, rewriting the whole document, only while
+   * the world still holds this session preparing. False when it does not, and
+   * then nothing is written.
+   */
+  begin(sessionId: SessionId, order: SetupStepOrder, since: Date): Promise<boolean>;
   /**
    * Applies what a game server declares to the kept step. Null when nothing
    * was applied: the world holds another session, the session is no longer
@@ -52,11 +56,17 @@ export function setupStores(db: Firestore): SetupStores {
       const serverDoc = () => db.doc(serverDocPath(worldId));
 
       return {
-        async begin(sessionId, order, openedAt): Promise<void> {
-          await setupDoc().set({
-            sessionId,
-            stepOrder: [...order],
-            ...stepFields(firstSetupStep(openedAt)),
+        async begin(sessionId, order, since): Promise<boolean> {
+          return db.runTransaction(async (transaction) => {
+            const server = (await transaction.get(serverDoc())).data() ?? {};
+            if (server['sessionId'] !== sessionId) return false;
+            if (server['state'] !== 'PROVISIONING') return false;
+            transaction.set(setupDoc(), {
+              sessionId,
+              stepOrder: [...order],
+              ...stepFields(firstSetupStep(since)),
+            });
+            return true;
           });
         },
 

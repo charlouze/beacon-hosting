@@ -51,13 +51,14 @@ interface FakeDepsOptions {
 const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
   const state = {
     claimProvisioning: vi.fn(async () => true),
+    applyIf: vi.fn(async () => false),
     publish: vi.fn(async () => undefined),
     apply: vi.fn(async () => undefined),
     read: vi.fn(async () => null),
     readSession: vi.fn(async (): Promise<Session | null> => provisioning()),
   };
   const setup = {
-    begin: vi.fn(async () => undefined),
+    begin: vi.fn(async () => true),
     advance: vi.fn(async () => null),
     read: vi.fn(async () => null),
   };

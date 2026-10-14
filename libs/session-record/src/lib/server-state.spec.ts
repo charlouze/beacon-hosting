@@ -1,7 +1,7 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Deadline, type StateCorrection } from '@beacon/session';
+import { Deadline, endedWithoutServer, Session, type StateCorrection } from '@beacon/session';
 import { abandonedSetupFrom, EVENTS, serverDocPath, toDate } from './fields.js';
 import { serverStateStore, type ServerStateStore } from './server-state.js';
 
@@ -405,5 +405,80 @@ describe('the mark of an abandoned setup', () => {
     expect(await store.claimProvisioning('s2', AT)).toBe(false);
 
     expect(abandonedSetupFrom(await current())).toEqual(MARK);
+  });
+});
+
+describe('applying under a condition', () => {
+  const CLAIMED_AT = new Date('2026-09-04T20:55:00Z');
+  const seed = (parts: Record<string, unknown>) => seedServer(parts);
+  const serverDoc = async () => (await db.doc(SERVER_DOC).get()).data() ?? {};
+  const eventsOf = async (sessionId: string) =>
+    (await db.collection(EVENTS).where('sessionId', '==', sessionId).get()).docs.map((d) =>
+      d.data(),
+    );
+  const stoppingSession = (sessionId: string) =>
+    Session.from({
+      state: 'STOPPING',
+      sessionId,
+      worldId: 'w1',
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: new Date('2026-09-04T20:00:00Z'),
+      deadline: Deadline.at(new Date('2026-09-05T00:00:00Z')),
+      instanceSize: null,
+      hasJoinInfo: false,
+    });
+  const endWithoutServer = (sessionId: string) => endedWithoutServer(stoppingSession(sessionId));
+
+  it('writes the correction and its events while the session is the expected one', async () => {
+    await seed({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: null });
+
+    const applied = await store.applyIf(
+      { sessionId: 's1', state: 'STOPPING' },
+      endWithoutServer('s1'),
+      AT,
+    );
+
+    expect(applied).toBe(true);
+    expect((await serverDoc())['state']).toBe('IDLE');
+    expect(await eventsOf('s1')).toEqual([
+      expect.objectContaining({ type: 'SessionStopped', costEuros: 0 }),
+    ]);
+  });
+
+  it('writes nothing when the world holds another session', async () => {
+    await seed({ state: 'STOPPING', sessionId: 's2', provisionClaimedAt: null });
+    expect(
+      await store.applyIf({ sessionId: 's1', state: 'STOPPING' }, endWithoutServer('s1'), AT),
+    ).toBe(false);
+    expect((await serverDoc())['state']).toBe('STOPPING');
+    expect(await eventsOf('s1')).toEqual([]);
+  });
+
+  it('writes nothing when the session is in another state', async () => {
+    await seed({ state: 'IDLE', sessionId: 's1', provisionClaimedAt: null });
+    expect(
+      await store.applyIf({ sessionId: 's1', state: 'STOPPING' }, endWithoutServer('s1'), AT),
+    ).toBe(false);
+  });
+
+  it('writes nothing for a claimed session when the condition wants it unclaimed', async () => {
+    await seed({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: CLAIMED_AT });
+    expect(
+      await store.applyIf(
+        { sessionId: 's1', state: 'STOPPING', unclaimed: true },
+        endWithoutServer('s1'),
+        AT,
+      ),
+    ).toBe(false);
+    expect((await serverDoc())['state']).toBe('STOPPING');
+  });
+
+  it('releases the claim, so the next opening can claim it', async () => {
+    await seed({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: CLAIMED_AT });
+    await store.applyIf({ sessionId: 's1', state: 'STOPPING' }, endWithoutServer('s1'), AT);
+    await db.doc(SERVER_DOC).set({ state: 'PROVISIONING', sessionId: 's2' }, { merge: true });
+
+    expect(await store.claimProvisioning('s2', AT)).toBe(true);
   });
 });

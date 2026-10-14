@@ -185,6 +185,7 @@ const quietDeps = (previous: { sweptAt: Date | null }): WatchdogDeps => ({
       claimProvisioning: vi.fn(),
       publish: vi.fn(),
       apply: vi.fn(),
+      applyIf: vi.fn(async () => false),
     })),
     all: vi.fn(async () => ['w1']),
   },

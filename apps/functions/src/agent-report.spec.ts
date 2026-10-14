@@ -98,9 +98,10 @@ const fakeDeps = (options: FakeDepsOptions = {}) => {
     apply: vi.fn(async () => undefined),
     read: vi.fn(async () => null),
     claimProvisioning: vi.fn(async () => false),
+    applyIf: vi.fn(async () => false),
   };
   const setup = {
-    begin: vi.fn(async () => undefined),
+    begin: vi.fn(async () => true),
     advance: vi.fn(async (): Promise<SetupAdvance | null> => null),
     read: vi.fn(async (): Promise<KeptSetup | null> => null),
   };
