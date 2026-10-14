@@ -93,6 +93,8 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
     ...opened,
     state: 'RUNNING',
     stateSince: ago(80 * 60_000),
+    // A session with a server was always claimed; an unclaimed STOPPING one is ended without server.
+    provisionClaimedAt: ago(85 * 60_000),
     instanceId: 'dev-instance',
     ipId: 'dev-ip',
     ip: '51.15.42.7',

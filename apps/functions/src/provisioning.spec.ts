@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Deadline, DEFAULT_SETTINGS, Game, Session, World } from '@beacon/session';
+import { Deadline, DEFAULT_SETTINGS, endedWithoutServer, Game, Session, World } from '@beacon/session';
+import {
+  adminWorldRecord,
+  idleServerDocument,
+  serverDocPath,
+  setupStores,
+  worldStateStores,
+} from '@beacon/session-record';
 import type { AdminMembershipRecord } from '@beacon/membership-record/admin';
 import { adminMembershipRecord, MEMBERS } from '@beacon/membership-record/admin';
 import { defaultApp } from './firebase-app.js';
@@ -114,14 +121,18 @@ beforeEach(() => {
 });
 
 describe('provisioning', () => {
-  it('begins the setup with the order of the game, since the opening of the session', async () => {
+  it('keeps the first step from the instant the preflight check passed', async () => {
+    const passed = new Date(NOW.getTime() + 2_000);
+    const now = vi.fn(() => passed).mockReturnValueOnce(NOW);
+    deps = { ...deps, clock: { now } };
+
     await runStateChange(deps, WORLD_ID, provisioning());
 
     expect(deps.setups.for).toHaveBeenCalledWith(WORLD_ID);
     expect(deps.setups.for(WORLD_ID).begin).toHaveBeenCalledWith(
       's1',
       ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
-      NOW,
+      passed,
     );
   });
 
@@ -143,20 +154,52 @@ describe('provisioning', () => {
     expect(deps.setups.for(WORLD_ID).begin).not.toHaveBeenCalled();
   });
 
-  // What is displayed must not cost a session: the server opens all the same,
-  // and the failure is kept where the operator reads it.
-  it('opens the server when the setup could not begin, and journals why', async () => {
+  // The first step kept is what ends the preflight check: no step, no server.
+  it('calls no provider when the first step could not be kept, and journals why', async () => {
     vi.mocked(deps.setups.for(WORLD_ID).begin).mockRejectedValue(new Error('firestore is down'));
 
-    await runStateChange(deps, WORLD_ID, provisioning());
+    expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(false);
 
-    expect(deps.host.open).toHaveBeenCalledTimes(1);
+    expect(deps.tokens.issue).not.toHaveBeenCalled();
+    expect(deps.ledger.open).not.toHaveBeenCalled();
+    expect(deps.host.open).not.toHaveBeenCalled();
     expect(deps.journal.failure).toHaveBeenCalledWith({
       source: 'provisioning.begin',
       sessionId: 's1',
       error: 'Error: firestore is down',
     });
-    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
+  });
+
+  describe('a session closed during its preflight check', () => {
+    it('ends it without a server when it was closed before the first step was kept', async () => {
+      const state = deps.states.for(WORLD_ID);
+      vi.mocked(deps.setups.for(WORLD_ID).begin).mockResolvedValue(false);
+      vi.mocked(state.readSession).mockResolvedValue(stopping());
+      vi.mocked(state.applyIf).mockResolvedValue(true);
+
+      expect(await runStateChange(deps, WORLD_ID, provisioning())).toBe(true);
+
+      expect(state.applyIf).toHaveBeenCalledWith(
+        { sessionId: 's1', state: 'STOPPING' },
+        endedWithoutServer(stopping()),
+        NOW,
+      );
+      expect(deps.tokens.issue).not.toHaveBeenCalled();
+      expect(deps.ledger.open).not.toHaveBeenCalled();
+      expect(deps.host.open).not.toHaveBeenCalled();
+      expect(state.apply).not.toHaveBeenCalled();
+    });
+
+    it('stops when the world moved on to another session meanwhile', async () => {
+      const state = deps.states.for(WORLD_ID);
+      vi.mocked(deps.setups.for(WORLD_ID).begin).mockResolvedValue(false);
+      vi.mocked(state.readSession).mockResolvedValue(provisioningSession('s2', WORLD_ID, 'enshrouded'));
+
+      await runStateChange(deps, WORLD_ID, provisioning());
+
+      expect(state.applyIf).not.toHaveBeenCalled();
+      expect(deps.host.open).not.toHaveBeenCalled();
+    });
   });
 
   // §6 étape 3, §8: triggers are delivered at least once. Without the claim, a
@@ -505,17 +548,152 @@ describe('provisioning', () => {
   });
 });
 
-// Rewritten for task 9 bis: `onServerStateChange` used to destroy the instant
-// STOPPING was written, before the agent had a chance to learn it was
-// stopping — the whole-branch review found neither stop path could ever let
-// the agent push a final save. Destruction now waits for the agent's `saved`
-// report (agent-report.ts); this trigger has nothing left to do on STOPPING.
 describe('stopping', () => {
-  it('does nothing at all: destruction now waits for the agent to report saved', async () => {
-    expect(await runStateChange(deps, WORLD_ID, stopping())).toBe(false);
+  // Closed before the Function claimed it: nothing was asked of anyone.
+  it('ends a session that was never claimed, without a server', async () => {
+    const state = deps.states.for(WORLD_ID);
+    vi.mocked(state.applyIf).mockResolvedValue(true);
+
+    expect(await runStateChange(deps, WORLD_ID, stopping())).toBe(true);
+
+    expect(state.applyIf).toHaveBeenCalledWith(
+      { sessionId: 's1', state: 'STOPPING', unclaimed: true },
+      endedWithoutServer(stopping()),
+      NOW,
+    );
     expect(deps.host.close).not.toHaveBeenCalled();
-    expect(deps.states.for(WORLD_ID).apply).not.toHaveBeenCalled();
+  });
+
+  // A claimed session may have a server, and its destruction waits for the
+  // agent to report saved (agent-report.ts): nothing here may end it.
+  it('leaves a claimed session to the agent and the watchdog', async () => {
+    const state = deps.states.for(WORLD_ID);
+    vi.mocked(state.applyIf).mockResolvedValue(false);
+
+    expect(await runStateChange(deps, WORLD_ID, stopping())).toBe(false);
+
+    expect(deps.host.close).not.toHaveBeenCalled();
+    expect(state.apply).not.toHaveBeenCalled();
     expect(deps.ledger.close).not.toHaveBeenCalled();
+  });
+});
+
+// The real stores, because what decides here is the transaction that rereads
+// `server/current`; fakes for everything that would reach a provider.
+describe('against the emulator', () => {
+  const db = getFirestore(defaultApp());
+  let live: ProvisionDeps;
+
+  const seedServer = (fields: Record<string, unknown>) =>
+    db.doc(serverDocPath(WORLD_ID)).set({ ...idleServerDocument(NOW), ...fields });
+
+  const stoppedEvents = async (sessionId: string) =>
+    (
+      await db
+        .collection('events')
+        .where('worldId', '==', WORLD_ID)
+        .where('sessionId', '==', sessionId)
+        .where('type', '==', 'SessionStopped')
+        .get()
+    ).docs;
+
+  const clearWorld = async (): Promise<void> => {
+    await db.recursiveDelete(db.doc(`worlds/${WORLD_ID}`));
+    const events = await db.collection('events').where('worldId', '==', WORLD_ID).get();
+    await Promise.all(events.docs.map((doc) => doc.ref.delete()));
+  };
+
+  beforeEach(async () => {
+    await clearWorld();
+    await adminWorldRecord(db).create(defaultWorld(), NOW);
+    await seedServer({
+      state: 'PROVISIONING',
+      sessionId: 's1',
+      startedBy: 'u1',
+      startedAt: NOW,
+      deadline: new Date('2026-09-07T00:00:00Z'),
+    });
+    live = { ...fakeDeps(), states: worldStateStores(db), setups: setupStores(db) };
+  });
+
+  afterEach(clearWorld);
+
+  it('never calls the provider when the session is closed between its claim and its first step', async () => {
+    // The member closes it right after the claim, the way the browser writes STOPPING.
+    const real = live.states.for(WORLD_ID);
+    const claim = real.claimProvisioning.bind(real);
+    const closing: ProvisionDeps = {
+      ...live,
+      states: {
+        ...live.states,
+        for: () => ({
+          ...real,
+          claimProvisioning: async (sessionId, at) => {
+            const claimed = await claim(sessionId, at);
+            await db.doc(serverDocPath(WORLD_ID)).update({ state: 'STOPPING' });
+            return claimed;
+          },
+        }),
+      },
+    };
+
+    await runStateChange(closing, WORLD_ID, provisioning());
+
+    const server = (await db.doc(serverDocPath(WORLD_ID)).get()).data() ?? {};
+    expect(server['state']).toBe('IDLE');
+    expect(server['provisionClaimedAt']).toBeNull();
+    expect(server['abandonedSetup'] ?? null).toBeNull();
+    expect(server['lastError'] ?? null).toBeNull();
+    expect(live.host.open).not.toHaveBeenCalled();
+    expect(live.tokens.issue).not.toHaveBeenCalled();
+    expect(live.ledger.open).not.toHaveBeenCalled();
+    expect(await setupStores(db).for(WORLD_ID).read()).toBeNull();
+    const stopped = await stoppedEvents('s1');
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0].data()).toEqual(
+      expect.objectContaining({ costEuros: 0, detail: 'closed before any server was created' }),
+    );
+  });
+
+  it('ends a session closed before its claim, without a server', async () => {
+    await seedServer({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: null });
+
+    await runStateChange(live, WORLD_ID, stopping());
+
+    expect((await db.doc(serverDocPath(WORLD_ID)).get()).data()?.['state']).toBe('IDLE');
+    const stopped = await stoppedEvents('s1');
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0].data()).toEqual(
+      expect.objectContaining({ costEuros: 0, detail: 'closed before any server was created' }),
+    );
+  });
+
+  it('forgets what the host said to the opening before', async () => {
+    await seedServer({
+      state: 'STOPPING',
+      sessionId: 's1',
+      provisionClaimedAt: null,
+      lastError: 'no capacity (left by the session before)',
+    });
+
+    await runStateChange(live, WORLD_ID, stopping());
+
+    expect((await db.doc(serverDocPath(WORLD_ID)).get()).data()?.['lastError']).toBeNull();
+  });
+
+  it('writes nothing on a second delivery of the same closing', async () => {
+    await seedServer({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: null });
+    await runStateChange(live, WORLD_ID, stopping());
+
+    expect(await runStateChange(live, WORLD_ID, stopping())).toBe(false);
+    expect(await stoppedEvents('s1')).toHaveLength(1);
+  });
+
+  it('leaves alone a session in service that is being closed', async () => {
+    await seedServer({ state: 'STOPPING', sessionId: 's1', provisionClaimedAt: NOW, ip: '51.15.42.7' });
+
+    expect(await runStateChange(live, WORLD_ID, stopping())).toBe(false);
+    expect((await db.doc(serverDocPath(WORLD_ID)).get()).data()?.['state']).toBe('STOPPING');
   });
 });
 
@@ -532,9 +710,9 @@ describe('what the caller learns', () => {
   });
 
   // What bounds the loop: a pass writes IDLE, FAILED, RUNNING or STOPPING, and
-  // none of the four is a state this function acts on — so the trigger it
-  // fires dies here instead of asking for another pass.
-  it.each(['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const)(
+  // the trigger it fires dies here instead of asking for another pass. A
+  // STOPPING a pass writes was claimed, and `stopping` covers it.
+  it.each(['IDLE', 'RUNNING', 'FAILED'] as const)(
     'says it did not act on %s',
     async (state) => {
       expect(
@@ -549,7 +727,7 @@ describe('what the caller learns', () => {
 });
 
 describe('every other state', () => {
-  it.each(['IDLE', 'RUNNING', 'STOPPING', 'FAILED'] as const)('does nothing on %s', async (state) => {
+  it.each(['IDLE', 'RUNNING', 'FAILED'] as const)('does nothing on %s', async (state) => {
     await runStateChange(deps, WORLD_ID, Session.from({ ...fieldsOf(provisioning()), state }));
     expect(deps.host.open).not.toHaveBeenCalled();
     expect(deps.host.close).not.toHaveBeenCalled();

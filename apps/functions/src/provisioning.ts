@@ -1,7 +1,15 @@
 import { catalogFor, renderCloudInit, type SaveAccess } from '@beacon/cloud-init';
 import { newAgentToken } from '@beacon/agent-protocol';
 import type { AdminMembershipRecord } from '@beacon/membership-record/admin';
-import type { Clock, Game, ServerHost, Session, SessionId, WorldId } from '@beacon/session';
+import {
+  endedWithoutServer,
+  type Clock,
+  type Game,
+  type ServerHost,
+  type Session,
+  type SessionId,
+  type WorldId,
+} from '@beacon/session';
 import type {
   AdminWorldRecord,
   SettingsStore,
@@ -45,13 +53,14 @@ export interface ProvisionDeps {
  * other one is a write this function has no business reacting to — including
  * the RUNNING that `agentReport` writes, which would otherwise re-enter here.
  *
- * **STOPPING triggers nothing here (task 9 bis).** It used to destroy on
+ * **STOPPING destroys nothing here (task 9 bis).** It used to destroy on
  * sight — the instant the browser or the watchdog wrote STOPPING, before the
  * agent had a chance to learn it was stopping at all. §6 now makes the
  * agent's `saved` report the one trigger of the destruction: it runs from
  * `agentReport` (agent-report.ts), once the game has stopped and the last
- * save is pushed. This branch stays absent on purpose — adding it back
- * un-fixes the bug this task exists for.
+ * save is pushed. Destroying here again un-fixes the bug that task existed
+ * for. A session closed before it was ever claimed has nothing to destroy,
+ * and stops being in progress here.
  */
 export async function runStateChange(
   deps: ProvisionDeps,
@@ -59,6 +68,7 @@ export async function runStateChange(
   session: Session,
 ): Promise<boolean> {
   if (session.state === 'PROVISIONING') return provision(deps, worldId, session);
+  if (session.state === 'STOPPING') return endIfNeverClaimed(deps, worldId, session);
   return false;
 }
 
@@ -73,7 +83,11 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
   const claimed = await state.claimProvisioning(sessionId, now);
   if (!claimed) return false;
 
-  await beginSetup(deps, worldId, sessionId, game, session.startedAt ?? now);
+  // The preflight check. It always passes for now, and the first step kept is
+  // its end: no step, no token, no intent, no server.
+  const begun = await beginSetup(deps, worldId, sessionId, game);
+  if (begun === 'failed') return false;
+  if (begun === 'refused') return endIfClosed(deps, worldId, sessionId);
 
   const size = session.instanceSize ?? (await deps.settings.read()).defaultInstanceSize;
 
@@ -130,21 +144,45 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
 }
 
 /**
- * The setup is only ever displayed, so failing to begin it stops nothing: the
- * screen stays on the first step for this session, and the operator reads why.
+ * Keeps the first step from the instant the preflight check passed, on the
+ * condition that the session is still preparing.
  */
 async function beginSetup(
   deps: ProvisionDeps,
   worldId: WorldId,
   sessionId: SessionId,
   game: Game,
-  openedAt: Date,
-): Promise<void> {
+): Promise<'begun' | 'refused' | 'failed'> {
   try {
-    await deps.setups.for(worldId).begin(sessionId, catalogFor(game).setupStepOrder, openedAt);
+    const begun = await deps.setups
+      .for(worldId)
+      .begin(sessionId, catalogFor(game).setupStepOrder, deps.clock.now());
+    return begun ? 'begun' : 'refused';
   } catch (error) {
+    // The session stays preparing with no server, until the delay abandons it.
     deps.journal.failure({ source: 'provisioning.begin', sessionId, error: String(error) });
+    return 'failed';
   }
+}
+
+/** A member closed it during the preflight check: it ends there, with no server. */
+async function endIfClosed(deps: ProvisionDeps, worldId: WorldId, sessionId: SessionId): Promise<boolean> {
+  const state = deps.states.for(worldId);
+  const session = await state.readSession();
+  if (session === null || session.sessionId !== sessionId || session.state !== 'STOPPING') return false;
+  return state.applyIf({ sessionId, state: 'STOPPING' }, endedWithoutServer(session), deps.clock.now());
+}
+
+/**
+ * Closed before the Function claimed it. The claim alone says no step was
+ * kept, since a step is kept only after a claim.
+ */
+async function endIfNeverClaimed(deps: ProvisionDeps, worldId: WorldId, session: Session): Promise<boolean> {
+  const sessionId = session.sessionId;
+  if (sessionId === null) return false;
+  return deps.states
+    .for(worldId)
+    .applyIf({ sessionId, state: 'STOPPING', unclaimed: true }, endedWithoutServer(session), deps.clock.now());
 }
 
 /**
