@@ -53,6 +53,7 @@ ci-dessous sont établis par lecture.
   a raison** — fermer une session pendant sa mise en place est un geste que le
   produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
   requalifie.
+  reserved by batch-04
 
 - **Running a game** — le catalogue d'un des jeux (`deploy/cloud-init`,
   `enshrouded.ts`) ne transmet à son serveur aucun des comptes Steam que les
@@ -127,6 +128,7 @@ ci-dessous sont établis par lecture.
   d'administration, cherche l'installation locale du serveur dédié dans les
   bibliothèques de la plateforme, et imprime la commande exacte à lancer quand il
   ne la trouve pas `docs/archive/specs/2026-09-02-game-hosting-design.md`.
+  reserved by batch-04
 
 - **Running a game** — rien ne compare ce qui est déposé à ce que
   l'éditeur publie, ni à l'installation locale depuis laquelle le dépôt se fait.
