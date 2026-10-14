@@ -1,9 +1,11 @@
-import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { create } from 'tar';
-import type { Game } from '@beacon/session';
+import type { Game, GameVersion } from '@beacon/session';
+import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
+import { copySteamAppOf, installedVersion } from './steam-manifest.js';
 
 /**
  * `<game>/game.tar`. The literal the cloud-init writes into
@@ -33,23 +35,52 @@ export const SERVER_BINARY = 'Sunkenland-DedicatedServer.exe';
 
 export interface PushGameFilesDeps {
   readonly api: ObjectApi;
+  /** Where the version of the copy is recorded, once the deposit is read back. */
+  readonly record: GameCopyRecord;
   readonly game: Game;
   /** The local folder holding an install of the game's dedicated server. */
   readonly from: string;
 }
 
 /**
- * Builds the archive from a local install, deposits it, and reads its own
- * deposit back rather than trusting the upload. Refusing the wrong folder
- * happens first and costs nothing; the reread happens last and costs a
- * `list`, never a second `get` — downloading 2.3 GB back would double the
- * price of every push to catch a fault a `ListObjectsV2` already reports.
+ * Builds the archive from a local install, deposits it, reads its own deposit
+ * back rather than trusting the upload, then records the version it deposited.
+ * Everything that can refuse happens before the archive is built, and the
+ * version is recorded only for a deposit that was read back: a recorded
+ * version never describes an archive this tool did not verify.
+ *
+ * The reread costs a `list`, never a second `get` — downloading 2.3 GB back
+ * would double the price of every push to catch a fault a `ListObjectsV2`
+ * already reports.
  */
-export async function pushGameFiles(deps: PushGameFilesDeps): Promise<void> {
+export async function pushGameFiles(deps: PushGameFilesDeps): Promise<GameVersion> {
+  const version = await versionToDeposit(deps);
+  await depositArchive(deps);
+  await recordDeposit(deps, version);
+  return version;
+}
+
+/** The version of the install, once nothing is left that could refuse the push. */
+async function versionToDeposit(deps: PushGameFilesDeps): Promise<GameVersion> {
+  const app = copySteamAppOf(deps.game);
   if (!existsSync(join(deps.from, SERVER_BINARY))) {
     throw new Error(`${deps.from} does not hold ${SERVER_BINARY}: refusing to push the wrong folder`);
   }
+  const installed = installedVersion(
+    (path) => (existsSync(path) ? readFileSync(path, 'utf8') : undefined),
+    deps.from,
+    app,
+  );
+  if ('refusal' in installed) throw new Error(`${installed.refusal}: refusing to push`);
+  try {
+    await deps.record.reach(deps.game);
+  } catch (error) {
+    throw new Error(`the record of the copy cannot be reached (${String(error)}): nothing deposited`);
+  }
+  return installed.version;
+}
 
+async function depositArchive(deps: PushGameFilesDeps): Promise<void> {
   const key = gameArchiveKeyFor(deps.game);
   const workDir = mkdtempSync(join(tmpdir(), 'game-depot-'));
   try {
@@ -72,5 +103,17 @@ export async function pushGameFiles(deps: PushGameFilesDeps): Promise<void> {
     }
   } finally {
     rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+async function recordDeposit(deps: PushGameFilesDeps, version: GameVersion): Promise<void> {
+  try {
+    await deps.record.recordDeposit(deps.game, version);
+  } catch (error) {
+    // The archive is new and the recorded version is the old one: the copy
+    // reads as behind until a run of this tool records it.
+    throw new Error(
+      `${gameArchiveKeyFor(deps.game)} is deposited, but its version ${version} was not recorded (${String(error)}): run this again`,
+    );
   }
 }

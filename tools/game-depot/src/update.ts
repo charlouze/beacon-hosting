@@ -3,10 +3,13 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { S3Client } from '@aws-sdk/client-s3';
+import { adminFirestore } from '@beacon/admin-firestore';
 import { fromS3 } from '@beacon/scaleway-storage';
+import { gameCopyRecord } from '@beacon/session-record';
 import { isGame } from '@beacon/session';
 import { pushGameFiles } from './lib/game-depot.js';
 import { runGuidedUpdate } from './lib/guided-update.js';
+import { recordDestinationFrom } from './lib/record-destination.js';
 import { DEFAULT_STEAM_ROOT, type LocalFiles } from './lib/steam-install.js';
 
 function argValue(name: string): string | undefined {
@@ -95,7 +98,7 @@ async function ask(question: string): Promise<boolean> {
 /**
  * The gesture repeated at every game update, guided from end to end: it finds
  * the key, finds the install or says exactly how to make one, shows what it is
- * about to send, deposits it and reads it back. Runs on the one machine that
+ * about to send, deposits it, reads it back and records its version. Runs on the one machine that
  * owns the game (§7) — never a runner, never the VM, which only reads this
  * bucket.
  *
@@ -121,9 +124,11 @@ try {
     game,
     bucketName,
     steamRoot: argValue('steam-root') ?? DEFAULT_STEAM_ROOT,
+    recordDestination: recordDestinationFrom(process.env),
     installDir: argValue('from'),
     steamAccount: argValue('steam-account'),
     files: onDisk,
+    record: gameCopyRecord(adminFirestore(process.env)),
     rcloneConfigDump: async () => rcloneConfigDump(),
     openBucket: (credentials) =>
       fromS3(

@@ -11,18 +11,25 @@ ne connaît pas non plus le préfixe des sauvegardes.
 ## `game-depot:update` — le geste de chaque mise à jour
 
 ```bash
-npx nx run game-depot:update
+BEACON_FIREBASE_PROJECT=<projet> npx nx run game-depot:update
 ```
 
 Guidé de bout en bout : il lit la clé d'administration dans le remote rclone
 `scw-admin` (aucune valeur n'est jamais affichée), cherche l'installation du
 serveur dédié dans **toutes** les bibliothèques Steam, annonce ce qu'il a
-trouvé, dépose et relit.
+trouvé, dépose et relit, puis enregistre dans Firestore la version de ce qu'il a déposé.
 
 Quand le serveur dédié n'est pas installé — c'est une application Steam
 distincte du client du jeu — il imprime la commande `steamcmd` exacte à lancer
 et attend, plutôt que d'échouer. Il ne peut pas la lancer lui-même : ces
 fichiers sont sous licence, et seul un compte qui possède le jeu les télécharge.
+
+La version est le `buildid` du manifeste que `steamcmd` écrit dans
+l'installation, `steamapps/appmanifest_<application>.acf`. L'outil refuse une
+installation sans manifeste, ou que son manifeste dit incomplète, et refuse de
+déposer quand l'enregistrement ne répond pas. `BEACON_FIREBASE_PROJECT` n'a
+aucune valeur par défaut, et l'identité est celle que
+`gcloud auth application-default login` a laissée sur le poste.
 
 Options, toutes facultatives : `--from=<dossier>` pour désigner l'installation à
 la main, `--steam-account=<nom>` quand la machine porte plusieurs comptes Steam,
@@ -35,7 +42,7 @@ npx nx run game-depot:push -- --game=sunkenland --from="<installation locale>"
 ```
 
 Pour un script qui a déjà résolu son dossier et exporté les cinq variables
-`BEACON_S3_*`.
+`BEACON_S3_*` et `BEACON_FIREBASE_PROJECT`.
 
 ## `game-depot:archive-key`
 

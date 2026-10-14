@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import type { Game } from '@beacon/session';
+import type { Game, GameVersion } from '@beacon/session';
+import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import { ADMIN_REMOTE, type AdminCredentials, adminCredentialsFrom, describeRemote } from '@beacon/admin-key';
 import { SERVER_BINARY, type PushGameFilesDeps, gameArchiveKeyFor } from './game-depot.js';
@@ -12,7 +13,7 @@ import {
   steamcmdCommandFor,
   suggestedInstallDir,
 } from './steam-install.js';
-import { copySteamAppOf } from './steam-manifest.js';
+import { copySteamAppOf, installedVersion } from './steam-manifest.js';
 
 /**
  * Four states rather than two, because the caller turns them into an exit code
@@ -21,7 +22,7 @@ import { copySteamAppOf } from './steam-manifest.js';
  * a task runner teaches him to ignore red.
  */
 export type GuidedUpdateOutcome =
-  /** The archive is in the bucket, and was read back. */
+  /** The archive is in the bucket, was read back, and its version is recorded. */
   | 'deposited'
   /** The server is not on this machine; the command to install it was handed over. */
   | 'not-installed'
@@ -34,15 +35,18 @@ export interface GuidedUpdatePorts {
   readonly game: Game;
   readonly bucketName: string;
   readonly steamRoot: string;
+  /** Where the version is recorded, worded for the operator. */
+  readonly recordDestination: string;
   /** An install folder named on the command line, which skips the search. */
   readonly installDir?: string;
   /** Overrides what `loginusers.vdf` says, on a machine with several accounts. */
   readonly steamAccount?: string;
   readonly files: LocalFiles;
+  readonly record: GameCopyRecord;
   readonly rcloneConfigDump: () => Promise<string>;
   readonly openBucket: (credentials: AdminCredentials) => ObjectApi;
   /** `pushGameFiles` itself. A port only so a test does not need 2.3 GB on disk. */
-  readonly pushArchive: (deps: PushGameFilesDeps) => Promise<void>;
+  readonly pushArchive: (deps: PushGameFilesDeps) => Promise<GameVersion>;
   /** Answers `false` when nobody is at the keyboard — a 2.3 GB upload is never assumed. */
   readonly ask: (question: string) => Promise<boolean>;
   readonly say: (line: string) => void;
@@ -110,9 +114,25 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
     say('        That is the game client or a half-copied folder, not the dedicated server.');
     return 'refused';
   }
+  const installed = installedVersion(ports.files.readText, installDir, copySteamAppOf(ports.game));
+  if ('refusal' in installed) {
+    say(`  STOP  ${installed.refusal}.`);
+    say('        Run this in another window to write the manifest in place, then this command again:');
+    say('');
+    say(`          ${steamcmdCommandFor({ installDir, account: steamAccountFor(ports), app: copySteamAppOf(ports.game) })}`);
+    return 'refused';
+  }
+  try {
+    await ports.record.reach(ports.game);
+  } catch (error) {
+    say(`  STOP  the record of the copy cannot be reached: ${error instanceof Error ? error.message : String(error)}`);
+    say('        BEACON_FIREBASE_PROJECT names the project, and gcloud auth application-default login the identity.');
+    return 'refused';
+  }
   const measure = ports.files.measure(installDir);
   say(`  ok    ${installDir}`);
-  say(`  ok    ${gigabytes(measure.sizeBytes)}, ${measure.fileCount} files, ${SERVER_BINARY} present`);
+  say(`  ok    ${gigabytes(measure.sizeBytes)}, ${measure.fileCount} files, ${SERVER_BINARY} present, build ${installed.version}`);
+  say(`  ok    the record of the copy answers, in ${ports.recordDestination}`);
   if (measure.sizeBytes > WEIGHT_THAT_IS_NO_LONGER_A_SERVER) {
     say('  !     that is far past the 2.3 GB a dedicated server weighs — this looks like');
     say('        the 8 GB game client. Check before answering below.');
@@ -125,7 +145,7 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
     return 'declined';
   }
   const bucket = ports.openBucket(credentials);
-  await ports.pushArchive({ api: bucket, game: ports.game, from: installDir });
+  const version = await ports.pushArchive({ api: bucket, record: ports.record, game: ports.game, from: installDir });
 
   // Read back rather than trust. `pushGameFiles` already compares the size it
   // deposited; this second look is what the operator gets to see, and it costs
@@ -135,6 +155,7 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
     throw new Error(`${key} is not in ${ports.bucketName} after a push that claimed success`);
   }
   say(`  ok    ${key} in ${ports.bucketName}, ${gigabytes(deposited.sizeBytes)}`);
+  say(`  ok    build ${version} recorded as the copy of ${ports.game}, in ${ports.recordDestination}`);
 
   say('');
   say('5. What this command did not do');
@@ -145,10 +166,14 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
   return 'deposited';
 }
 
+function steamAccountFor(ports: GuidedUpdatePorts): string {
+  return ports.steamAccount ?? discoverSteamAccount(ports.files, ports.steamRoot)?.name ?? '<your-steam-account>';
+}
+
 function sayHowToInstall(ports: GuidedUpdatePorts, libraries: readonly string[]): void {
   const { say } = ports;
   const discovered = discoverSteamAccount(ports.files, ports.steamRoot);
-  const account = ports.steamAccount ?? discovered?.name ?? '<your-steam-account>';
+  const account = steamAccountFor(ports);
 
   say(`  !     no folder under any Steam library holds ${SERVER_BINARY}.`);
   say('        The dedicated server is a Steam application of its own, separate from the');

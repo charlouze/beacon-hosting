@@ -1,9 +1,35 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeObjectApi, type ObjectApi, type ObjectSummary } from '@beacon/scaleway-storage';
+import type { GameCopyRecord } from '@beacon/session-record';
+import type { Game, GameVersion } from '@beacon/session';
 import { SERVER_BINARY, gameArchiveKeyFor, pushGameFiles } from './game-depot.js';
+
+const MANIFEST = `"AppState"
+{
+\t"appid"\t\t"2667530"
+\t"StateFlags"\t\t"4"
+\t"buildid"\t\t"25746735"
+}
+`;
+
+interface RecordDouble extends GameCopyRecord {
+  readonly recorded: { game: Game; version: GameVersion }[];
+}
+
+function recordDouble(options: { reach?: () => Promise<void>; recordDeposit?: () => Promise<void> } = {}): RecordDouble {
+  const recorded: { game: Game; version: GameVersion }[] = [];
+  return {
+    recorded,
+    reach: options.reach ?? (async () => undefined),
+    async recordDeposit(game, version) {
+      await options.recordDeposit?.();
+      recorded.push({ game, version });
+    },
+  };
+}
 
 let root: string;
 let sunkenlandInstall: string;
@@ -13,6 +39,8 @@ beforeEach(() => {
   sunkenlandInstall = join(root, 'install');
   mkdirSync(sunkenlandInstall);
   writeFileSync(join(sunkenlandInstall, 'Sunkenland-DedicatedServer.exe'), Buffer.alloc(1024, 7));
+  mkdirSync(join(sunkenlandInstall, 'steamapps'));
+  writeFileSync(join(sunkenlandInstall, 'steamapps', 'appmanifest_2667530.acf'), MANIFEST);
 });
 
 /** A double that accepts every deposit but lies about what it holds. */
@@ -58,7 +86,7 @@ describe('the server binary', () => {
 describe('pushing game files', () => {
   it('deposits the archive under the game archive key', async () => {
     const api = fakeObjectApi();
-    await pushGameFiles({ api, game: 'sunkenland', from: sunkenlandInstall });
+    await pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: sunkenlandInstall });
     expect(await api.list('sunkenland/game.tar')).toHaveLength(1);
   });
 
@@ -67,7 +95,7 @@ describe('pushing game files', () => {
   // request, and a network that drops makes an object shorter without saying so.
   it('reads back what it deposited, and refuses a size that disagrees', async () => {
     const api = apiThatUndersellsWhatItStored(fakeObjectApi());
-    await expect(pushGameFiles({ api, game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/size/);
+    await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/size/);
   });
 
   // Depositing 2.3 GB from the wrong folder costs a minute of transfer and an
@@ -77,8 +105,57 @@ describe('pushing game files', () => {
     const empty = join(root, 'empty');
     mkdirSync(empty);
     const api = fakeObjectApi();
-    await expect(pushGameFiles({ api, game: 'sunkenland', from: empty })).rejects.toThrow(
+    await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: empty })).rejects.toThrow(
       /Sunkenland-DedicatedServer\.exe/,
     );
+  });
+
+  it('records the version of what it deposited, once the deposit is read back', async () => {
+    const record = recordDouble();
+
+    expect(await pushGameFiles({ api: fakeObjectApi(), record, game: 'sunkenland', from: sunkenlandInstall })).toBe('25746735');
+    expect(record.recorded).toEqual([{ game: 'sunkenland', version: '25746735' }]);
+  });
+
+  it('records nothing when the deposit it reads back disagrees', async () => {
+    const record = recordDouble();
+    const api = apiThatUndersellsWhatItStored(fakeObjectApi());
+
+    await expect(pushGameFiles({ api, record, game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/size/);
+    expect(record.recorded).toEqual([]);
+  });
+
+  it('refuses an install whose version cannot be read, before building anything', async () => {
+    rmSync(join(sunkenlandInstall, 'steamapps'), { recursive: true });
+    const api = fakeObjectApi();
+
+    await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(
+      /appmanifest_2667530\.acf/,
+    );
+    expect(await api.list('sunkenland/')).toEqual([]);
+  });
+
+  it('refuses when the record cannot be reached, before building anything', async () => {
+    const api = fakeObjectApi();
+    const record = recordDouble({ reach: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
+
+    await expect(pushGameFiles({ api, record, game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/record/);
+    expect(await api.list('sunkenland/')).toEqual([]);
+  });
+
+  it('says the archive is deposited and its version is not, when recording fails after the deposit', async () => {
+    const api = fakeObjectApi();
+    const record = recordDouble({ recordDeposit: async () => Promise.reject(new Error('UNAVAILABLE')) });
+
+    await expect(pushGameFiles({ api, record, game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(
+      /deposited.*25746735.*not recorded.*again/s,
+    );
+    expect(await api.list('sunkenland/game.tar')).toHaveLength(1);
+  });
+
+  it('refuses a game that goes through no copy', async () => {
+    await expect(
+      pushGameFiles({ api: fakeObjectApi(), record: recordDouble(), game: 'enshrouded', from: sunkenlandInstall }),
+    ).rejects.toThrow(/no copy/);
   });
 });
