@@ -103,6 +103,13 @@ export function completedSetupsDocument(setups: readonly CompletedSetup[]): Reco
   };
 }
 
+export const GAME_COPIES = 'gameCopies';
+
+/** `gameCopies/{game}` — the copy Beacon keeps of one game, and what its publisher last published. */
+export function gameCopyDocPath(game: Game): string {
+  return `${GAME_COPIES}/${game}`;
+}
+
 /**
  * The field of `server/current` that marks an abandoned setup: whose it was,
  * and when. Only the Functions write it, in the write that changes the state.

@@ -1,5 +1,6 @@
 export * from './lib/completed-setups-record.js';
 export * from './lib/deployment-record.js';
+export * from './lib/game-copy-record.js';
 export * from './lib/fields.js';
 export * from './lib/save-records.js';
 export * from './lib/server-state.js';
