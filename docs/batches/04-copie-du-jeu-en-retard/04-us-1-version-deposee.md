@@ -1338,4 +1338,26 @@ Après la fusion, le commanditaire lance `BEACON_FIREBASE_PROJECT=<projet> npx n
 
 ## Rulings log
 
+Ruling: la liste des fichiers que `world-depot` n'éprouve pas, dans `tools/world-depot/README.md`, ne nomme plus `admin-firestore.ts` ni le refus sans `BEACON_FIREBASE_PROJECT` — le fichier quitte l'outil, et le README mentirait — si c'est faux, une ligne de documentation est à remettre.
+
+Ruling: trois tests existants de `guided-update.spec.ts` suivent le manifeste que la fixture porte désormais : le compte de fichiers passe de 2 à 3, et le manifeste apparaît avec le binaire quand le parcours reprend et dans la fixture du poids du client — sans lui, le parcours s'arrête au refus du manifeste avant ce que ces tests éprouvent — si c'est faux, un test éprouve moins qu'avant.
+
+Ruling: le refus d'une installation sans manifeste ne renvoie plus à une commande que l'outil imprimerait, et le parcours guidé imprime, après ce refus, la ligne `steamcmd` exacte qui réinstalle dans le dossier refusé — la revue de la branche relève que le texte du plan promettait une commande qu'aucun chemin n'imprime — si c'est faux, l'exploitant lit une ligne `steamcmd` de plus après un refus.
+
+Ruling: l'annonce de la version enregistrée dit où elle l'est : le projet, et l'émulateur quand `FIRESTORE_EMULATOR_HOST` est posé — le lot fait attendre cette annonce avant la story qui fait échouer la vérification préalable, et le SDK d'administration écrit sans rien dire dans l'émulateur quand la variable traîne sur le poste — si c'est faux, deux lignes de l'outil sont plus longues.
+
+Ruling: la destination de l'enregistrement se calcule dans `tools/game-depot`, depuis l'environnement, et non dans `libs/admin-firestore` — seul cet outil l'annonce — si c'est faux, la fonction déménage le jour où `world-depot` l'annonce aussi.
+
+Ruling: un test de `game-version.spec.ts` épingle, par `// @ts-expect-error`, qu'un littéral ne satisfait pas `GameVersion` — c'est la marque, et non le test du manifeste, qui tient « une `GameVersion` ne se construit que par la fonction de `libs/session` » — si c'est faux, un test de typage de plus.
+
+Technical design ruling: une installation est complète quand son manifeste porte exactement `StateFlags` `4`, et refusée pour toute autre valeur — le design dit « dont le manifeste dit l'installation incomplète » sans dire comment ; la sonde ne relève que 1026 pendant le téléchargement et 4 à la fin — si c'est faux, une installation complète dont Steam pose un autre bit est refusée, et `steamcmd +app_update … validate` la remet à 4.
+
+Technical design ruling: « l'enregistrement est joignable » se vérifie par une lecture de `gameCopies/{game}` — elle prouve le projet, l'identité et le réseau sans rien écrire avant le dépôt — si c'est faux, une identité qui lit sans pouvoir écrire passe la vérification, dépose, puis échoue à l'enregistrement en disant de relancer l'outil.
+
+Technical design ruling: le port d'enregistrement que `pushGameFiles` reçoit, `GameCopyRecord`, est déclaré par `libs/session-record`, qui l'implémente — comme `CompletedSetupStore`, et un outil ne peut pas être importé par un record — si c'est faux, l'interface déménage dans l'outil.
+
+Technical design ruling: le champ du catalogue s'appelle `copySteamApp` et vaut `null` pour un jeu qui ne passe par aucune copie — le design le veut propre à Steam et le disant, sans le nommer — si c'est faux, un renommage dans le catalogue et ses deux lecteurs.
+
+Technical design ruling: la bibliothèque qui porte `adminFirestore` est `libs/admin-firestore`, étiquetée `scope:adapter` comme `libs/admin-key` — le design dit « une bibliothèque que les deux outils importent » sans la nommer, et `scope:tool` ne dépend que d'adapters, du catalogue, du domaine et des records — si c'est faux, un déménagement de bibliothèque.
+
 ## Observed drift
