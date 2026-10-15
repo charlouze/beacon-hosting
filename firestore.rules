@@ -302,6 +302,15 @@ service cloud.firestore {
       allow read: if isMember();
     }
 
+    // The copy Beacon keeps of each game, and the version its publisher last
+    // published: public versions and instants, nothing of a world. Every user
+    // reads them — the screen of a world out of service says from them whether
+    // its game waits for its copy — and no client writes them: the deposit
+    // tool and the Functions write through the Admin SDK.
+    match /gameCopies/{game} {
+      allow read: if isMember();
+    }
+
     // §4: the two fields of `config/settings` the deployment stamps at every
     // merge. The writer is the Admin SDK, which is above the rules, so all this
     // has to do is subtract the keys from the ones a client can affect.
