@@ -1220,4 +1220,42 @@ git commit -m "feat(web): montre la vérification préalable avant les quatre é
 
 ## Rulings log
 
+Ruling: les tests contre l'émulateur de `provisioning.spec.ts` montent des objets de dépendances neufs, étalés depuis `fakeDeps()` avec les vrais magasins, au lieu d'assigner `live.states` comme le plan l'écrit — les champs de `ProvisionDeps` sont en lecture seule — si c'est faux, une aide de test se lit autrement, sans rien changer au comportement.
+
+Ruling: `sessionIn` et `SESSION_ID` sont écrits dans `session-aggregate.spec.ts`, qui n'en avait pas — le plan le permettait — si c'est faux, une aide de test à renommer.
+
+Ruling: les tests existants de `begin` dans `setup-record.spec.ts` et `client-session.spec.ts` appellent `begin` pendant que le monde tient la session en préparation, puis font avancer le monde — `begin` n'écrit plus rien sinon, et ces tests auraient échoué ou n'auraient plus rien éprouvé — si c'est faux, une mise en place de test plus longue.
+
+Ruling: le test « releases the claim » sème son second `server/current` par fusion — `seedServer` réécrit tout le document, ce qui effacerait la revendication et ferait passer le test pour une mauvaise raison — sans coût.
+
+Ruling: le `describe` contre l'émulateur de `provisioning.spec.ts` est au premier niveau du fichier — il couvre la mise en place et la fermeture — si c'est faux, un bloc à déplacer.
+
+Ruling: le semis de `server/current` de ces tests porte `startedBy`, `startedAt` et `deadline` — `readSession` rend null sans eux, et une session fermée après sa revendication resterait en fermeture — si c'est faux, deux champs semés de trop.
+
+Ruling: la surveillance ne range une session dans la fin sans serveur que si son enregistrement se lit encore comme une session en fermeture — sinon `reconcileWorld` ne peut pas la terminer, et elle resterait en fermeture pour toujours ; elle est détruite comme aujourd'hui — si c'est faux, une fermeture idempotente chez l'hébergeur.
+
+Ruling: les specs de `client-session` et le commentaire de `ServerView.setup` dans `libs/session-record` suivent la nouvelle forme de `ShownSetup` dans le commit de l'écran — sans eux, `session-record` ne passe plus — si c'est faux, deux fichiers de test et un commentaire à déplacer dans un autre commit.
+
+Ruling: sur téléphone, `Preflight check` prend 40 px, la taille de la maquette ; sur grand écran, il garde les 52 px du nom d'une étape — la maquette ne dessine que 390 px ; l'écran a été comparé à 390 et 1440 px sur l'émulateur — si c'est faux, une taille à retoucher.
+
+Ruling: une règle de grille propre au téléphone place `Before the first step`, `Preflight check` et l'heure — sur téléphone le bloc de l'étape se défait dans la grille, et le gabarit du plan aurait jeté ces lignes dans des pistes implicites — si c'est faux, la mise en page seule.
+
+Ruling: `screenFixture` traite `preflight` et `preparing` dans une seule branche, sous un seul commentaire — deux commentaires sur une branche partagée se liraient mal — si c'est faux, un commentaire à scinder.
+
+Ruling: le jeu d'écran `live` de l'émulateur porte une revendication — une session qui a un serveur est toujours revendiquée, et le déclencheur termine désormais une fermeture sans revendication — si c'est faux, une date de plus dans un jeu de développement.
+
+Ruling: la surveillance écrit la fin sans serveur par `applyIf`, à condition que la session soit toujours la même et toujours en fermeture — deux passes qui se chevauchent journalisaient sinon deux `SessionStopped` ; les autres corrections de la surveillance gardent `apply` et ce chevauchement, qu'aucune story ne leur a encore fait rencontrer — si c'est faux, une transaction de plus par fin sans serveur.
+
+Ruling: la fin sans serveur efface `lastError` par un champ `clearLastError` de `StateCorrection`, et la spec précise que la réponse de l'hébergeur est celle de la dernière session qui a échoué — sinon l'écran hors service redisait la réponse de l'ouverture d'avant après une fermeture avant revendication ; effacer à l'ouverture, depuis le navigateur, aurait donné au client l'écriture de deux constats dans les règles — si c'est faux, un champ de plus à chaque correction.
+
+Technical design ruling: la remise hors service d'une session fermée passe par `ServerStateStore.applyIf`, une méthode à côté de `apply`, et non par `apply` rendu conditionnel — changer la signature de `apply` aurait cassé tous les faux magasins des tests, et `apply` garde son écriture pour l'abandon et les autres corrections de la surveillance — si c'est faux, deux méthodes au lieu d'une sur le magasin.
+
+Technical design ruling: le déclencheur termine une session en fermeture sur la seule absence de revendication, vérifiée dans la transaction, sans lire l'étape gardée — une étape n'est gardée qu'après une revendication — si c'est faux, une lecture à ajouter.
+
+Technical design ruling: la surveillance ne termine sans fermeture une session en fermeture, passé son délai, que si aucune étape n'est gardée pour elle, que l'hébergeur ne liste rien pour elle et qu'aucune intention de provisionnement n'est ouverte pour elle — le design ne dit que l'étape ; un document de mise en place illisible se lit comme « aucune étape », et l'intention, ouverte seulement après la première étape gardée, prouve qu'un serveur a été demandé — si c'est faux, une fermeture idempotente et un `SessionStopped` chiffré là où rien n'était dû.
+
+Technical design ruling: la décision de la surveillance porte une troisième liste, `endWithoutServer`, à côté de `destroy` et `expired`, que `reconcileWorld` reçoit en cinquième argument — le design ne dit pas comment la surveillance décide de cette fin, et cette forme suit celle qu'avait déjà la liste des sessions expirées — si c'est faux, une signature à reprendre.
+
 ## Observed drift
+
+Aucune.
