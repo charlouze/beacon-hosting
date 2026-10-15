@@ -48,6 +48,10 @@ export const onServerStateChange = onDocumentWritten(
     region: 'europe-west1',
     secrets: [SCW_SECRET_KEY, SERVER_PASSWORD, S3_SECRET_KEY],
     timeoutSeconds: 540,
+    // Measured at 165 MB RSS locally once steam-user is loaded, against the 256 MiB
+    // default: running out of memory during the preflight check would leave the
+    // session preparing until the abandon delay.
+    memory: '512MiB',
     // One at a time, whatever the number of worlds writing at once (§13). Two
     // deliveries racing on the same world is what the transactional claim
     // answers; two *worlds* provisioning the same second only serialises them

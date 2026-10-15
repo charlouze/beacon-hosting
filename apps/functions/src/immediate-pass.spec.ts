@@ -5,6 +5,7 @@ import { FakeBlockApi, FakeInstanceApi, ScalewayServerHost } from '@beacon/scale
 import { DEFAULT_LIMITS, World, type ServerHost, type Session } from '@beacon/session';
 import {
   adminWorldRecord,
+  gameCopyStore,
   serverDocPath,
   sessionFrom,
   settingsStore,
@@ -149,6 +150,13 @@ const provisionDeps = (db: Firestore, host: ServerHost): ProvisionDeps => ({
     secretKey: 'probe',
   }),
   journal: { failure: () => undefined, setupChanged: () => undefined, discarded: () => undefined },
+  // The world's game goes through no copy: nothing here may reach a publisher.
+  publisher: {
+    publishedVersion: async () => {
+      throw new Error('no publisher is asked for a game that goes through no copy');
+    },
+  },
+  gameCopies: gameCopyStore(db),
 });
 
 const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({

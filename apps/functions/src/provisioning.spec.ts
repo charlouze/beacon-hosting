@@ -1,8 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Deadline, DEFAULT_SETTINGS, endedWithoutServer, Game, Session, World } from '@beacon/session';
+import {
+  Deadline,
+  DEFAULT_SETTINGS,
+  endedWithoutServer,
+  Game,
+  gameVersionFrom,
+  Session,
+  World,
+  type GameCopy,
+  type GameVersion,
+  type PublishedVersion,
+} from '@beacon/session';
 import {
   adminWorldRecord,
+  gameCopyDocPath,
+  gameCopyRecord,
+  gameCopyStore,
   idleServerDocument,
   serverDocPath,
   setupStores,
@@ -15,6 +29,14 @@ import { runStateChange, type ProvisionDeps } from './provisioning.js';
 
 const NOW = new Date('2026-09-06T20:00:00Z');
 const WORLD_ID = 'les-copains';
+
+const version = (digits: string): GameVersion => {
+  const built = gameVersionFrom(digits);
+  if (built === null) throw new Error(`not a version: ${digits}`);
+  return built;
+};
+const PUBLISHED = version('25746735');
+const BEHIND = version('25700000');
 
 const provisioningSession = (sessionId: string, worldId: string, game: Game) =>
   Session.from({
@@ -111,6 +133,13 @@ const fakeDeps = (options: FakeDepsOptions = {}): ProvisionDeps => {
       create: vi.fn(async () => undefined),
     },
     journal: { failure: vi.fn(), setupChanged: vi.fn(), discarded: vi.fn() },
+    publisher: {
+      publishedVersion: vi.fn(async (): Promise<PublishedVersion> => ({ readable: true, version: PUBLISHED })),
+    },
+    gameCopies: {
+      read: vi.fn(async (): Promise<GameCopy | null> => ({ version: PUBLISHED, depositedAt: NOW })),
+      recordPublished: vi.fn(async () => undefined),
+    },
   };
 };
 
@@ -548,6 +577,129 @@ describe('provisioning', () => {
   });
 });
 
+describe('the preflight check', () => {
+  const failingWith = async (outcome: Partial<Pick<ProvisionDeps, 'publisher' | 'gameCopies'>>) => {
+    const failing: ProvisionDeps = { ...deps, ...outcome };
+    vi.mocked(failing.states.for(WORLD_ID).applyIf).mockResolvedValue(true);
+    await runStateChange(failing, WORLD_ID, provisioningSunkenland());
+    return failing;
+  };
+
+  const expectNothingAsked = (asked: ProvisionDeps) => {
+    expect(asked.setups.for(WORLD_ID).begin).not.toHaveBeenCalled();
+    expect(asked.tokens.issue).not.toHaveBeenCalled();
+    expect(asked.ledger.open).not.toHaveBeenCalled();
+    expect(asked.host.open).not.toHaveBeenCalled();
+    expect(asked.host.close).not.toHaveBeenCalled();
+  };
+
+  it('reads nothing for a game that goes through no copy', async () => {
+    await runStateChange(deps, WORLD_ID, provisioning());
+
+    expect(deps.publisher.publishedVersion).not.toHaveBeenCalled();
+    expect(deps.gameCopies.read).not.toHaveBeenCalled();
+    expect(deps.host.open).toHaveBeenCalledOnce();
+  });
+
+  it('reads nothing when another delivery already claimed the session', async () => {
+    vi.mocked(deps.states.for(WORLD_ID).claimProvisioning).mockResolvedValue(false);
+
+    await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+    expect(deps.publisher.publishedVersion).not.toHaveBeenCalled();
+  });
+
+  it('keeps the first step and opens when the copy is at the published version, and records what it read', async () => {
+    await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+    expect(deps.publisher.publishedVersion).toHaveBeenCalledWith('sunkenland');
+    expect(deps.gameCopies.recordPublished).toHaveBeenCalledWith('sunkenland', PUBLISHED);
+    expect(deps.setups.for(WORLD_ID).begin).toHaveBeenCalledOnce();
+    expect(deps.host.open).toHaveBeenCalledOnce();
+  });
+
+  it('abandons with the cause, and asks nothing of anyone, when the copy is behind', async () => {
+    const failing = await failingWith({
+      gameCopies: { ...deps.gameCopies, read: vi.fn(async () => ({ version: BEHIND, depositedAt: NOW })) },
+    });
+
+    expect(failing.states.for(WORLD_ID).applyIf).toHaveBeenCalledWith(
+      { sessionId: 's1', state: 'PROVISIONING' },
+      expect.objectContaining({ state: 'IDLE', abandonedSetup: { sessionId: 's1', cause: 'copy-behind' } }),
+      NOW,
+    );
+    expectNothingAsked(failing);
+  });
+
+  it('abandons for a copy behind when no copy is recorded', async () => {
+    const failing = await failingWith({
+      gameCopies: { ...deps.gameCopies, read: vi.fn(async () => null) },
+    });
+
+    expect(failing.states.for(WORLD_ID).applyIf).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ abandonedSetup: { sessionId: 's1', cause: 'copy-behind' } }),
+      NOW,
+    );
+    expectNothingAsked(failing);
+  });
+
+  it('abandons for an unreadable version, journals why, and reads no copy', async () => {
+    const failing = await failingWith({
+      publisher: {
+        publishedVersion: vi.fn(async (): Promise<PublishedVersion> => ({
+          readable: false,
+          cause: 'no answer from Steam within 10000 ms',
+        })),
+      },
+    });
+
+    expect(failing.states.for(WORLD_ID).applyIf).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ abandonedSetup: { sessionId: 's1', cause: 'version-unreadable' } }),
+      NOW,
+    );
+    expect(failing.journal.failure).toHaveBeenCalledWith({
+      source: 'provisioning.preflight',
+      sessionId: 's1',
+      error: 'no answer from Steam within 10000 ms',
+    });
+    expect(failing.gameCopies.read).not.toHaveBeenCalled();
+    expect(failing.gameCopies.recordPublished).not.toHaveBeenCalled();
+    expectNothingAsked(failing);
+  });
+
+  it('lets the check decide when recording what it read fails, and journals why', async () => {
+    vi.mocked(deps.gameCopies.recordPublished).mockRejectedValue(new Error('firestore is down'));
+
+    await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+    expect(deps.journal.failure).toHaveBeenCalledWith({
+      source: 'provisioning.recordPublished',
+      sessionId: 's1',
+      error: 'Error: firestore is down',
+    });
+    expect(deps.host.open).toHaveBeenCalledOnce();
+  });
+
+  it('treats a copy that cannot be read as an ordinary refusal', async () => {
+    vi.mocked(deps.gameCopies.read).mockRejectedValue(new Error('firestore is down'));
+
+    await runStateChange(deps, WORLD_ID, provisioningSunkenland());
+
+    expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'IDLE',
+        lastError: 'Error: firestore is down',
+        abandonedSetup: { sessionId: 's1', cause: null },
+      }),
+      NOW,
+    );
+    expect(deps.host.open).not.toHaveBeenCalled();
+    expect(deps.setups.for(WORLD_ID).begin).not.toHaveBeenCalled();
+  });
+});
+
 describe('stopping', () => {
   // Closed before the Function claimed it: nothing was asked of anyone.
   it('ends a session that was never claimed, without a server', async () => {
@@ -694,6 +846,190 @@ describe('against the emulator', () => {
 
     expect(await runStateChange(live, WORLD_ID, stopping())).toBe(false);
     expect((await db.doc(serverDocPath(WORLD_ID)).get()).data()?.['state']).toBe('STOPPING');
+  });
+
+  describe('for a game that goes through a copy', () => {
+    const sunkenlandWorld = (): World =>
+      World.from({ worldId: WORLD_ID, game: 'sunkenland', name: 'Les copains', inviteCode: 'c', players: ['u1'] });
+
+    const copies = () => db.doc(gameCopyDocPath('sunkenland'));
+
+    const eventsOf = async (type: string) =>
+      (
+        await db
+          .collection('events')
+          .where('worldId', '==', WORLD_ID)
+          .where('sessionId', '==', 's1')
+          .where('type', '==', type)
+          .get()
+      ).docs;
+
+    const closeMeanwhile = () => db.doc(serverDocPath(WORLD_ID)).update({ state: 'STOPPING' });
+
+    const answering = (answer: PublishedVersion, before: () => Promise<unknown> = async () => undefined) => ({
+      publishedVersion: vi.fn(async () => {
+        await before();
+        return answer;
+      }),
+    });
+
+    let copy: ProvisionDeps;
+
+    beforeEach(async () => {
+      await clearWorld();
+      await copies().delete();
+      await adminWorldRecord(db).create(sunkenlandWorld(), NOW);
+      await seedServer({
+        state: 'PROVISIONING',
+        sessionId: 's1',
+        startedBy: 'u1',
+        startedAt: NOW,
+        deadline: new Date('2026-09-07T00:00:00Z'),
+      });
+      await gameCopyRecord(db).recordDeposit('sunkenland', PUBLISHED);
+      copy = {
+        ...live,
+        worlds: { ...live.worlds, read: vi.fn(async () => sunkenlandWorld()) },
+        gameCopies: gameCopyStore(db),
+        publisher: answering({ readable: true, version: PUBLISHED }),
+      };
+    });
+
+    afterEach(async () => {
+      await copies().delete();
+    });
+
+    const expectAbandonedFor = async (cause: string) => {
+      const server = (await db.doc(serverDocPath(WORLD_ID)).get()).data() ?? {};
+      expect(server['state']).toBe('IDLE');
+      expect(server['provisionClaimedAt']).toBeNull();
+      expect(server['lastError'] ?? null).toBeNull();
+      expect(server['abandonedSetup']).toEqual(expect.objectContaining({ sessionId: 's1', cause }));
+      expect(await eventsOf('ProvisioningFailed')).toHaveLength(1);
+      expect(copy.host.open).not.toHaveBeenCalled();
+      expect(copy.host.close).not.toHaveBeenCalled();
+      expect(copy.tokens.issue).not.toHaveBeenCalled();
+      expect(copy.ledger.open).not.toHaveBeenCalled();
+      expect(await setupStores(db).for(WORLD_ID).read()).toBeNull();
+    };
+
+    const expectEndedWithoutServer = async () => {
+      const server = (await db.doc(serverDocPath(WORLD_ID)).get()).data() ?? {};
+      expect(server['state']).toBe('IDLE');
+      expect(server['abandonedSetup'] ?? null).toBeNull();
+      expect(server['lastError'] ?? null).toBeNull();
+      expect(await eventsOf('SessionStopped')).toHaveLength(1);
+      expect(await eventsOf('ProvisioningFailed')).toHaveLength(0);
+      expect(copy.host.open).not.toHaveBeenCalled();
+    };
+
+    it('opens when the copy is at the published version, and records what it read', async () => {
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      expect(copy.host.open).toHaveBeenCalledOnce();
+      const recorded = (await copies().get()).data() ?? {};
+      expect(recorded['publishedVersion']).toBe(PUBLISHED);
+      expect(recorded['publishedReadAt']).toBeDefined();
+    });
+
+    it('abandons for a copy behind, without the host', async () => {
+      await gameCopyRecord(db).recordDeposit('sunkenland', BEHIND);
+
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      await expectAbandonedFor('copy-behind');
+    });
+
+    it('abandons for a copy behind when no deposit is recorded', async () => {
+      await copies().delete();
+
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      await expectAbandonedFor('copy-behind');
+    });
+
+    it('abandons for an unreadable version, without the host', async () => {
+      copy = { ...copy, publisher: answering({ readable: false, cause: 'no answer' }) };
+
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      await expectAbandonedFor('version-unreadable');
+    });
+
+    it('lets the check decide when recording what it read fails', async () => {
+      const real = gameCopyStore(db);
+      copy = {
+        ...copy,
+        gameCopies: { read: real.read, recordPublished: vi.fn(async () => Promise.reject(new Error('down'))) },
+      };
+
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      expect(copy.host.open).toHaveBeenCalledOnce();
+    });
+
+    it('lets an opening claim after an abandon at the preflight check', async () => {
+      await gameCopyRecord(db).recordDeposit('sunkenland', BEHIND);
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      await db.doc(serverDocPath(WORLD_ID)).update({ state: 'PROVISIONING', sessionId: 's2' });
+
+      expect(await worldStateStores(db).for(WORLD_ID).claimProvisioning('s2', NOW)).toBe(true);
+    });
+
+    describe('closed during its preflight check', () => {
+      it('ends without a server when the check passes', async () => {
+        copy = { ...copy, publisher: answering({ readable: true, version: PUBLISHED }, closeMeanwhile) };
+
+        await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+        await expectEndedWithoutServer();
+      });
+
+      // The write of the abandon finds the session closing, and leaves it to end.
+      it('ends without a server, and without the mark, when the check fails', async () => {
+        copy = { ...copy, publisher: answering({ readable: false, cause: 'no answer' }, closeMeanwhile) };
+
+        await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+        await expectEndedWithoutServer();
+      });
+
+      it('ends without a server, and without an error, when the check ends on an ordinary refusal', async () => {
+        copy = {
+          ...copy,
+          gameCopies: {
+            read: vi.fn(async () => {
+              await closeMeanwhile();
+              throw new Error('firestore is down');
+            }),
+            recordPublished: vi.fn(async () => undefined),
+          },
+        };
+
+        await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+        await expectEndedWithoutServer();
+      });
+    });
+
+    it('treats a copy that cannot be read as an ordinary refusal', async () => {
+      copy = {
+        ...copy,
+        gameCopies: {
+          read: vi.fn(async () => Promise.reject(new Error('firestore is down'))),
+          recordPublished: vi.fn(async () => undefined),
+        },
+      };
+
+      await runStateChange(copy, WORLD_ID, provisioningSunkenland());
+
+      const server = (await db.doc(serverDocPath(WORLD_ID)).get()).data() ?? {};
+      expect(server['state']).toBe('IDLE');
+      expect(server['lastError']).toBe('Error: firestore is down');
+      expect(server['abandonedSetup']).toEqual(expect.objectContaining({ sessionId: 's1', cause: null }));
+      expect(copy.host.open).not.toHaveBeenCalled();
+    });
   });
 });
 

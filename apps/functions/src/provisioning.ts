@@ -2,9 +2,13 @@ import { catalogFor, renderCloudInit, type SaveAccess } from '@beacon/cloud-init
 import { newAgentToken } from '@beacon/agent-protocol';
 import type { AdminMembershipRecord } from '@beacon/membership-record/admin';
 import {
+  abandonedAtPreflight,
   endedWithoutServer,
+  preflightOutcome,
   type Clock,
   type Game,
+  type GamePublisher,
+  type PreflightOutcome,
   type ServerHost,
   type Session,
   type SessionId,
@@ -12,6 +16,7 @@ import {
 } from '@beacon/session';
 import type {
   AdminWorldRecord,
+  GameCopyStore,
   SettingsStore,
   SetupStores,
   WorldStateStores,
@@ -21,6 +26,7 @@ import type { AgentTokens } from './agent-tokens.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import { expunged, type PlatformJournal } from './platform-journal.js';
 import { abandonSetup } from './abandon-setup.js';
+import { readPublished } from './published-version.js';
 
 export interface ProvisionDeps {
   readonly clock: Clock;
@@ -46,6 +52,10 @@ export interface ProvisionDeps {
   /** From Secret Manager. It never leaves this process except in a cloud-init. */
   readonly saveKeys: () => SaveAccess;
   readonly journal: PlatformJournal;
+  /** Asks a game's publisher which version it publishes (§ Opening a session). */
+  readonly publisher: GamePublisher;
+  /** `gameCopies/{game}`: the copy the last deposit put in place, and where the read version is recorded. */
+  readonly gameCopies: GameCopyStore;
 }
 
 /**
@@ -83,8 +93,29 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
   const claimed = await state.claimProvisioning(sessionId, now);
   if (!claimed) return false;
 
-  // The preflight check. It always passes for now, and the first step kept is
-  // its end: no step, no token, no intent, no server.
+  // The preflight check. Nothing is created before it ends, and every write of
+  // state that follows it holds only for this session, still preparing.
+  let checked: PreflightOutcome;
+  try {
+    checked = await preflightCheck(deps, sessionId, game);
+  } catch (cause) {
+    // A copy that cannot be read is an ordinary refusal, not a failed check.
+    await failed(deps, worldId, sessionId, now, cause);
+    await endIfClosed(deps, worldId, sessionId);
+    return true;
+  }
+  if (!checked.passed) {
+    const abandoned = await state.applyIf(
+      { sessionId, state: 'PROVISIONING' },
+      abandonedAtPreflight(session, checked.failure),
+      deps.clock.now(),
+    );
+    if (!abandoned) await endIfClosed(deps, worldId, sessionId);
+    return true;
+  }
+
+  // The first step kept is the end of the check: no step, no token, no
+  // intent, no server.
   const begun = await beginSetup(deps, worldId, sessionId, game);
   if (begun === 'failed') return false;
   if (begun === 'refused') return endIfClosed(deps, worldId, sessionId);
@@ -141,6 +172,31 @@ async function provision(deps: ProvisionDeps, worldId: WorldId, session: Session
   // §5: the intent carries the two ids **and** the address.
   await deps.ledger.record(sessionId, { ...opened.references, ip: opened.address });
   return true;
+}
+
+/**
+ * Reads nothing for a game that goes through no copy. Otherwise reads and
+ * records the published version, then the copy when that version is
+ * readable: the decision does not depend on the copy otherwise. Rejects when
+ * the copy cannot be read.
+ */
+async function preflightCheck(
+  deps: ProvisionDeps,
+  sessionId: SessionId,
+  game: Game,
+): Promise<PreflightOutcome> {
+  if (catalogFor(game).copySteamApp === null) return preflightOutcome({ throughCopy: false });
+
+  const { published, recordError } = await readPublished(deps, game);
+  if (!published.readable) {
+    deps.journal.failure({ source: 'provisioning.preflight', sessionId, error: published.cause });
+  }
+  if (recordError !== null) {
+    deps.journal.failure({ source: 'provisioning.recordPublished', sessionId, error: recordError });
+  }
+
+  const copy = published.readable ? await deps.gameCopies.read(game) : null;
+  return preflightOutcome({ throughCopy: true, published, copy });
 }
 
 /**
