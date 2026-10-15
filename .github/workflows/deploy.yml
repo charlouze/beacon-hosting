@@ -96,7 +96,7 @@ jobs:
       # It comes before the stamp, not after: `rules-stamp:test` reads
       # `rules-version.ts` off the disk and pins it to the 'dev' the repository
       # holds. Stamping first turns this barrier red on every single merge.
-      - run: npx nx run-many -t lint test build typecheck --all
+      - run: npx nx run-many -t lint test build typecheck bundle-check --all
 
       # The bundle carries the value (§4), so the stamp lands between the
       # barrier and the build that reads it. 'dev' never matches a deployed

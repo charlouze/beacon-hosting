@@ -92,6 +92,16 @@
         "options": {
           "buildTarget": "build"
         }
+      },
+      "bundle-check": {
+        "dependsOn": [
+          "prune-lockfile"
+        ],
+        "cache": false,
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "node apps/functions/bundle-check.mjs"
+        }
       }
     },
     "tags": [
