@@ -18,6 +18,9 @@ const PREFLIGHT_ADVICE: Record<PreflightFailure, string> = {
     'We couldn’t find out which version of the game is current, and nothing starts without knowing. Press again in a few minutes; if it stops here twice, tell whoever runs this.',
 };
 
+/** Why nothing opens while the game waits for its copy to be replaced. */
+const COPY_AWAITED = 'The game had an update that the copy here doesn’t have yet';
+
 /**
  * The screen most often seen, and the one a start that failed comes back to.
  * A creation the provider refuses, or a setup that is abandoned, is cleaned up
@@ -28,7 +31,9 @@ const PREFLIGHT_ADVICE: Record<PreflightFailure, string> = {
  * Where the setup stopped is a step and an hour, and nothing a game server
  * wrote. What the host said is quoted only when the host said something.
  * After an abandon at the preflight check, the warning line says why when the
- * mark says it, and the text above says what to do about it.
+ * mark says it, and the text above says what to do about it. While the game
+ * waits for its copy to be replaced, the foot says what it waits for in place
+ * of the button.
  */
 @Component({
   selector: 'beacon-out-of-service',
@@ -38,32 +43,31 @@ const PREFLIGHT_ADVICE: Record<PreflightFailure, string> = {
     <div class="mid">
       <div class="empty">
         <div>
-          @if (stopped()) {
+          @if (didNotStart()) {
             <div class="big sm">It didn’t start.</div>
             <div class="sub">
               Nothing was left running, and nothing is costing anything. {{ advice() }}
             </div>
-          } @else if (refusal() !== null) {
-            <div class="big sm">It didn’t start.</div>
-            <div class="sub">
-              Nothing was left running, and nothing is costing anything. Press again — a refusal
-              one minute is usually gone the next.
-            </div>
+          } @else if (awaits()) {
+            <div class="big">Nothing is running.</div>
+            <div class="sub">{{ copyAwaited }}, and nothing opens on an old copy. Tell whoever runs this.</div>
           } @else {
             <div class="big">Nothing is running.</div>
             <div class="sub">It closed itself, which is the whole idea.</div>
           }
         </div>
-        <div class="plate">
-          <div class="line">
-            <span class="k">Next session</span>
-            <span class="v">{{ duration() }} · until {{ until() }}</span>
+        @if (!awaits()) {
+          <div class="plate">
+            <div class="line">
+              <span class="k">Next session</span>
+              <span class="v">{{ duration() }} · until {{ until() }}</span>
+            </div>
+            <div class="line">
+              <span class="k">Estimated cost</span>
+              <span class="v">{{ cost() }}</span>
+            </div>
           </div>
-          <div class="line">
-            <span class="k">Estimated cost</span>
-            <span class="v">{{ cost() }}</span>
-          </div>
-        </div>
+        }
       </div>
 
       @if (stopped(); as stopped) {
@@ -90,12 +94,20 @@ const PREFLIGHT_ADVICE: Record<PreflightFailure, string> = {
     <div class="foot">
       <div class="money"></div>
       <div class="btncol">
-        <div class="acts">
-          <button type="button" class="btn xl" data-action="open" (click)="opened.emit()">
-            {{ didNotStart() ? 'Try again' : 'Open the service' }}
-          </button>
-        </div>
-        <div class="hint">We’ll tell you the exact time once it’s on its way.</div>
+        @if (awaits()) {
+          <div class="call" data-field="copy-awaited">
+            <span class="k">Waiting for</span>
+            <span class="at">A new copy of the game</span>
+            <span class="said">Opening comes back here as soon as it’s in place.</span>
+          </div>
+        } @else {
+          <div class="acts">
+            <button type="button" class="btn xl" data-action="open" (click)="opened.emit()">
+              {{ didNotStart() ? 'Try again' : 'Open the service' }}
+            </button>
+          </div>
+          <div class="hint">We’ll tell you the exact time once it’s on its way.</div>
+        }
       </div>
     </div>
   `,
@@ -109,14 +121,19 @@ export class OutOfServiceComponent {
 
   private readonly clock = inject(CLOCK);
 
+  readonly copyAwaited = COPY_AWAITED;
+
+  readonly awaits = computed(() => this.view().awaitsCopyReplacement);
+
   readonly refusal = computed(() => this.view().facts.lastError);
 
   readonly stopped = computed(() => stoppedAt(this.view().setup));
 
   /** What follows `Nothing was left running, and nothing is costing anything.` after an abandon. */
   readonly advice = computed(() => {
+    if (this.awaits()) return `${COPY_AWAITED}. Tell whoever runs this.`;
     const stopped = this.stopped();
-    if (stopped === null) return '';
+    if (stopped === null) return 'Press again — a refusal one minute is usually gone the next.';
     if (stopped.stage === 'preflight' && stopped.failure !== null) return PREFLIGHT_ADVICE[stopped.failure];
     return `Press again; if it stops at the same ${stopped.stage === 'step' ? 'step' : 'place'} twice, tell whoever runs this.`;
   });

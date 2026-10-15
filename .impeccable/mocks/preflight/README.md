@@ -42,3 +42,14 @@ pas du nom que le code porte, `preflight` : le glossaire n'a pas à l'afficher.
 Les deux textes commencent par `Nothing was left running, and nothing is
 costing anything.`, comme tout abandon. Le bouton `Try again` reste : c'est
 l'annonce avant l'ouverture qui le retire.
+
+## L'attente d'un remplacement — story 4 du lot 04
+
+| Question | Décision | Ce qui a été écarté |
+|---|---|---|
+| Où l'écran dit que le jeu attend que sa copie soit remplacée | **W2** : plus de bouton ; le pied porte une ligne annoncée, comme `Extension call` en service : `Waiting for`, puis `A new copy of the game`, puis `Opening comes back here as soon as it’s in place.` La plaque de la prochaine session disparaît | **W1**, le bouton éteint avec sa raison dessous, qui se voit encore à la place où l'on ouvre ; **W3**, l'attente en titre, qui retire au titre l'état du monde |
+| Le texte sous le titre, l'attente seule | `Nothing is running.` reste. Dessous : `The game had an update that the copy here doesn’t have yet, and nothing opens on an old copy. Tell whoever runs this.` | `It closed itself, which is the whole idea.`, qui ne dit pas pourquoi rien ne s'ouvre |
+| Après un abandon pour une copie en retard | Le cadre C1, sans `Try again`, et la même ligne au pied. Le texte sous `It didn’t start.` perd `pressing again won’t help until they replace it` : `Nothing was left running, and nothing is costing anything. The game had an update that the copy here doesn’t have yet. Tell whoever runs this.` | |
+
+La ligne de C1 pour une copie en retard sans attente reste celle de la story 3 :
+elle ne se voit plus que quand une lecture plus récente a rendu le bouton.

@@ -6,7 +6,9 @@ import { OutOfServiceComponent } from './out-of-service.component';
 describe('OutOfServiceComponent', () => {
   const clock = { now: () => new Date('2026-09-12T20:14:00') };
 
-  const render = async (lastError: string | null = null, setup: ShownSetup | null = null) => {
+  const render = async (lastError: string | null = null, setup: ShownSetup | null = null,
+    awaitsCopyReplacement = false,
+  ) => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [{ provide: CLOCK, useValue: clock }] });
     const fixture = TestBed.createComponent(OutOfServiceComponent);
@@ -15,7 +17,8 @@ describe('OutOfServiceComponent', () => {
       facts: { ip: null, joinInfo: null, lastError },
       stateSince: null,
       setup,
-      readyWindow: null, awaitsCopyReplacement: false,
+      readyWindow: null,
+      awaitsCopyReplacement,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
@@ -61,6 +64,7 @@ describe('OutOfServiceComponent', () => {
       const text = (await render(REFUSAL)).nativeElement.textContent;
       expect(text).toContain('didn’t start');
       expect(text).toContain(REFUSAL);
+      expect(text).toContain('Press again — a refusal one minute is usually gone the next.');
     });
 
     /** §8: nothing was left running, and the button is clickable at once. */
@@ -204,5 +208,60 @@ describe('OutOfServiceComponent', () => {
         expect(button.disabled).toBe(false);
       }
     });
+  });
+
+  describe('while the game waits for its copy to be replaced', () => {
+    const PREFLIGHT_BEHIND: ShownSetup = {
+      stage: 'preflight',
+      since: new Date('2026-09-12T20:13:00'),
+      abandonedAt: new Date('2026-09-12T20:14:00'),
+      failure: 'copy-behind',
+    };
+
+    it('says so in place of offering to open', async () => {
+      const fixture = await render(null, null, true);
+      const element: HTMLElement = fixture.nativeElement;
+
+      expect(element.querySelector('[data-action="open"]')).toBeNull();
+      expect(element.querySelector('[data-field="copy-awaited"]')?.textContent).toContain('A new copy of the game');
+      expect(element.textContent).toContain('Opening comes back here as soon as it’s in place.');
+    });
+
+    it('says why nothing opens, and quotes no next session', async () => {
+      const text: string = (await render(null, null, true)).nativeElement.textContent;
+
+      expect(text).toContain('Nothing is running.');
+      expect(text).toContain('nothing opens on an old copy. Tell whoever runs this.');
+      expect(text).not.toContain('Next session');
+      expect(text).not.toContain('exact time');
+    });
+
+    it('says both after a setup abandoned for a behind copy, and offers no retry', async () => {
+      const fixture = await render(null, PREFLIGHT_BEHIND, true);
+      const element: HTMLElement = fixture.nativeElement;
+
+      expect(element.textContent).toContain('It didn’t start.');
+      expect(element.textContent).toContain(
+        'Nothing was left running, and nothing is costing anything. The game had an update that the copy here doesn’t have yet. Tell whoever runs this.',
+      );
+      expect(element.querySelector('[data-field="stopped-at"]')?.textContent).toContain('the game’s copy is out of date');
+      expect(element.textContent).not.toContain('Try again');
+      expect(element.textContent).not.toContain('pressing again');
+      expect(element.querySelector('[data-field="copy-awaited"]')).not.toBeNull();
+    });
+
+    it('offers no retry after a refusal either', async () => {
+      const fixture = await render('no capacity left for this machine size in the zone', null, true);
+
+      expect(fixture.nativeElement.querySelector('[data-action="open"]')).toBeNull();
+      expect(fixture.nativeElement.textContent).not.toContain('Press again');
+    });
+  });
+
+  it('offers to open, and says no wait, while the game waits for nothing', async () => {
+    const fixture = await render();
+
+    expect(fixture.nativeElement.querySelector('[data-action="open"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-field="copy-awaited"]')).toBeNull();
   });
 });

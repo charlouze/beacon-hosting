@@ -125,6 +125,16 @@
   .track .cur i { background:linear-gradient(to right, var(--ink) var(--at,0%), var(--held) var(--at,0%)); }
   .stepline .clock.word { font-size:40px; line-height:1; letter-spacing:-.025em; }
   .warn .said span { color:var(--mute); }
+
+  /* ---------- 5 · waiting for the copy to be replaced ---------- */
+  .btn[aria-disabled="true"] { background:transparent; color:var(--held); border-color:var(--rule); cursor:not-allowed; }
+  .call { padding-top:16px; }
+  .call .k { display:block; }
+  .call .at { display:block; font:800 24px/1.1 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.015em; margin-top:8px; }
+  .call .said { display:block; font-size:13.5px; color:var(--mute); margin-top:6px; }
+  .section { padding:12px 12px 0; border-top:4px solid var(--ink); }
+  .section h2 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:6px; }
+  .section p { font-size:13.5px; color:#4d4a44; max-width:66ch; }
 </style>
 
 <div class="note">
@@ -450,6 +460,184 @@
       </div>
       <div class="acts push"></div>
       <div class="hint">Nothing left to do here.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5 · Le jeu attend que sa copie soit remplacée</h2>
+    <p>La spec : quand la copie était en retard à la dernière lecture chez l'éditeur, et n'a pas été
+    remplacée depuis, l'écran hors service dit que le jeu attend que sa copie soit remplacée, <b>à la
+    place d'offrir d'ouvrir</b>. Deux cas : l'attente seule, le plus fréquent — la lecture horaire a vu la
+    publication avant que quiconque ouvre —, et l'attente après un abandon pour copie en retard, où
+    l'écran dit les deux et n'offre pas de réessayer. Tout dépôt rend le bouton, sans recharger.</p>
+  </div>
+
+  <div>
+    <div class="label">5 · Attente seule — <b>W1, le bouton éteint, sa raison dessous</b></div>
+    <p class="ask">La règle du contrat de direction pour une action indisponible : elle reste à sa place et
+    porte sa raison en clair dessous. Le bouton se voit encore, éteint : c'est la lecture la plus large de
+    « à la place d'offrir d'ouvrir ».</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Nothing is running.</div>
+        <div class="sub">The game had an update that the copy here doesn’t have yet, and nothing opens
+        on an old copy. Tell whoever runs this.</div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Next session</span><span class="v">4 h · until 00:41</span></div>
+        <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn" aria-disabled="true">Open the service</div></div>
+      <div class="hint">Waiting for the game’s copy to be replaced. The button comes back here on its own.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · Après un abandon — <b>W1</b></div>
+    <p class="ask">Le cadre C1 tel quel, le bouton éteint à la place de « Try again ». Le texte du dessus
+    perd « pressing again won’t help » : il n'y a plus rien à presser.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">It didn’t start.</div>
+        <div class="sub">Nothing was left running, and nothing is costing anything. The game had an
+        update that the copy here doesn’t have yet. Tell whoever runs this.</div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn" style="margin-top:14px">
+        <span class="k red">Where it stopped, at 20:14</span>
+        <div class="said"><b>Preflight check</b> · <span>the game’s copy is out of date</span></div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Next session</span><span class="v">4 h · until 00:41</span></div>
+        <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn" aria-disabled="true">Try again</div></div>
+      <div class="hint">Waiting for the game’s copy to be replaced. The button comes back here on its own.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · Attente seule — <b>W2, une ligne de tableau à la place du bouton</b></div>
+    <p class="ask">Plus de bouton. Le pied porte une ligne annoncée, comme « Extension call » en service :
+    ce qu'on attend, en mots de tableau, et ce qui le fera revenir. La plaque de la prochaine session
+    disparaît : aucune ne peut s'ouvrir.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Nothing is running.</div>
+        <div class="sub">The game had an update that the copy here doesn’t have yet, and nothing opens
+        on an old copy. Tell whoever runs this.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:auto"></div>
+      <div class="call">
+        <span class="k">Waiting for</span>
+        <span class="at">A new copy of the game</span>
+        <span class="said">Opening comes back here as soon as it’s in place.</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · Après un abandon — <b>W2</b></div>
+    <p class="ask">Le cadre C1, et la même ligne au pied à la place de « Try again ».</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">It didn’t start.</div>
+        <div class="sub">Nothing was left running, and nothing is costing anything. The game had an
+        update that the copy here doesn’t have yet. Tell whoever runs this.</div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn" style="margin-top:14px">
+        <span class="k red">Where it stopped, at 20:14</span>
+        <div class="said"><b>Preflight check</b> · <span>the game’s copy is out of date</span></div>
+      </div>
+
+      <div class="band thin" style="margin-top:auto"></div>
+      <div class="call">
+        <span class="k">Waiting for</span>
+        <span class="at">A new copy of the game</span>
+        <span class="said">Opening comes back here as soon as it’s in place.</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · Attente seule — <b>W3, l'attente en titre</b></div>
+    <p class="ask">L'attente prend le titre, à la place de « Nothing is running. », et le pied ne porte plus
+    qu'une ligne d'aide. C'est la place que C2 aurait prise, gardée libre pour ce cas.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Waiting for a new copy of the game.</div>
+        <div class="sub">The game had an update that the copy here doesn’t have yet, and nothing opens
+        on an old copy. Tell whoever runs this.</div>
+      </div>
+
+      <div class="acts push"></div>
+      <div class="hint">Opening comes back here as soon as it’s in place.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">5 · Après un abandon — <b>W3</b></div>
+    <p class="ask">Le titre dit l'attente, la ligne d'arrêt dit l'abandon. « It didn’t start. » disparaît :
+    la ligne rouge le dit déjà.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Waiting for a new copy of the game.</div>
+        <div class="sub">Nothing was left running, and nothing is costing anything. The game had an
+        update that the copy here doesn’t have yet. Tell whoever runs this.</div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn" style="margin-top:14px">
+        <span class="k red">Where it stopped, at 20:14</span>
+        <div class="said"><b>Preflight check</b> · <span>the game’s copy is out of date</span></div>
+      </div>
+
+      <div class="acts push"></div>
+      <div class="hint">Opening comes back here as soon as it’s in place.</div>
     </div>
   </div>
 

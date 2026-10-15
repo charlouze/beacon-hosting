@@ -36,6 +36,11 @@ describe('screenFixture', () => {
     });
   });
 
+  // It waits from the copy document `screen()` writes, not from an abandon.
+  it('stages copy-awaited as a world out of service with no abandoned setup', () => {
+    expect(screenFixture('copy-awaited', NOW)['abandonedSetup']).toBeNull();
+  });
+
   it('names only screens the board can actually announce', () => {
     expect(SCREENS).toEqual([
       'idle',
@@ -48,6 +53,7 @@ describe('screenFixture', () => {
       'failed',
       'preflight-behind',
       'preflight-unreadable',
+      'copy-awaited',
       'unreadable',
     ]);
     expect(isScreen('running')).toBe(true);
@@ -66,6 +72,7 @@ describe('screenFixture', () => {
     ['expiring', 'RUNNING'],
     ['closing', 'STOPPING'],
     ['failed', 'FAILED'],
+    ['copy-awaited', 'IDLE'],
   ] as const)('makes %s readable as %s', (screen, state) => {
     expect(sessionFrom(screenFixture(screen, NOW), WORLD)?.state).toBe(state);
   });
