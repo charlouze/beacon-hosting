@@ -37,13 +37,13 @@ const running = (worldId: string, name: string): WorldSummary => ({
     facts: NO_FACTS,
     stateSince: STARTED_AT,
     setup: null,
-    readyWindow: null,
+    readyWindow: null, awaitsCopyReplacement: false,
   },
 });
 
 const idle = (worldId: string, name: string): WorldSummary => ({
   world: world(worldId, name),
-  server: { session: Session.idle(), facts: NO_FACTS, stateSince: null, setup: null, readyWindow: null },
+  server: { session: Session.idle(), facts: NO_FACTS, stateSince: null, setup: null, readyWindow: null, awaitsCopyReplacement: false },
 });
 
 const preparing = (
@@ -68,6 +68,7 @@ const preparing = (
     stateSince: STARTED_AT,
     setup: null,
     readyWindow,
+    awaitsCopyReplacement: false,
   },
 });
 

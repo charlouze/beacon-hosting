@@ -1,5 +1,7 @@
 import {
+  awaitsCopyReplacement,
   DEFAULT_SETTINGS,
+  markOfLastOpening,
   readyWindow,
   Session,
   shownSetup,
@@ -32,12 +34,15 @@ import {
   completedSetupsFrom,
   displayedFactsFrom,
   EVENTS,
+  gameCopyDocPath,
+  gameCopyFrom,
   gameFrom,
   keptSetupFrom,
   lastOpeningFrom,
   openingFields,
   playerDocument,
   PLAYERS,
+  publisherReadingFrom,
   rulesVersionFrom,
   serverDocPath,
   sessionFrom,
@@ -83,6 +88,11 @@ export interface ServerView {
    * of a setup, and while that game counts fewer than two.
    */
   readonly readyWindow: ReadyWindow | null;
+  /**
+   * Whether the world's game waits for its copy to be replaced, whatever the
+   * state: only the screen of a world out of service says it.
+   */
+  readonly awaitsCopyReplacement: boolean;
 }
 
 /**
@@ -242,6 +252,8 @@ export function clientSessionRecord(
     let setupData: Record<string, unknown> | undefined;
     let completedData: Record<string, unknown> | undefined;
     let unsubCompleted: Unsubscribe | null = null;
+    let copyData: Record<string, unknown> | undefined;
+    let unsubCopy: Unsubscribe | null = null;
     let publishing = Promise.resolve();
 
     const publish = (): void => {
@@ -269,9 +281,9 @@ export function clientSessionRecord(
             return;
           }
           // A world `worldFrom` reads names a game this vocabulary knows, so the
-          // listener on that game's completed setups is already open and will
+          // listeners on that game's documents are already open and will
           // answer, by a snapshot or by a refusal: waiting here cannot hang.
-          if (completedData === undefined) return;
+          if (completedData === undefined || copyData === undefined) return;
 
           const session = sessionFrom(serverData, world);
           if (session === null) {
@@ -290,6 +302,11 @@ export function clientSessionRecord(
                 opening,
                 completedSetupsFrom(completedData).map((completed) => completed.durationMs),
               ),
+              awaitsCopyReplacement: awaitsCopyReplacement({
+                copy: gameCopyFrom(copyData),
+                lastReading: publisherReadingFrom(copyData),
+                abandoned: markOfLastOpening(opening, abandonedSetupFrom(serverData)),
+              }),
             },
           });
         })
@@ -298,10 +315,11 @@ export function clientSessionRecord(
         });
     };
 
-    // One document per game, and a world never changes game: the listener
-    // opens on the first snapshot of the world that names one, and stays.
-    // Absent or refused, it reads as nothing kept, and no window is announced.
-    const watchCompletedSetups = (world: Record<string, unknown>): void => {
+    // One document per game for each, and a world never changes game: the
+    // listeners open on the first snapshot of the world that names one, and
+    // stay. Absent or refused, each reads as nothing recorded: no window is
+    // announced, and the game waits for no copy.
+    const watchGameDocuments = (world: Record<string, unknown>): void => {
       const game = gameFrom(world);
       if (game === null || unsubCompleted !== null) return;
       unsubCompleted = onSnapshot(
@@ -315,6 +333,17 @@ export function clientSessionRecord(
           publish();
         },
       );
+      unsubCopy = onSnapshot(
+        doc(db, gameCopyDocPath(game)),
+        (snapshot) => {
+          copyData = snapshot.data() ?? {};
+          publish();
+        },
+        () => {
+          copyData = {};
+          publish();
+        },
+      );
     };
 
     // A rules refusal completes the stream rather than rejecting a promise —
@@ -325,7 +354,7 @@ export function clientSessionRecord(
       worldDoc(worldId),
       (snapshot) => {
         worldData = snapshot.exists() ? (snapshot.data() ?? {}) : null;
-        if (worldData !== null) watchCompletedSetups(worldData);
+        if (worldData !== null) watchGameDocuments(worldData);
         publish();
       },
       () => {
@@ -379,6 +408,7 @@ export function clientSessionRecord(
       unsubPlayers();
       unsubSetup();
       unsubCompleted?.();
+      unsubCopy?.();
     };
   }
 

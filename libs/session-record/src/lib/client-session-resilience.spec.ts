@@ -121,6 +121,8 @@ describe('a roster read the rules refuse', () => {
     expect(seen.at(-1)?.server?.setup).toEqual({ stage: 'preflight', since: NOW, abandonedAt: null, failure: null });
     // Nor on `completedSetups`: the world publishes all the same, with no window.
     expect(seen.at(-1)?.server?.readyWindow).toBeNull();
+    // Nor on `gameCopies`: the world publishes all the same, and its game waits for nothing.
+    expect(seen.at(-1)?.server?.awaitsCopyReplacement).toBe(false);
 
     unsubscribe();
     await Promise.all(clients.splice(0).map((app) => deleteApp(app)));
