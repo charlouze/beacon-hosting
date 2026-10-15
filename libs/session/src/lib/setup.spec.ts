@@ -7,6 +7,7 @@ import {
   isSetupStepOrder,
   type KeptSetup,
   type KeptSetupStep,
+  markOfLastOpening,
   setupStepRank,
   shownSetup,
 } from './setup.js';
@@ -286,5 +287,28 @@ describe('setupStepRank', () => {
         abandonedAt: null,
       }),
     ).toBe(4);
+  });
+});
+
+describe('markOfLastOpening', () => {
+  const AT = new Date('2026-10-15T20:14:00Z');
+  const mark: AbandonedSetup = { sessionId: 's1', at: AT, cause: 'copy-behind' };
+  const opening = (state: 'IDLE' | 'PROVISIONING', sessionId: string) => ({ state, sessionId, startedAt: AT });
+
+  it('is the mark of the last session opened, once it no longer prepares', () => {
+    expect(markOfLastOpening(opening('IDLE', 's1'), mark)).toBe(mark);
+  });
+
+  it('is none while the last session opened prepares', () => {
+    expect(markOfLastOpening(opening('PROVISIONING', 's1'), mark)).toBeNull();
+  });
+
+  // A session stopped before it was claimed leaves the mark of the session before it.
+  it('is none when the mark names another session', () => {
+    expect(markOfLastOpening(opening('IDLE', 's2'), mark)).toBeNull();
+  });
+
+  it('is none when there is no mark', () => {
+    expect(markOfLastOpening(opening('IDLE', 's1'), null)).toBeNull();
   });
 });
