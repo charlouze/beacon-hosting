@@ -8,12 +8,14 @@ import {
   isSetupStep,
   isSetupStepOrder,
   isWorldId,
+  gameVersionFrom,
   SESSION_STATES,
   Session,
   World,
   type AbandonedSetup,
   type CompletedSetup,
   type Game,
+  type GameCopy,
   type InstanceSize,
   type JoinInfo,
   type KeptSetup,
@@ -109,6 +111,14 @@ export const GAME_COPIES = 'gameCopies';
 /** `gameCopies/{game}` — the copy Beacon keeps of one game, and what its publisher last published. */
 export function gameCopyDocPath(game: Game): string {
   return `${GAME_COPIES}/${game}`;
+}
+
+/** The copy a deposit recorded on `gameCopies/{game}`. Half a deposit, or a version that is not one, reads as none. */
+export function gameCopyFrom(data: Record<string, unknown>): GameCopy | null {
+  const version = gameVersionFrom(data['depositedVersion']);
+  const depositedAt = toDate(data['depositedAt']);
+  if (version === null || depositedAt === null) return null;
+  return { version, depositedAt };
 }
 
 /**
