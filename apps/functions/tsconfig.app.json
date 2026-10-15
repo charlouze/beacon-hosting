@@ -31,7 +31,13 @@
   ],
   "references": [
     {
+      "path": "../../libs/membership-record/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/scaleway-compute/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/steam-publications/tsconfig.lib.json"
     },
     {
       "path": "../../libs/session-record/tsconfig.lib.json"
@@ -41,9 +47,6 @@
     },
     {
       "path": "../../libs/ovh-dns/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/membership-record/tsconfig.lib.json"
     },
     {
       "path": "../../deploy/cloud-init/tsconfig.lib.json"

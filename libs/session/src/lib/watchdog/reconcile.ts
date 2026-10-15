@@ -3,6 +3,7 @@ import { endedWithoutServer } from '../ended-without-server.js';
 import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
+import type { SetupAbandonment } from '../setup.js';
 import type { EndWithoutServer, Expiration, Reclamation } from './reclamations.js';
 import type { WatchdogView, WorldView } from './view.js';
 
@@ -42,11 +43,12 @@ export interface StateCorrection {
    */
   readonly deadline: Deadline | null;
   /**
-   * The session whose setup this correction abandons, or null. Null leaves
-   * whatever mark the record already carries: the mark of an abandoned setup
-   * outlives the corrections that follow it, until the next setup is claimed.
+   * The setup this correction abandons, and why its preflight check failed
+   * when it did, or null.
+   * Null leaves whatever mark the record already carries: the mark of an
+   * abandoned setup outlives the corrections that follow it, until the next setup is claimed.
    */
-  readonly abandonedSetup: SessionId | null;
+  readonly abandonedSetup: SetupAbandonment | null;
 }
 
 const NOTHING: StateCorrection = {
@@ -227,7 +229,7 @@ export function reconcileWorld(
       closeIntents,
       events,
       deadline: null,
-      abandonedSetup: abandonedBy(own.reclamation),
+      abandonedSetup: abandonmentBy(own.reclamation),
     };
   }
 
@@ -240,7 +242,7 @@ export function reconcileWorld(
       closeIntents,
       events,
       deadline: null,
-      abandonedSetup: abandonedBy(own.reclamation),
+      abandonedSetup: abandonmentBy(own.reclamation),
     };
   }
 
@@ -334,6 +336,12 @@ export function reconcileWorld(
  */
 const abandonedBy = (reclamation: Reclamation): SessionId | null =>
   reclamation.reason === 'provisioning-timeout' ? reclamation.sessionId : null;
+
+/** The watchdog abandons a setup only when its delay runs out: never for a preflight failure. */
+function abandonmentBy(reclamation: Reclamation): SetupAbandonment | null {
+  const sessionId = abandonedBy(reclamation);
+  return sessionId === null ? null : { sessionId, cause: null };
+}
 
 function isStillHeld(view: WatchdogView, sessionId: SessionId | null): boolean {
   return sessionId !== null && view.hosted.some((s) => s.sessionId === sessionId);

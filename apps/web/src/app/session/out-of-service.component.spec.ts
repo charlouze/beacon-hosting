@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { DEFAULT_SETTINGS, Session, type ShownSetup } from '@beacon/session';
+import { DEFAULT_SETTINGS, Session, type PreflightFailure, type ShownSetup } from '@beacon/session';
 import { CLOCK } from '../clock';
 import { OutOfServiceComponent } from './out-of-service.component';
 
@@ -144,14 +144,14 @@ describe('OutOfServiceComponent', () => {
     });
 
     it('says the setup stopped at the preflight check, with no rank', async () => {
-      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).nativeElement;
 
       expect(text(element, '[data-field="stopped-at"] .said')).toBe('Preflight check · before the first step');
       expect(element.textContent).not.toContain('Step 1 of 4');
     });
 
     it('asks to say so when it stops at the same place twice', async () => {
-      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).nativeElement;
       expect(element.textContent).toContain('if it stops at the same place twice');
     });
 
@@ -162,6 +162,47 @@ describe('OutOfServiceComponent', () => {
     it('says nothing of it on a world that abandoned no setup', async () => {
       expect(stopped(await render())).toBeNull();
       expect(stopped(await render('no capacity left'))).toBeNull();
+    });
+  });
+
+  describe('after an abandon at the preflight check', () => {
+    const abandonedAtPreflight = (failure: PreflightFailure | null): ShownSetup => ({
+      stage: 'preflight',
+      since: new Date('2026-09-12T20:14:00'),
+      abandonedAt: new Date('2026-09-12T20:14:02'),
+      failure,
+    });
+
+    it('says the copy of the game is out of date, and that pressing again will not help', async () => {
+      const text: string = (await render(null, abandonedAtPreflight('copy-behind'))).nativeElement.textContent;
+      expect(text).toContain('didn’t start');
+      expect(text).toContain('Preflight check');
+      expect(text).toContain('the game’s copy is out of date');
+      expect(text).toContain('pressing again won’t help until they replace it');
+      expect(text).not.toContain('before the first step');
+    });
+
+    it('says the current version could not be read, and to press again in a few minutes', async () => {
+      const text: string = (await render(null, abandonedAtPreflight('version-unreadable'))).nativeElement
+        .textContent;
+      expect(text).toContain('the game’s current version couldn’t be read');
+      expect(text).toContain('Press again in a few minutes');
+    });
+
+    it('says only where it stopped when the abandon carries no cause', async () => {
+      const text: string = (await render(null, abandonedAtPreflight(null))).nativeElement.textContent;
+      expect(text).toContain('before the first step');
+      expect(text).toContain('at the same place twice');
+    });
+
+    it('still offers to try again, whatever the cause', async () => {
+      for (const failure of ['copy-behind', 'version-unreadable', null] as const) {
+        const button = (await render(null, abandonedAtPreflight(failure))).nativeElement.querySelector(
+          '[data-action="open"]',
+        );
+        expect(button.textContent).toContain('Try again');
+        expect(button.disabled).toBe(false);
+      }
     });
   });
 });

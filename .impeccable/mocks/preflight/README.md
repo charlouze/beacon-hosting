@@ -10,7 +10,7 @@ décidée dans [`../progress/`](../progress/README.md).
 
 | Fichier | Contenu |
 |---|---|
-| `phone.html` | En 390 px : la vérification en cours avec et sans filet, l'écran après un abandon sans cause, l'écran de fermeture d'aujourd'hui et sa variante |
+| `phone.html` | En 390 px : la vérification en cours avec et sans filet, l'écran après un abandon sans cause puis avec chacune des deux causes (C1, C2), l'écran de fermeture d'aujourd'hui et sa variante |
 
 ## Décidé
 
@@ -31,5 +31,14 @@ donne aujourd'hui.
 `Preflight check` est le mot de tableau de la vérification, et il ne diffère
 pas du nom que le code porte, `preflight` : le glossaire n'a pas à l'afficher.
 
-Les causes d'un abandon à la vérification arrivent avec la story qui fait
-échouer la vérification ; leurs mots passent par un autre tour.
+## Les causes d'un abandon — story 3 du lot 04
+
+| Question | Décision | Ce qui a été écarté |
+|---|---|---|
+| Où l'écran dit la cause | **C1** : `It didn’t start.` reste, et la cause suit `Preflight check` sur la ligne d'arrêt, à la place de `before the first step` | **C2**, la cause en titre, qui prendrait la place dont l'annonce avant l'ouverture aura besoin |
+| Copie en retard | Ligne d'arrêt : `the game’s copy is out of date`. Texte du dessus : `The game had an update that the copy here doesn’t have yet. Tell whoever runs this: pressing again won’t help until they replace it.` | `Press again`, faux tant que la copie n'est pas remplacée |
+| Version illisible | Ligne d'arrêt : `the game’s current version couldn’t be read`. Texte du dessus : `We couldn’t find out which version of the game is current, and nothing starts without knowing. Press again in a few minutes; if it stops here twice, tell whoever runs this.` | |
+
+Les deux textes commencent par `Nothing was left running, and nothing is
+costing anything.`, comme tout abandon. Le bouton `Try again` reste : c'est
+l'annonce avant l'ouverture qui le retire.

@@ -2,17 +2,20 @@ import {
   Deadline,
   DEFAULT_SETTINGS,
   isGame,
+  isPreflightFailure,
   isSetupActivity,
   isSetupProgress,
   isSetupStep,
   isSetupStepOrder,
   isWorldId,
+  gameVersionFrom,
   SESSION_STATES,
   Session,
   World,
   type AbandonedSetup,
   type CompletedSetup,
   type Game,
+  type GameCopy,
   type InstanceSize,
   type JoinInfo,
   type KeptSetup,
@@ -110,6 +113,14 @@ export function gameCopyDocPath(game: Game): string {
   return `${GAME_COPIES}/${game}`;
 }
 
+/** The copy a deposit recorded on `gameCopies/{game}`. Half a deposit, or a version that is not one, reads as none. */
+export function gameCopyFrom(data: Record<string, unknown>): GameCopy | null {
+  const version = gameVersionFrom(data['depositedVersion']);
+  const depositedAt = toDate(data['depositedAt']);
+  if (version === null || depositedAt === null) return null;
+  return { version, depositedAt };
+}
+
 /**
  * The field of `server/current` that marks an abandoned setup: whose it was,
  * and when. Only the Functions write it, in the write that changes the state.
@@ -118,14 +129,14 @@ export function gameCopyDocPath(game: Game): string {
  */
 export const ABANDONED_SETUP = 'abandonedSetup';
 
-/** The mark as the domain reads it. Half a mark reads as none. */
+/** The mark as the domain reads it. Half a mark reads as none; a cause it does not know reads as none. */
 export function abandonedSetupFrom(data: Record<string, unknown>): AbandonedSetup | null {
   const mark = data[ABANDONED_SETUP];
   if (typeof mark !== 'object' || mark === null) return null;
-  const { sessionId, at } = mark as Record<string, unknown>;
+  const { sessionId, at, cause } = mark as Record<string, unknown>;
   const abandonedAt = toDate(at);
   if (typeof sessionId !== 'string' || abandonedAt === null) return null;
-  return { sessionId, at: abandonedAt };
+  return { sessionId, at: abandonedAt, cause: isPreflightFailure(cause) ? cause : null };
 }
 
 /**

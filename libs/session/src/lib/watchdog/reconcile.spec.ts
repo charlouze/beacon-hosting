@@ -131,14 +131,14 @@ describe('reconcileWorld', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
     const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', true)], [], []);
     expect(correction.state).toBe('IDLE');
-    expect(correction.abandonedSetup).toBe('s1');
+    expect(correction.abandonedSetup).toEqual({ sessionId: 's1', cause: null });
   });
 
   it('gives it too when the close is refused', () => {
     const v = view({ worlds: [singleWorld(record('PROVISIONING', 's1', true))], hosted: [hosted('s1')] });
     const correction = reconcileWorld(v, v.worlds[0], [outcome('s1', 'provisioning-timeout', false)], [], []);
     expect(correction.state).toBe('FAILED');
-    expect(correction.abandonedSetup).toBe('s1');
+    expect(correction.abandonedSetup).toEqual({ sessionId: 's1', cause: null });
   });
 
   // Only a setup is abandoned. A session that stops late, or whose cleanup is

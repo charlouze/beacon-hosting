@@ -145,14 +145,21 @@ describe('stoppedAt', () => {
   });
 
   it('says a setup abandoned before its first step stopped at the preflight check', () => {
-    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).toEqual({
+    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).toEqual({
       stage: 'preflight',
       at: '20:39',
+      failure: null,
     });
   });
 
+  it('says why the preflight check failed, when it is known', () => {
+    expect(
+      stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: 'copy-behind' }),
+    ).toEqual({ stage: 'preflight', at: '20:39', failure: 'copy-behind' });
+  });
+
   it('says nothing of a preflight check under way', () => {
-    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: null })).toBeNull();
+    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: null, failure: null })).toBeNull();
   });
 
   it('says nothing of a step under way, nor of none', () => {

@@ -23,6 +23,19 @@ const WORLD = World.from({
 });
 
 describe('screenFixture', () => {
+  it.each([
+    ['preflight-behind', 'copy-behind'],
+    ['preflight-unreadable', 'version-unreadable'],
+  ] as const)('stages %s as a world out of service whose last setup stopped at its preflight check', (name, cause) => {
+    const fixture = screenFixture(name, NOW);
+    expect(fixture['state']).toBe('IDLE');
+    expect(fixture['abandonedSetup']).toEqual({
+      sessionId: fixture['sessionId'],
+      at: expect.any(Date),
+      cause,
+    });
+  });
+
   it('names only screens the board can actually announce', () => {
     expect(SCREENS).toEqual([
       'idle',
@@ -33,6 +46,8 @@ describe('screenFixture', () => {
       'expiring',
       'closing',
       'failed',
+      'preflight-behind',
+      'preflight-unreadable',
       'unreadable',
     ]);
     expect(isScreen('running')).toBe(true);

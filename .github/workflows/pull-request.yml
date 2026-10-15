@@ -39,4 +39,4 @@ jobs:
       # Sets the base and head shas nx affected compares against.
       - uses: nrwl/nx-set-shas@v4
 
-      - run: npx nx affected -t lint test build typecheck
+      - run: npx nx affected -t lint test build typecheck bundle-check

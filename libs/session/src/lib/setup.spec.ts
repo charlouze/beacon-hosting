@@ -10,6 +10,7 @@ import {
   setupStepRank,
   shownSetup,
 } from './setup.js';
+import type { PreflightFailure } from './preflight.js';
 
 const OPENED = new Date('2026-10-12T20:00:00Z');
 const LATER = new Date('2026-10-12T20:02:00Z');
@@ -151,7 +152,11 @@ describe('shownSetup', () => {
     step: kept({ since: LATER, activity: 'downloading', progress: 37 }),
   });
 
-  const markOf = (sessionId: string): AbandonedSetup => ({ sessionId, at: ABANDONED });
+  const markOf = (sessionId: string, cause: PreflightFailure | null = null): AbandonedSetup => ({
+    sessionId,
+    at: ABANDONED,
+    cause,
+  });
 
   it('shows the kept step and the order of its game, while its own session prepares', () => {
     expect(shownSetup(PREPARING, null, keptFor('s1'))).toEqual({
@@ -163,13 +168,23 @@ describe('shownSetup', () => {
   });
 
   it('shows the preflight check since the opening while no step is kept', () => {
-    expect(shownSetup(PREPARING, null, null)).toEqual({ stage: 'preflight', since: OPENED, abandonedAt: null });
+    expect(shownSetup(PREPARING, null, null)).toEqual({
+      stage: 'preflight',
+      since: OPENED,
+      abandonedAt: null,
+      failure: null,
+    });
   });
 
   // Nothing erases what a setup left: the next session finds the previous one
   // there until its own is begun.
   it('shows the preflight check when what is kept belongs to another session', () => {
-    expect(shownSetup(PREPARING, null, keptFor('s0'))).toEqual({ stage: 'preflight', since: OPENED, abandonedAt: null });
+    expect(shownSetup(PREPARING, null, keptFor('s0'))).toEqual({
+      stage: 'preflight',
+      since: OPENED,
+      abandonedAt: null,
+      failure: null,
+    });
   });
 
   // The mark of the setup before is erased when the next one is claimed, not
@@ -201,9 +216,29 @@ describe('shownSetup', () => {
   });
 
   it('shows the preflight check as where an abandoned setup stopped, when no step was kept for it', () => {
-    const stopped = { stage: 'preflight', since: OPENED, abandonedAt: ABANDONED };
+    const stopped = { stage: 'preflight', since: OPENED, abandonedAt: ABANDONED, failure: null };
     expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s0'))).toEqual(stopped);
     expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), null)).toEqual(stopped);
+  });
+
+  it('shows why the preflight check failed, when the mark of the abandon says it', () => {
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1', 'copy-behind'), null)).toEqual({
+      stage: 'preflight',
+      since: OPENED,
+      abandonedAt: ABANDONED,
+      failure: 'copy-behind',
+    });
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1', 'version-unreadable'), null)).toEqual({
+      stage: 'preflight',
+      since: OPENED,
+      abandonedAt: ABANDONED,
+      failure: 'version-unreadable',
+    });
+  });
+
+  it('shows no failure for a preflight check abandoned without a cause, nor for one under way', () => {
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), null)).toMatchObject({ failure: null });
+    expect(shownSetup(PREPARING, markOf('s0', 'copy-behind'), null)).toMatchObject({ failure: null });
   });
 
   // A session opened then stopped before it was claimed leaves the mark of

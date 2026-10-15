@@ -2,7 +2,7 @@ import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { gameVersionFrom, type GameVersion } from '@beacon/session';
-import { gameCopyRecord, type GameCopyRecord } from './game-copy-record.js';
+import { gameCopyRecord, gameCopyStore, type GameCopyRecord, type GameCopyStore } from './game-copy-record.js';
 import { gameCopyDocPath } from './fields.js';
 
 process.env['FIRESTORE_EMULATOR_HOST'] ??= '127.0.0.1:8080';
@@ -12,6 +12,7 @@ const SUNKENLAND = gameCopyDocPath('sunkenland');
 let app: ReturnType<typeof initializeApp>;
 let db: Firestore;
 let record: GameCopyRecord;
+let store: GameCopyStore;
 
 const version = (digits: string): GameVersion => {
   const built = gameVersionFrom(digits);
@@ -25,6 +26,7 @@ beforeAll(() => {
   app = initializeApp({ projectId: 'demo-beacon' }, 'game-copy-record-spec');
   db = getFirestore(app);
   record = gameCopyRecord(db);
+  store = gameCopyStore(db);
 });
 
 afterAll(async () => {
@@ -74,5 +76,42 @@ describe('recordDeposit', () => {
     await record.recordDeposit('sunkenland', version('23178631'));
 
     expect(await stored()).toMatchObject({ publishedVersion: '25746735', readAt, depositedVersion: '23178631' });
+  });
+});
+
+describe('gameCopyStore', () => {
+  it('reads no copy when the document does not exist', async () => {
+    expect(await store.read('sunkenland')).toBeNull();
+  });
+
+  it('reads the copy the tool recorded', async () => {
+    await record.recordDeposit('sunkenland', version('25746735'));
+
+    expect(await store.read('sunkenland')).toEqual({
+      version: '25746735',
+      depositedAt: expect.any(Date),
+    });
+  });
+
+  it('records the published version, at the time of the Firestore server', async () => {
+    const before = Date.now();
+    await store.recordPublished('sunkenland', version('25800001'));
+
+    const data = await stored();
+    expect(data?.['publishedVersion']).toBe('25800001');
+    expect(data?.['publishedReadAt']).toBeInstanceOf(Timestamp);
+    expect((data?.['publishedReadAt'] as Timestamp).toMillis()).toBeGreaterThanOrEqual(before - 5_000);
+  });
+
+  it('leaves the deposit as it is, and the tool leaves the published version', async () => {
+    await record.recordDeposit('sunkenland', version('25746735'));
+    await store.recordPublished('sunkenland', version('25800001'));
+
+    expect(await stored()).toMatchObject({ depositedVersion: '25746735', depositedAt: expect.any(Timestamp) });
+    await record.recordDeposit('sunkenland', version('25800001'));
+
+    const data = await stored();
+    expect(data?.['depositedVersion']).toBe('25800001');
+    expect(data?.['publishedVersion']).toBe('25800001');
   });
 });

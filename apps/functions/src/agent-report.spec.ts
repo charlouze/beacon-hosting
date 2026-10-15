@@ -952,7 +952,7 @@ describe('agentReport', () => {
         state: 'IDLE',
         clearFacts: true,
         lastError: null,
-        abandonedSetup: 's1',
+        abandonedSetup: { sessionId: 's1', cause: null },
       });
       expect(deps.ledger.close).toHaveBeenCalledWith('s1', NOW);
     });
@@ -979,7 +979,7 @@ describe('agentReport', () => {
       expect(corrections()[0]).toMatchObject({
         state: 'FAILED',
         clearFacts: false,
-        abandonedSetup: 's1',
+        abandonedSetup: { sessionId: 's1', cause: null },
       });
       expect(corrections()[0].lastError).toContain('api unreachable');
       expect(filed(deps).map((event) => event.type)).toEqual([
@@ -1097,7 +1097,7 @@ describe('agentReport', () => {
           sessionId: 's1',
           error: 'Error: firestore unavailable',
         });
-        expect(corrections()[0]).toMatchObject({ state: 'IDLE', abandonedSetup: 's1' });
+        expect(corrections()[0]).toMatchObject({ state: 'IDLE', abandonedSetup: { sessionId: 's1', cause: null } });
       });
 
       it('says so when the game server said nothing of its failure', async () => {

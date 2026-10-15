@@ -122,9 +122,23 @@ préalable n'est pas abandonnée, quelle que soit l'issue de cette vérification
 Une mise en place est abandonnée dès que le serveur de jeu déclare qu'il ne
 peut pas la finir.
 
+Une mise en place est abandonnée dès que sa vérification préalable échoue,
+sauf celle d'une session qu'on a fermée pendant cette vérification.
+
+La vérification préalable d'une session dont le jeu passe par une copie
+n'échoue que dans deux cas : quand cette copie est en retard, et quand le
+système ne peut pas lire la version que l'éditeur du jeu publie.
+
+La vérification préalable d'une session dont le jeu ne passe pas par une copie
+réussit.
+
 Après l'abandon d'une mise en place, et jusqu'à l'ouverture suivante d'une
 session sur le même monde, l'écran affiche l'étape à laquelle elle s'est
 arrêtée et l'heure de l'abandon.
+
+Exception : après une mise en place abandonnée à sa vérification préalable,
+l'écran affiche, à la place de l'étape, la vérification préalable et celui de
+ses deux cas d'échec qui s'est produit.
 
 La durée d'une session et le gabarit sont les mêmes pour tous les mondes, et
 seul un administrateur les change.

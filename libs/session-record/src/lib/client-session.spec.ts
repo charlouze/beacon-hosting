@@ -299,7 +299,7 @@ describe('the setup of a session that prepares', () => {
   const OPENED = new Date('2026-10-12T20:14:00Z');
   const AT = new Date('2026-10-12T20:16:00Z');
   const ORDER = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
-  const PREFLIGHT = { stage: 'preflight', since: OPENED, abandonedAt: null };
+  const PREFLIGHT = { stage: 'preflight', since: OPENED, abandonedAt: null, failure: null };
 
   async function preparingServer(worldId: string, sessionId: string): Promise<void> {
     await getFirestore()

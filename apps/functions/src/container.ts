@@ -3,6 +3,7 @@ import {
   adminWorldRecord,
   completedSetupStore,
   deploymentRecord,
+  gameCopyStore,
   saveRecords,
   settingsStore,
   setupStores,
@@ -10,6 +11,7 @@ import {
   worldStateStores,
 } from '@beacon/session-record';
 import { catalogFor } from '@beacon/cloud-init';
+import { steamPublisher } from '@beacon/steam-publications';
 import {
   blockFromSdk,
   fromSdk,
@@ -153,6 +155,10 @@ export function buildProvisionDeps(): ProvisionDeps {
     serverPassword: () => SERVER_PASSWORD.value(),
     members: adminMembershipRecord(db),
     tokens: agentTokens(db),
+    // The catalogue knows which Steam application a game's copy holds; the
+    // adapter only knows how to read one.
+    publisher: steamPublisher({ appOf: (game) => catalogFor(game).copySteamApp }),
+    gameCopies: gameCopyStore(db),
     agentEndpoint: () => deploymentRecord(db).agentEndpoint(),
     saveKeys: () => ({
       endpoint: S3_ENDPOINT.value(),

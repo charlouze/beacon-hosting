@@ -5,6 +5,7 @@ import {
   completedSetupsDocPath,
   completedSetupsFrom,
   displayedFactsFrom,
+  gameCopyFrom,
   gameFrom,
   idleServerDocument,
   keptSetupFrom,
@@ -252,10 +253,30 @@ describe('abandonedSetupFrom', () => {
   const AT = new Date('2026-10-12T20:19:00Z');
 
   it('reads whose setup was abandoned, and when', () => {
+    expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: null } })).toEqual({
+      sessionId: 's1',
+      at: AT,
+      cause: null,
+    });
+  });
+
+  it('reads why the preflight check failed, when the mark says it', () => {
+    expect(
+      abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: 'version-unreadable' } }),
+    ).toEqual({ sessionId: 's1', at: AT, cause: 'version-unreadable' });
+  });
+
+  // A mark written before causes existed, or by a version that knows one more:
+  // still a mark, without a cause.
+  it('reads a mark with no cause, or a cause it does not know, as a mark without a cause', () => {
     expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT } })).toEqual({
       sessionId: 's1',
       at: AT,
+      cause: null,
     });
+    expect(
+      abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: 'disk-full' } }),
+    ).toEqual({ sessionId: 's1', at: AT, cause: null });
   });
 
   it('reads nothing from a document that carries no mark', () => {
@@ -347,5 +368,29 @@ describe('gameFrom', () => {
   it('reads a game this vocabulary does not know as none', () => {
     expect(gameFrom({ game: 'not-a-game' })).toBeNull();
     expect(gameFrom({})).toBeNull();
+  });
+});
+
+describe('gameCopyFrom', () => {
+  const AT = new Date('2026-10-14T18:00:00Z');
+
+  it('reads the version the last deposit put in place, and when', () => {
+    expect(gameCopyFrom({ depositedVersion: '25746735', depositedAt: AT })).toEqual({
+      version: '25746735',
+      depositedAt: AT,
+    });
+  });
+
+  it('reads no copy where no deposit is recorded', () => {
+    expect(gameCopyFrom({})).toBeNull();
+    expect(gameCopyFrom({ publishedVersion: '25746735', publishedReadAt: AT })).toBeNull();
+  });
+
+  // A copy whose version cannot be read is a copy nobody can vouch for: it is
+  // missing, and a missing copy is behind.
+  it('reads no copy from half a deposit, or from a version that is not one', () => {
+    expect(gameCopyFrom({ depositedVersion: '25746735' })).toBeNull();
+    expect(gameCopyFrom({ depositedAt: AT })).toBeNull();
+    expect(gameCopyFrom({ depositedVersion: 'v1.2', depositedAt: AT })).toBeNull();
   });
 });
