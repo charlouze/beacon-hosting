@@ -2,6 +2,7 @@ import { Deadline } from './deadline.js';
 import type { DomainEvent } from './events.js';
 import type { Game } from './game.js';
 import type { Clock } from './ports.js';
+import type { PreflightFailure } from './preflight.js';
 import type { SessionId, SessionState } from './session.js';
 import type { InstanceSize, SessionSettings } from './settings.js';
 import type { World, WorldId } from './world.js';
@@ -53,6 +54,11 @@ export interface OpeningRequest {
   /** Admin only; the function applies the default when it is absent (§5). */
   readonly instanceSize?: InstanceSize;
 }
+
+const PREFLIGHT_FAILED: Record<PreflightFailure, string> = {
+  'copy-behind': 'preflight check failed: the copy of the game is behind what its publisher publishes',
+  'version-unreadable': 'preflight check failed: the version its publisher publishes could not be read',
+};
 
 /**
  * The aggregate root, and the only door into the model (§4).
@@ -221,6 +227,18 @@ export class Session {
           costEuros: 0,
         },
       ],
+    };
+  }
+
+  /** Its preflight check failed: the session stops being in progress, and no server was ever asked for. */
+  failPreflight(failure: PreflightFailure): SessionDecision {
+    const fields = this.required();
+    if (fields.state !== 'PROVISIONING') {
+      throw new Error(`cannot fail the preflight check of a ${fields.state} session`);
+    }
+    return {
+      session: Session.idle(),
+      events: [{ type: 'ProvisioningFailed', sessionId: fields.sessionId, detail: PREFLIGHT_FAILED[failure] }],
     };
   }
 

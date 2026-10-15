@@ -1,3 +1,4 @@
+import type { PreflightFailure } from './preflight.js';
 import type { SessionId, SessionState } from './session.js';
 
 /**
@@ -126,10 +127,21 @@ export interface LastOpening {
   readonly startedAt: Date | null;
 }
 
-/** The mark an abandoned setup leaves: whose it was, and the instant it was abandoned. */
+/**
+ * The mark an abandoned setup leaves: whose it was, the instant it was
+ * abandoned, and why its preflight check failed when the setup was abandoned
+ * for one of its failures.
+ */
 export interface AbandonedSetup {
   readonly sessionId: SessionId;
   readonly at: Date;
+  readonly cause: PreflightFailure | null;
+}
+
+/** The mark as a correction asks for it: its instant is the instant the correction is written. */
+export interface SetupAbandonment {
+  readonly sessionId: SessionId;
+  readonly cause: PreflightFailure | null;
 }
 
 /** The preflight check, before any step. */
@@ -139,6 +151,8 @@ export interface ShownPreflight {
   readonly since: Date;
   /** The instant the setup was abandoned, and null while it is under way. */
   readonly abandonedAt: Date | null;
+  /** Why it failed, when the setup was abandoned for one of its failures; null otherwise. */
+  readonly failure: PreflightFailure | null;
 }
 
 /** A step, in the order of its game. */
@@ -171,20 +185,21 @@ export function shownSetup(
 ): ShownSetup | null {
   if (opening.sessionId === null || opening.startedAt === null) return null;
 
-  const abandonedAt = abandonedAtOf(opening, abandoned);
-  if (opening.state !== 'PROVISIONING' && abandonedAt === null) return null;
+  const mark = markOf(opening, abandoned);
+  const abandonedAt = mark?.at ?? null;
+  if (opening.state !== 'PROVISIONING' && mark === null) return null;
 
   if (kept !== null && kept.sessionId === opening.sessionId) {
     return { stage: 'step', step: kept.step, order: kept.order, abandonedAt };
   }
   // No step kept for this session: it has not passed its preflight check, or
   // was abandoned before it did.
-  return { stage: 'preflight', since: opening.startedAt, abandonedAt };
+  return { stage: 'preflight', since: opening.startedAt, abandonedAt, failure: mark?.cause ?? null };
 }
 
-function abandonedAtOf(opening: LastOpening, abandoned: AbandonedSetup | null): Date | null {
+function markOf(opening: LastOpening, abandoned: AbandonedSetup | null): AbandonedSetup | null {
   if (opening.state === 'PROVISIONING') return null;
-  return abandoned !== null && abandoned.sessionId === opening.sessionId ? abandoned.at : null;
+  return abandoned !== null && abandoned.sessionId === opening.sessionId ? abandoned : null;
 }
 
 /** The rank of the shown step in the order of its game, from one. */

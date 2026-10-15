@@ -20,7 +20,7 @@ describe('PreparingComponent', () => {
   /** The world is brought back before the game's own container fetches the game. */
   const WORLD_FIRST = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
 
-  const PREFLIGHT: ShownSetup = { stage: 'preflight', since: startedAt, abandonedAt: null };
+  const PREFLIGHT: ShownSetup = { stage: 'preflight', since: startedAt, abandonedAt: null, failure: null };
 
   const WINDOW: ReadyWindow = {
     from: new Date('2026-09-12T20:19:10'),

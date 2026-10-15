@@ -252,10 +252,30 @@ describe('abandonedSetupFrom', () => {
   const AT = new Date('2026-10-12T20:19:00Z');
 
   it('reads whose setup was abandoned, and when', () => {
+    expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: null } })).toEqual({
+      sessionId: 's1',
+      at: AT,
+      cause: null,
+    });
+  });
+
+  it('reads why the preflight check failed, when the mark says it', () => {
+    expect(
+      abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: 'version-unreadable' } }),
+    ).toEqual({ sessionId: 's1', at: AT, cause: 'version-unreadable' });
+  });
+
+  // A mark written before causes existed, or by a version that knows one more:
+  // still a mark, without a cause.
+  it('reads a mark with no cause, or a cause it does not know, as a mark without a cause', () => {
     expect(abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT } })).toEqual({
       sessionId: 's1',
       at: AT,
+      cause: null,
     });
+    expect(
+      abandonedSetupFrom({ abandonedSetup: { sessionId: 's1', at: AT, cause: 'disk-full' } }),
+    ).toEqual({ sessionId: 's1', at: AT, cause: null });
   });
 
   it('reads nothing from a document that carries no mark', () => {

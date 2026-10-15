@@ -239,3 +239,44 @@ describe('endWithoutServer', () => {
     expect(() => Session.idle().endWithoutServer()).toThrow();
   });
 });
+
+describe('failPreflight', () => {
+  const sessionIn = (state: 'PROVISIONING' | 'RUNNING') =>
+    Session.from({
+      state,
+      sessionId: 's1',
+      worldId: ENSHROUDED_WORLD.worldId,
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: new Date('2026-09-06T20:00:00Z'),
+      deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
+      instanceSize: null,
+      hasJoinInfo: false,
+    });
+  const provisioning = () => sessionIn('PROVISIONING');
+  const running = () => sessionIn('RUNNING');
+
+  it('puts the session out of service and files a failed provisioning, for each failure', () => {
+    expect(provisioning().failPreflight('copy-behind')).toEqual({
+      session: Session.idle(),
+      events: [
+        {
+          type: 'ProvisioningFailed',
+          sessionId: 's1',
+          detail: 'preflight check failed: the copy of the game is behind what its publisher publishes',
+        },
+      ],
+    });
+    expect(provisioning().failPreflight('version-unreadable').events).toEqual([
+      {
+        type: 'ProvisioningFailed',
+        sessionId: 's1',
+        detail: 'preflight check failed: the version its publisher publishes could not be read',
+      },
+    ]);
+  });
+
+  it('refuses a session that is not preparing', () => {
+    expect(() => running().failPreflight('copy-behind')).toThrow();
+  });
+});

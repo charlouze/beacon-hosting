@@ -337,7 +337,7 @@ describe('provisioning', () => {
     });
     await runStateChange(deps, WORLD_ID, provisioning());
     expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'IDLE', abandonedSetup: 's1' }),
+      expect.objectContaining({ state: 'IDLE', abandonedSetup: { sessionId: 's1', cause: null } }),
       NOW,
     );
   });
@@ -351,7 +351,7 @@ describe('provisioning', () => {
     });
     await runStateChange(deps, WORLD_ID, provisioning());
     expect(deps.states.for(WORLD_ID).apply).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'FAILED', abandonedSetup: 's1' }),
+      expect.objectContaining({ state: 'FAILED', abandonedSetup: { sessionId: 's1', cause: null } }),
       NOW,
     );
   });

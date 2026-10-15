@@ -144,14 +144,14 @@ describe('OutOfServiceComponent', () => {
     });
 
     it('says the setup stopped at the preflight check, with no rank', async () => {
-      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).nativeElement;
 
       expect(text(element, '[data-field="stopped-at"] .said')).toBe('Preflight check · before the first step');
       expect(element.textContent).not.toContain('Step 1 of 4');
     });
 
     it('asks to say so when it stops at the same place twice', async () => {
-      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).nativeElement;
       expect(element.textContent).toContain('if it stops at the same place twice');
     });
 

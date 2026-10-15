@@ -368,17 +368,23 @@ describe('applying a deadline', () => {
 });
 
 describe('the mark of an abandoned setup', () => {
-  const MARK = { sessionId: 's1', at: AT };
+  const MARK = { sessionId: 's1', at: AT, cause: null };
   const current = async () => (await db.doc(SERVER_DOC).get()).data() ?? {};
 
   it('is written with the state, in the same write, at the instant of the pass', async () => {
     await seedServer({ state: 'PROVISIONING', sessionId: 's1', ip: '51.15.42.7' });
 
-    await apply({ state: 'IDLE', clearFacts: true, abandonedSetup: 's1' });
+    await apply({ state: 'IDLE', clearFacts: true, abandonedSetup: { sessionId: 's1', cause: null } });
 
     const after = await current();
     expect(after['state']).toBe('IDLE');
-    expect(abandonedSetupFrom(after)).toEqual({ sessionId: 's1', at: NOW });
+    expect(abandonedSetupFrom(after)).toEqual({ sessionId: 's1', at: NOW, cause: null });
+  });
+
+  it('writes the cause of a preflight check that failed with the mark', async () => {
+    await apply({ state: 'IDLE', clearFacts: true, abandonedSetup: { sessionId: 's1', cause: 'copy-behind' } });
+
+    expect(abandonedSetupFrom(await current())).toEqual({ sessionId: 's1', at: NOW, cause: 'copy-behind' });
   });
 
   // The retry that clears a blocked session abandons nothing: the mark it

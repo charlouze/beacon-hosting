@@ -2,6 +2,7 @@ import {
   Deadline,
   DEFAULT_SETTINGS,
   isGame,
+  isPreflightFailure,
   isSetupActivity,
   isSetupProgress,
   isSetupStep,
@@ -118,14 +119,14 @@ export function gameCopyDocPath(game: Game): string {
  */
 export const ABANDONED_SETUP = 'abandonedSetup';
 
-/** The mark as the domain reads it. Half a mark reads as none. */
+/** The mark as the domain reads it. Half a mark reads as none; a cause it does not know reads as none. */
 export function abandonedSetupFrom(data: Record<string, unknown>): AbandonedSetup | null {
   const mark = data[ABANDONED_SETUP];
   if (typeof mark !== 'object' || mark === null) return null;
-  const { sessionId, at } = mark as Record<string, unknown>;
+  const { sessionId, at, cause } = mark as Record<string, unknown>;
   const abandonedAt = toDate(at);
   if (typeof sessionId !== 'string' || abandonedAt === null) return null;
-  return { sessionId, at: abandonedAt };
+  return { sessionId, at: abandonedAt, cause: isPreflightFailure(cause) ? cause : null };
 }
 
 /**

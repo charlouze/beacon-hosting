@@ -220,8 +220,9 @@ function correctionPatch(correction: StateCorrection, at: Date): Record<string, 
     // without where it stopped. Null leaves the recorded mark, like
     // `lastError`.
     patch[ABANDONED_SETUP] = {
-      sessionId: correction.abandonedSetup,
+      sessionId: correction.abandonedSetup.sessionId,
       at: Timestamp.fromDate(at),
+      cause: correction.abandonedSetup.cause,
     };
   }
   return patch;
