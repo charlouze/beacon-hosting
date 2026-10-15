@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const dist = 'apps/functions/dist';
-const FUNCTIONS = ['watchdog', 'onServerStateChange', 'agentReport'];
+const FUNCTIONS = ['watchdog', 'refreshPublishedVersions', 'onServerStateChange', 'agentReport'];
 
 const fail = (message) => {
   console.error(`bundle-check: ${message}`);

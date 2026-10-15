@@ -25,7 +25,7 @@ vi.mock('./container.js', async (importOriginal) => {
 });
 
 import { runAgentReport } from './agent-report.js';
-import { agentReport, onServerStateChange } from './main.js';
+import { agentReport, onServerStateChange, refreshPublishedVersions } from './main.js';
 
 const mockRunAgentReport = vi.mocked(runAgentReport);
 
@@ -160,5 +160,17 @@ describe('the onServerStateChange trigger', () => {
     expect(endpoint.eventTrigger.eventFilterPathPatterns.document).toBe(
       'worlds/{worldId}/server/current',
     );
+  });
+});
+
+describe('the refreshPublishedVersions schedule', () => {
+  it('reads the publishers every hour, with no retry', () => {
+    const endpoint = (
+      refreshPublishedVersions as unknown as {
+        __endpoint: { scheduleTrigger: { schedule: string; retryConfig?: { retryCount?: number } } };
+      }
+    ).__endpoint;
+    expect(endpoint.scheduleTrigger.schedule).toBe('every 60 minutes');
+    expect(endpoint.scheduleTrigger.retryConfig?.retryCount).toBe(0);
   });
 });

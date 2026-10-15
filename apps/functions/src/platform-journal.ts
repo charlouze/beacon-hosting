@@ -9,6 +9,8 @@ export type FailureSource =
   | 'provisioning.begin'
   | 'provisioning.preflight'
   | 'provisioning.recordPublished'
+  | 'publishedRefresh.read'
+  | 'publishedRefresh.record'
   | 'provisioning.cleanup'
   | 'agentReport.dns'
   | 'agentReport.save'
