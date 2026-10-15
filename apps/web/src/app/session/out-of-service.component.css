@@ -7,3 +7,31 @@
 .said .before {
   color: var(--mute);
 }
+
+/* The waiting line stacks its three lines at every width: a label, the
+   display line, then the sentence. The shared `.call` row would squeeze them
+   into columns. */
+.call[data-field='copy-awaited'] {
+  display: block;
+  text-align: end;
+}
+
+.call[data-field='copy-awaited'] .k,
+.call[data-field='copy-awaited'] .at,
+.call[data-field='copy-awaited'] .said {
+  display: block;
+}
+
+.call[data-field='copy-awaited'] .at {
+  margin-top: 8px;
+}
+
+.call[data-field='copy-awaited'] .said {
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .call[data-field='copy-awaited'] {
+    text-align: start;
+  }
+}

@@ -58,6 +58,7 @@ describe('PreparingComponent', () => {
       stateSince: startedAt,
       setup,
       readyWindow,
+      awaitsCopyReplacement: false,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();

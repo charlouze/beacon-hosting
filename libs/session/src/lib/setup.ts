@@ -185,7 +185,7 @@ export function shownSetup(
 ): ShownSetup | null {
   if (opening.sessionId === null || opening.startedAt === null) return null;
 
-  const mark = markOf(opening, abandoned);
+  const mark = markOfLastOpening(opening, abandoned);
   const abandonedAt = mark?.at ?? null;
   if (opening.state !== 'PROVISIONING' && mark === null) return null;
 
@@ -197,7 +197,12 @@ export function shownSetup(
   return { stage: 'preflight', since: opening.startedAt, abandonedAt, failure: mark?.cause ?? null };
 }
 
-function markOf(opening: LastOpening, abandoned: AbandonedSetup | null): AbandonedSetup | null {
+/**
+ * The mark of the last session a world opened, once that session no longer
+ * prepares. A session stopped before it was claimed leaves the mark of the
+ * session before it, which counts for nothing.
+ */
+export function markOfLastOpening(opening: LastOpening, abandoned: AbandonedSetup | null): AbandonedSetup | null {
   if (opening.state === 'PROVISIONING') return null;
   return abandoned !== null && abandoned.sessionId === opening.sessionId ? abandoned : null;
 }

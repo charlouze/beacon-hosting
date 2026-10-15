@@ -1,4 +1,5 @@
 export * from './lib/abandoned-at-preflight.js';
+export * from './lib/copy-replacement.js';
 export * from './lib/deadline.js';
 export * from './lib/ended-without-server.js';
 export * from './lib/events.js';

@@ -535,3 +535,75 @@ describe('the setup of a session that prepares', () => {
     stop();
   });
 });
+
+describe('whether the game waits for its copy to be replaced', () => {
+  const DEPOSITED = new Date('2026-10-15T18:00:00Z');
+  const READ = new Date('2026-10-15T19:00:00Z');
+  const ABANDONED = new Date('2026-10-15T20:14:00Z');
+
+  const copyDoc = () => getFirestore().doc('gameCopies/sunkenland');
+
+  const recorded = (fields: Record<string, unknown>) => copyDoc().set(fields, { merge: true });
+
+  const deposit = (version: string, at: Date) =>
+    recorded({ depositedVersion: version, depositedAt: Timestamp.fromDate(at) });
+
+  const reading = (version: string, at: Date) =>
+    recorded({ publishedVersion: version, publishedReadAt: Timestamp.fromDate(at) });
+
+  const view = () =>
+    firstValue<WorldSummary | null>((on) => record().watchWorld('les-copains', on));
+
+  beforeEach(async () => {
+    await seedWorld('les-copains', { players: ['alice'], game: 'sunkenland' });
+  });
+
+  it('waits when the last reading follows the deposit and finds another version', async () => {
+    await deposit('25700000', DEPOSITED);
+    await reading('25746735', READ);
+
+    expect((await view())?.server?.awaitsCopyReplacement).toBe(true);
+  });
+
+  it('does not wait when the last reading finds the version deposited', async () => {
+    await deposit('25746735', DEPOSITED);
+    await reading('25746735', READ);
+
+    expect((await view())?.server?.awaitsCopyReplacement).toBe(false);
+  });
+
+  // A game that goes through no copy has no document at all.
+  it('does not wait when the game has no copy document', async () => {
+    expect((await view())?.server?.awaitsCopyReplacement).toBe(false);
+  });
+
+  it('waits after a setup abandoned for a behind copy, with no reading recorded', async () => {
+    await deposit('25700000', DEPOSITED);
+    await getFirestore()
+      .doc(serverDocPath('les-copains'))
+      .set(
+        {
+          state: 'IDLE',
+          stateSince: Timestamp.fromDate(ABANDONED),
+          sessionId: 's1',
+          abandonedSetup: { sessionId: 's1', at: Timestamp.fromDate(ABANDONED), cause: 'copy-behind' },
+        },
+        { merge: true },
+      );
+
+    expect((await view())?.server?.awaitsCopyReplacement).toBe(true);
+  });
+
+  it('follows a deposit made while the world is watched', async () => {
+    await deposit('25700000', DEPOSITED);
+    await reading('25746735', READ);
+    const seen: (WorldSummary | null)[] = [];
+    const unsubscribe = record().watchWorld('les-copains', (summary) => seen.push(summary));
+    await vi.waitFor(() => expect(seen.at(-1)?.server?.awaitsCopyReplacement).toBe(true));
+
+    await deposit('25746735', new Date('2026-10-15T21:00:00Z'));
+
+    await vi.waitFor(() => expect(seen.at(-1)?.server?.awaitsCopyReplacement).toBe(false));
+    unsubscribe();
+  });
+});

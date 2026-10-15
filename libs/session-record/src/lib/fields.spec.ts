@@ -12,6 +12,7 @@ import {
   lastOpeningFrom,
   openingFields,
   playerDocument,
+  publisherReadingFrom,
   serverDocPath,
   sessionFrom,
   settingsFrom,
@@ -392,5 +393,27 @@ describe('gameCopyFrom', () => {
     expect(gameCopyFrom({ depositedVersion: '25746735' })).toBeNull();
     expect(gameCopyFrom({ depositedAt: AT })).toBeNull();
     expect(gameCopyFrom({ depositedVersion: 'v1.2', depositedAt: AT })).toBeNull();
+  });
+});
+
+describe('publisherReadingFrom', () => {
+  const AT = new Date('2026-10-15T19:00:00Z');
+
+  it('reads the version last read from the publisher, and when', () => {
+    expect(publisherReadingFrom({ publishedVersion: '25746735', publishedReadAt: AT })).toEqual({
+      version: '25746735',
+      readAt: AT,
+    });
+  });
+
+  it('reads no reading where none is recorded', () => {
+    expect(publisherReadingFrom({})).toBeNull();
+    expect(publisherReadingFrom({ depositedVersion: '25746735', depositedAt: AT })).toBeNull();
+  });
+
+  it('reads no reading from half of one, or from a version that is not one', () => {
+    expect(publisherReadingFrom({ publishedVersion: '25746735' })).toBeNull();
+    expect(publisherReadingFrom({ publishedReadAt: AT })).toBeNull();
+    expect(publisherReadingFrom({ publishedVersion: 'v1.2', publishedReadAt: AT })).toBeNull();
   });
 });

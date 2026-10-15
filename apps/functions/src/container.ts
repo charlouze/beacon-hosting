@@ -31,6 +31,7 @@ import type { AgentReportDeps } from './agent-report.js';
 import { provisioningLedger } from './provisioning-ledger.js';
 import type { PlatformJournal } from './platform-journal.js';
 import type { ProvisionDeps } from './provisioning.js';
+import type { PublishedRefreshDeps } from './published-refresh.js';
 import type { WatchdogDeps } from './watchdog.js';
 import { watchdogHealth } from './watchdog-health.js';
 
@@ -136,6 +137,15 @@ function buildShared() {
   };
 }
 
+/**
+ * The reading of a game's publisher, shared by the preflight check and the
+ * hourly refresh. The catalogue knows which Steam application a game's copy
+ * holds; the adapter only knows how to read one.
+ */
+function publisher() {
+  return steamPublisher({ appOf: (game) => catalogFor(game).copySteamApp });
+}
+
 export function buildDeps(): WatchdogDeps {
   return { ...buildShared(), limits: DEFAULT_LIMITS };
 }
@@ -155,9 +165,7 @@ export function buildProvisionDeps(): ProvisionDeps {
     serverPassword: () => SERVER_PASSWORD.value(),
     members: adminMembershipRecord(db),
     tokens: agentTokens(db),
-    // The catalogue knows which Steam application a game's copy holds; the
-    // adapter only knows how to read one.
-    publisher: steamPublisher({ appOf: (game) => catalogFor(game).copySteamApp }),
+    publisher: publisher(),
     gameCopies: gameCopyStore(db),
     agentEndpoint: () => deploymentRecord(db).agentEndpoint(),
     saveKeys: () => ({
@@ -193,4 +201,10 @@ export function buildAgentReportDeps(): AgentReportDeps {
     host: shared.host,
     journal: shared.journal,
   };
+}
+
+/** What the hourly refresh needs: no Scaleway client, no secret. */
+export function buildPublishedRefreshDeps(): PublishedRefreshDeps {
+  const db = getFirestore(defaultApp());
+  return { publisher: publisher(), gameCopies: gameCopyStore(db), journal: platformJournal };
 }

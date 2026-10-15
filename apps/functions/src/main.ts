@@ -6,6 +6,7 @@ import {
   buildAgentReportDeps,
   buildDeps,
   buildProvisionDeps,
+  buildPublishedRefreshDeps,
   DYNHOST_PASSWORD,
   DYNHOST_USER,
   S3_SECRET_KEY,
@@ -14,6 +15,7 @@ import {
 } from './container.js';
 import { runAgentReport } from './agent-report.js';
 import { runStateChange } from './provisioning.js';
+import { runPublishedRefresh } from './published-refresh.js';
 import { runWatchdog } from './watchdog.js';
 
 /**
@@ -34,6 +36,28 @@ export const watchdog = onSchedule(
   },
   async () => {
     await runWatchdog(buildDeps());
+  },
+);
+
+/**
+ * Reads, every hour, the version each game's publisher publishes, so that the
+ * screen of a world out of service says its game waits for its copy before
+ * anyone opens. Apart from the watchdog: a pass of the watchdog must not
+ * depend on a call to Steam.
+ */
+export const refreshPublishedVersions = onSchedule(
+  {
+    schedule: 'every 60 minutes',
+    timeZone: 'Etc/UTC',
+    region: 'europe-west1',
+    timeoutSeconds: 120,
+    // steam-user, loaded at the first reading, as in onServerStateChange.
+    memory: '512MiB',
+    // No retry: the next reading is an hour away.
+    retryCount: 0,
+  },
+  async () => {
+    await runPublishedRefresh(buildPublishedRefreshDeps());
   },
 );
 

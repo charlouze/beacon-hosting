@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type Game, type JoinInfo } from '@beacon/session';
 import {
   completedSetupsDocPath,
   completedSetupsDocument,
+  gameCopyDocPath,
   serverDocPath,
   setupDocPath,
   setupStores,
@@ -29,6 +30,7 @@ export const SCREENS = [
   'failed',
   'preflight-behind',
   'preflight-unreadable',
+  'copy-awaited',
   'unreadable',
 ] as const;
 
@@ -171,6 +173,11 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
         },
       };
 
+    // Out of service and nothing abandoned: the game waits for its copy all
+    // the same, from what `screen()` writes on `gameCopies/{game}`.
+    case 'copy-awaited':
+      return blank;
+
     // A word no vocabulary in this repository knows — not a missing document.
     // The board has a row for it, and this is the only way to see it.
     case 'unreadable':
@@ -223,6 +230,21 @@ export async function screen(name: string, now: Date): Promise<void> {
   // A ready window is announced only from two completed setups of the game;
   // written whole on every screen, like `server/current`.
   await db.doc(completedSetupsDocPath(DEV_WORLD_GAME)).set(completedSetupsDocument(DEV_WORLD_SETUPS));
+  // Written whole on every screen too: only 'copy-awaited' records a reading
+  // newer than the deposit and at another version. 'preflight-behind' waits as
+  // well, from its abandon alone. The dev world's game keeps no copy in
+  // production, so this document is staged for the screen only.
+  const copy = db.doc(gameCopyDocPath(DEV_WORLD_GAME));
+  if (name === 'copy-awaited') {
+    await copy.set({
+      depositedVersion: '25700000',
+      depositedAt: new Date(now.getTime() - 3 * 86_400_000),
+      publishedVersion: '25746735',
+      publishedReadAt: new Date(now.getTime() - 20 * 60_000),
+    });
+  } else {
+    await copy.delete();
+  }
   console.log(
     `${serverDocPath(DEV_WORLD_ID)} now shows "${name}" — the open tab follows without a reload`,
   );

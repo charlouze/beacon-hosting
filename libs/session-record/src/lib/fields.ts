@@ -21,6 +21,7 @@ import {
   type KeptSetup,
   type KeptSetupStep,
   type LastOpening,
+  type PublisherReading,
   type SessionSettings,
   type SessionState,
   type WorldId,
@@ -119,6 +120,14 @@ export function gameCopyFrom(data: Record<string, unknown>): GameCopy | null {
   const depositedAt = toDate(data['depositedAt']);
   if (version === null || depositedAt === null) return null;
   return { version, depositedAt };
+}
+
+/** The reading of the publisher recorded on `gameCopies/{game}`. Half a reading, or a version that is not one, reads as none. */
+export function publisherReadingFrom(data: Record<string, unknown>): PublisherReading | null {
+  const version = gameVersionFrom(data['publishedVersion']);
+  const readAt = toDate(data['publishedReadAt']);
+  if (version === null || readAt === null) return null;
+  return { version, readAt };
 }
 
 /**

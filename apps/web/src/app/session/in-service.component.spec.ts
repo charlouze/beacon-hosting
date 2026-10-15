@@ -31,7 +31,7 @@ describe('InServiceComponent', () => {
       facts: { ip: null, joinInfo: null, lastError: null },
       stateSince: OPENED_AT,
       setup: null,
-      readyWindow: null,
+      readyWindow: null, awaitsCopyReplacement: false,
     });
     fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
     await fixture.whenStable();
@@ -125,7 +125,7 @@ describe('InServiceComponent', () => {
         facts: { ip: null, joinInfo, lastError: null },
         stateSince: OPENED_AT,
         setup: null,
-        readyWindow: null,
+        readyWindow: null, awaitsCopyReplacement: false,
       });
       fixture.componentRef.setInput('settings', DEFAULT_SETTINGS);
       await fixture.whenStable();
