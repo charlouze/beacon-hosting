@@ -1157,4 +1157,10 @@ La première lecture de Steam par `refreshPublishedVersions` a lieu dans l'heure
 
 ## Rulings log
 
+Ruling: la ligne d'attente prend la forme empilée des cadres W2, trois lignes, par un style limité à `[data-field="copy-awaited"]` dans `out-of-service.component.css`, à toutes les largeurs, et non la ligne `.call` du service que le plan réutilisait — W2 a été choisie sur des cadres qui empilent, et une phrase de 49 caractères ne tient pas sur une ligne à 390 px — si c'est faux, quelques lignes de CSS à retirer.
+
+Ruling: après un abandon pour une version illisible, quand une lecture enregistrée ensuite trouve la copie en retard, le texte sous le titre parle de la copie et la ligne d'arrêt de la version illisible — les deux sont vrais, et le cas demande une lecture horaire entre l'abandon et le regard — si c'est faux, une branche de plus dans `advice()`.
+
 ## Observed drift
+
+Aucune.
