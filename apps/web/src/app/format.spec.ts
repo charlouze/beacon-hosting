@@ -148,7 +148,14 @@ describe('stoppedAt', () => {
     expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: null })).toEqual({
       stage: 'preflight',
       at: '20:39',
+      failure: null,
     });
+  });
+
+  it('says why the preflight check failed, when it is known', () => {
+    expect(
+      stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT, failure: 'copy-behind' }),
+    ).toEqual({ stage: 'preflight', at: '20:39', failure: 'copy-behind' });
   });
 
   it('says nothing of a preflight check under way', () => {

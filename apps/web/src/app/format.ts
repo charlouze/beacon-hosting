@@ -3,6 +3,7 @@ import {
   setupStepRank,
   type Game,
   type ReadyWindow,
+  type PreflightFailure,
   type SessionState,
   type SetupActivity,
   type SetupStep,
@@ -84,7 +85,7 @@ export function activityLabel(activity: SetupActivity): string {
 
 /** Where an abandoned setup stopped, in the board's own words: its preflight check, or a step and its rank. */
 export type StoppedAt =
-  | { readonly stage: 'preflight'; readonly at: string }
+  | { readonly stage: 'preflight'; readonly at: string; readonly failure: PreflightFailure | null }
   | {
       readonly stage: 'step';
       readonly at: string;
@@ -100,7 +101,7 @@ export type StoppedAt =
 export function stoppedAt(shown: ShownSetup | null): StoppedAt | null {
   if (shown === null || shown.abandonedAt === null) return null;
   const at = hourLabel(shown.abandonedAt);
-  if (shown.stage === 'preflight') return { stage: 'preflight', at };
+  if (shown.stage === 'preflight') return { stage: 'preflight', at, failure: shown.failure };
   return {
     stage: 'step',
     at,

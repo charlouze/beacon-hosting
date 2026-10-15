@@ -27,6 +27,8 @@ export const SCREENS = [
   'expiring',
   'closing',
   'failed',
+  'preflight-behind',
+  'preflight-unreadable',
   'unreadable',
 ] as const;
 
@@ -85,6 +87,7 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
     provisionClaimedAt: null as Date | null,
     lastError: null as string | null,
     instanceSize: null as string | null,
+    abandonedSetup: null as { sessionId: string; at: Date; cause: string } | null,
   };
 
   const opened = {
@@ -150,6 +153,22 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
         state: 'FAILED',
         stateSince: ago(5 * 60_000),
         lastError: 'no capacity for DEV1-L in fr-par-1 (staged by `mise run screen`)',
+      };
+
+    // Out of service, the last setup abandoned at its preflight check two
+    // seconds after its opening: no step was ever kept for it.
+    case 'preflight-behind':
+    case 'preflight-unreadable':
+      return {
+        ...opened,
+        state: 'IDLE',
+        startedAt: ago(62_000),
+        stateSince: ago(60_000),
+        abandonedSetup: {
+          sessionId: opened.sessionId,
+          at: ago(60_000),
+          cause: screen === 'preflight-behind' ? 'copy-behind' : 'version-unreadable',
+        },
       };
 
     // A word no vocabulary in this repository knows — not a missing document.
