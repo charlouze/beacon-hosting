@@ -70,6 +70,11 @@ Un monde n'a jamais deux sessions en cours à la fois.
 Qui ouvre une session sur un monde qui en a déjà une en cours apprend qu'elle
 existe.
 
+Quand la copie d'un jeu était en retard la dernière fois que le système a lu
+la version que l'éditeur de ce jeu publie, et qu'elle n'a pas été remplacée
+depuis, l'écran d'un monde hors service de ce jeu dit, à la place d'offrir
+d'ouvrir une session, que le jeu attend que sa copie soit remplacée.
+
 Le nombre de mondes qui tournent en même temps n'a aucun plafond.
 
 Une session ouvre le monde sur sa dernière sauvegarde, quelle qu'ait été la
