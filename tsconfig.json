@@ -59,6 +59,9 @@
     },
     {
       "path": "./libs/admin-firestore"
+    },
+    {
+      "path": "./libs/steam-publications"
     }
   ],
   "compilerOptions": {}
