@@ -117,12 +117,8 @@ describe('a roster read the rules refuse', () => {
       });
     await vi.waitFor(() => expect(seen.at(-1)?.server?.session.state).toBe('PROVISIONING'));
     // These rules open no read on `server/setup` either: its listener is
-    // refused too, and the world publishes on the first step all the same.
-    expect(seen.at(-1)?.server?.setup).toEqual({
-      step: { step: 'waking', since: NOW, activity: null, progress: null },
-      order: null,
-      abandonedAt: null,
-    });
+    // refused too, and the world publishes on the preflight check all the same.
+    expect(seen.at(-1)?.server?.setup).toEqual({ stage: 'preflight', since: NOW, abandonedAt: null });
     // Nor on `completedSetups`: the world publishes all the same, with no window.
     expect(seen.at(-1)?.server?.readyWindow).toBeNull();
 

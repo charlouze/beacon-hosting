@@ -22,11 +22,19 @@ export interface Expiration {
   readonly detail: string;
 }
 
+/** A session closed before any server, past its stopping delay, that the provider holds nothing for. */
+export interface EndWithoutServer {
+  readonly worldId: WorldId;
+  readonly sessionId: SessionId;
+}
+
 export interface WatchdogDecision {
   /** What must be destroyed, and why. Computed once, across every world. */
   readonly destroy: readonly Reclamation[];
   /** What must be asked to stop, its closing time behind it — per world. */
   readonly expired: readonly Expiration[];
+  /** What must go out of service without anything to close. */
+  readonly endWithoutServer: readonly EndWithoutServer[];
 }
 
 /**
@@ -41,10 +49,10 @@ export interface WatchdogDecision {
  * expiration and the stuck-state check, by contrast, run once per world — §6:
  * the watchdog "applique à chacun, séparément, les décisions du tableau".
  *
- * One parcours, one return, two named lists — never a single list a flag
- * would have to be read to tell apart. A session never appears in both:
- * destroying and asking to stop are different verbs, and the caller must not
- * have to interpret which one it received.
+ * One parcours, one return, three named lists — never a single list a flag
+ * would have to be read to tell apart. A session never appears in two:
+ * destroying, asking to stop and ending with nothing to close are different
+ * verbs, and the caller must not have to interpret which one it received.
  */
 export function reclamations(view: WatchdogView, limits: WatchdogLimits): WatchdogDecision {
   const open = new Set(view.openSessions);
@@ -61,6 +69,7 @@ export function reclamations(view: WatchdogView, limits: WatchdogLimits): Watchd
   }
 
   const expired: Expiration[] = [];
+  const endWithoutServer: EndWithoutServer[] = [];
 
   for (const world of view.worlds) {
     const sessionId = world.server?.sessionId;
@@ -92,23 +101,35 @@ export function reclamations(view: WatchdogView, limits: WatchdogLimits): Watchd
       // reason reads better in the audit, and it is the one that decides what
       // server/current becomes.
       //
-      // It is emitted whether or not the provider holds anything. §6 asks for
-      // "destruction, then IDLE", and the "then" is the part a session with no
-      // resources still needs: close() is idempotent, so the cost of asking is
-      // two reads, and the benefit is a state that stops being stuck forever.
+      // It is emitted whether or not the provider holds anything, unless no
+      // server was ever asked for (below). §6 asks for "destruction, then
+      // IDLE", and the "then" is the part a session with no resources still
+      // needs: close() is idempotent, so the cost of asking is two reads, and
+      // the benefit is a state that stops being stuck forever.
       const stuck = stuckReason(world, view.now, limits);
       if (stuck !== null && sessionId != null) {
         const held = view.hosted.find((server) => server.sessionId === sessionId);
-        bySession.set(sessionId, {
-          sessionId,
-          reason: stuck,
-          detail: held?.summary ?? NOTHING_HELD,
-        });
+        // No step kept means no server was asked for; the provider confirms it,
+        // and so does a closed intent, which the Function opens only after the
+        // first step. Any one missing, and it is closed as any stuck closing
+        // is. So is a record no session can be read from: ending one needs the
+        // session.
+        if (
+          stuck === 'stopping-timeout' &&
+          !world.stepKept &&
+          held === undefined &&
+          !open.has(sessionId) &&
+          world.session?.state === 'STOPPING'
+        ) {
+          endWithoutServer.push({ worldId: world.worldId, sessionId });
+        } else {
+          bySession.set(sessionId, { sessionId, reason: stuck, detail: held?.summary ?? NOTHING_HELD });
+        }
       }
     }
   }
 
-  return { destroy: [...bySession.values()], expired };
+  return { destroy: [...bySession.values()], expired, endWithoutServer };
 }
 
 const NOTHING_HELD = 'the provider holds nothing for this session';

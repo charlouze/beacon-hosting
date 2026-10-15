@@ -1,6 +1,6 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
-import { displayedFactsFrom, sessionFrom } from '@beacon/session-record';
+import { displayedFactsFrom, keptSetupFrom, sessionFrom, setupDocPath } from '@beacon/session-record';
 import { DEFAULT_SETTINGS, World } from '@beacon/session';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEV_WORLD_ID } from './personas.js';
@@ -26,6 +26,7 @@ describe('screenFixture', () => {
   it('names only screens the board can actually announce', () => {
     expect(SCREENS).toEqual([
       'idle',
+      'preflight',
       'preparing',
       'running',
       'running-sunkenland',
@@ -43,6 +44,7 @@ describe('screenFixture', () => {
   // board has a row for it.
   it.each([
     ['idle', 'IDLE'],
+    ['preflight', 'PROVISIONING'],
     ['preparing', 'PROVISIONING'],
     ['running', 'RUNNING'],
     ['running-sunkenland', 'RUNNING'],
@@ -140,5 +142,24 @@ describe('screen', () => {
     expect(doc.get('setups').map((setup: { durationMs: number }) => setup.durationMs)).toEqual([
       300_000, 480_000,
     ]);
+  });
+
+  it('stages a claimed session that keeps no step yet, on preflight', async () => {
+    await screen('preparing', NOW);
+    await screen('preflight', NOW);
+
+    const server = await db.doc('worlds/dev-world/server/current').get();
+    expect(server.get('state')).toBe('PROVISIONING');
+    expect(server.get('provisionClaimedAt')).not.toBeNull();
+    expect((await db.doc(setupDocPath(DEV_WORLD_ID)).get()).exists).toBe(false);
+  });
+
+  it('keeps the first step for the staged session, on preparing', async () => {
+    await screen('preflight', NOW);
+    await screen('preparing', NOW);
+
+    const kept = keptSetupFrom((await db.doc(setupDocPath(DEV_WORLD_ID)).get()).data() ?? {});
+    expect(kept?.sessionId).toBe('dev-session-0001');
+    expect(kept?.step.step).toBe('waking');
   });
 });

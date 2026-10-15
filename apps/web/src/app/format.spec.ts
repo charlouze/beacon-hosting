@@ -124,6 +124,8 @@ describe('activityLabel', () => {
 });
 
 describe('stoppedAt', () => {
+  const OPENED = new Date('2026-09-12T20:14:00');
+  const STOPPED_AT = new Date('2026-09-12T20:39:00');
   const step = (name: 'waking' | 'fetching-game') => ({
     step: name,
     since: new Date('2026-09-12T20:16:00'),
@@ -134,25 +136,34 @@ describe('stoppedAt', () => {
   it('says the hour, the rank in the order of the game and the name of the step', () => {
     expect(
       stoppedAt({
+        stage: 'step',
         step: step('fetching-game'),
         order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
-        abandonedAt: new Date('2026-09-12T20:19:00'),
+        abandonedAt: STOPPED_AT,
       }),
-    ).toEqual({ at: '20:19', rank: 3, total: 4, name: 'Getting the game' });
+    ).toEqual({ stage: 'step', at: '20:39', rank: 3, total: 4, name: 'Getting the game' });
   });
 
-  it('ranks the first step first when no order is known', () => {
+  it('says a setup abandoned before its first step stopped at the preflight check', () => {
+    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).toEqual({
+      stage: 'preflight',
+      at: '20:39',
+    });
+  });
+
+  it('says nothing of a preflight check under way', () => {
+    expect(stoppedAt({ stage: 'preflight', since: OPENED, abandonedAt: null })).toBeNull();
+  });
+
+  it('says nothing of a step under way, nor of none', () => {
     expect(
       stoppedAt({
+        stage: 'step',
         step: step('waking'),
-        order: null,
-        abandonedAt: new Date('2026-09-12T20:19:00'),
+        order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
+        abandonedAt: null,
       }),
-    ).toEqual({ at: '20:19', rank: 1, total: 4, name: 'Waking the server' });
-  });
-
-  it('says nothing of a setup under way, nor of none', () => {
-    expect(stoppedAt({ step: step('waking'), order: null, abandonedAt: null })).toBeNull();
+    ).toBeNull();
     expect(stoppedAt(null)).toBeNull();
   });
 });

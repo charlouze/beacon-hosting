@@ -1,0 +1,324 @@
+﻿<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beacon — the preflight check, 390 px</title>
+<style>
+  :root {
+    --paper:#faf8f3; --ink:#16181b; --red:#d8232a; --blue:#12457f;
+    --rule:rgba(22,24,27,.18); --mute:#6b6f75; --held:#8d8a82;
+    color-scheme: light;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:#e7e4dc; color:var(--ink);
+    font:16px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; padding:0 0 80px;
+  }
+  ::selection { background:rgba(216,35,42,.2); color:var(--ink); }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+
+  .note { max-width:760px; margin:0 auto; padding:28px 24px 8px; font-size:14px; color:#4d4a44; }
+  .note h1 { font-size:12px; letter-spacing:.2em; text-transform:uppercase; margin-bottom:8px; color:var(--ink); }
+  .note p { max-width:66ch; }
+  .note p + p { margin-top:10px; }
+
+  .stage { width:620px; max-width:100%; margin:0 auto; padding:24px 0 0; display:grid; gap:40px; }
+  .label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#6b6f75; margin-bottom:10px; padding:0 12px; }
+  .label b { color:var(--ink); font-weight:700; }
+  .ask { font-size:12.5px; color:#4d4a44; margin:-4px 0 12px; padding:0 12px; }
+
+  /* ---------- the screen, as the states round left it ---------- */
+  .screen {
+    width:390px; max-width:100%; margin:0 auto;
+    background:var(--paper);
+    box-shadow:0 1px 2px rgba(0,0,0,.14), 0 18px 44px rgba(0,0,0,.16);
+    padding:26px 24px 24px;
+    display:flex; flex-direction:column;
+    min-height:700px;
+  }
+  .lede { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .wordmark { font-size:13px; font-weight:800; letter-spacing:.26em; text-transform:uppercase; }
+  .wordmark span { font-weight:500; color:var(--mute); }
+  .status { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap; }
+  .status .dot { width:8px; height:8px; border-radius:50%; background:var(--red); }
+  .status.off { color:var(--mute); }
+  .status.off .dot { background:#b6b2a8; }
+
+  .band { border-top:3px solid var(--ink); margin-top:18px; }
+  .band.thin { border-top-width:1px; border-color:var(--rule); }
+  .band.red { border-top:3px solid var(--red); }
+
+  .headline { padding:22px 0 18px; }
+  .k { font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--mute); }
+  .k.red { color:var(--red); }
+  .clock {
+    font:800 84px/0.86 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-variant-numeric:tabular-nums; letter-spacing:-.035em; margin-top:10px;
+  }
+  .clock.range { font-size:52px; line-height:1.04; letter-spacing:-.03em; }
+  .clock.range .to, .clock .of { color:var(--mute); }
+  .closes { display:flex; align-items:baseline; gap:10px; margin-top:14px; }
+  .closes .v { font:700 22px/1 ui-sans-serif, system-ui, sans-serif; font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+  .closes .v .to { color:var(--mute); }
+  .closes .v.none { font-size:15px; font-weight:600; color:var(--mute); }
+  .closes + .closes { margin-top:10px; }
+  .unknown { font:800 34px/1.06 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.02em; margin-top:10px; }
+  .why { font-size:13.5px; color:var(--mute); margin-top:10px; }
+
+  .money { display:flex; gap:26px; padding:16px 0 20px; }
+  .money div .k { display:block; }
+  .money div .v { font:700 19px/1.2 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; margin-top:6px; }
+
+  .acts { display:flex; gap:10px; padding-top:14px; }
+  .acts.push { margin-top:auto; }
+  .btn {
+    flex:1; text-align:center; padding:16px 8px; border:2px solid var(--ink); background:var(--ink); color:var(--paper);
+    font:700 12px/1 ui-sans-serif,system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn.ghost { background:transparent; color:var(--ink); }
+  .hint { margin-top:11px; font-size:11.5px; color:var(--mute); letter-spacing:.02em; }
+
+  .empty { padding:40px 0 6px; }
+  .empty .big { font:800 33px/1.06 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.02em; }
+  .empty .sub { margin-top:14px; font-size:14.5px; color:var(--mute); max-width:34ch; }
+  .plate {
+    margin-top:18px; border:1px solid var(--rule); background:rgba(18,69,127,.045);
+    padding:14px 15px; display:flex; flex-direction:column; gap:9px;
+  }
+  .plate .line { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .plate .v { font-weight:700; font-variant-numeric:tabular-nums; }
+  .warn { margin-top:22px; }
+  .warn .said { font-size:15px; margin-top:10px; }
+  .warn .said b { font-weight:700; }
+
+  .release { padding:18px 0 6px; }
+  .release .big { font:800 26px/1.14 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.015em; }
+  .release .sub { margin-top:12px; font-size:14.5px; color:var(--mute); line-height:1.55; }
+  .release.small .big { font-size:19px; }
+  .release.small .sub { margin-top:8px; font-size:13.5px; }
+
+  /* ---------- A · one announced line ---------- */
+  .now { padding:16px 0 16px; }
+  .now .name { font:800 26px/1.1 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.015em; margin-top:8px; }
+  .now .row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:8px; }
+  .now .pct { font:800 26px/1 ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+  .now .since { font-size:13px; color:var(--mute); font-variant-numeric:tabular-nums; }
+
+  /* ---------- B · the calling points ---------- */
+  .points { display:grid; grid-template-columns:30px 1fr auto 6ch; padding:14px 0 4px; }
+  .points > div { display:contents; }
+  .points span { padding:10px 0; border-top:1px solid var(--rule); font-size:14.5px; font-variant-numeric:tabular-nums; display:flex; align-items:baseline; }
+  .points .head span { border-top:0; padding:0 0 8px; font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--mute); }
+  .points span:nth-child(3), .points span:nth-child(4) { justify-content:flex-end; }
+  .points span:nth-child(4) { padding-left:12px; }
+  .points .done span, .points .todo span { color:var(--mute); }
+  .points .cur span { font-weight:800; font-size:18px; letter-spacing:-.01em; padding:12px 0 11px; border-top:3px solid var(--ink); }
+  .points .cur + div span { border-top:3px solid var(--ink); }
+  .points .tail span { padding:0; border-top:3px solid var(--ink); }
+
+  /* ---------- C · the step leads, and the rule fills ---------- */
+  .stepline { display:flex; align-items:flex-end; gap:18px; }
+  .stepline .name { font:800 24px/1.08 ui-sans-serif,system-ui,sans-serif; letter-spacing:-.015em; padding-bottom:4px; }
+  .meta { font-size:14px; color:var(--mute); margin-top:14px; font-variant-numeric:tabular-nums; }
+  .meta b { color:var(--ink); font-weight:800; font-size:20px; margin-right:10px; }
+  .track { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .track i { display:block; height:3px; background:linear-gradient(var(--rule),var(--rule)) left bottom/100% 1px no-repeat; }
+  .track .done i { background:var(--ink); }
+  .track .cur i { background:linear-gradient(to right, var(--ink) var(--at,0%), var(--held) var(--at,0%)); }
+  .stepline .clock.word { font-size:40px; line-height:1; letter-spacing:-.025em; }
+  .warn .said span { color:var(--mute); }
+</style>
+
+<div class="note">
+  <h1>Beacon — la vérification préalable, 390 px</h1>
+  <p>Le monde ne rejoue pas : <b>The Departure Board</b>, forme C de l'attente. La vérification
+  préalable vient avant les quatre étapes, et aucun serveur n'existe encore pendant qu'elle tourne.
+  La spec veut que l'écran dise qu'elle est en cours, et aucune étape.</p>
+  <p>Elle dure une à deux secondes dans le cas ordinaire. Elle se voit surtout quand une Function
+  tombe pendant elle, et après un abandon qui s'y est arrêté.</p>
+</div>
+
+<div class="stage">
+
+  <div>
+    <div class="label">1 · Pendant la vérification — <b>P1, le filet attend, intact</b></div>
+    <p class="ask">À la place du rang, le nom de la vérification, en mots de tableau. Les quatre longueurs
+    restent, toutes à venir et immobiles : aucune étape n'a commencé. Sous « Close it now », plus aucune
+    ligne : la première heure n'est pas due.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="headline">
+        <div class="k">Before the first step</div>
+        <div class="stepline">
+          <div class="clock word">Preflight check</div>
+        </div>
+        <div class="meta">since 20:14</div>
+      </div>
+
+      <div class="track" role="img" aria-label="Preflight check, before the first step">
+        <div class="todo"><i></i></div>
+        <div class="todo"><i></i></div>
+        <div class="todo"><i></i></div>
+        <div class="todo"><i></i></div>
+      </div>
+
+      <div style="padding:16px 0 4px">
+        <div class="closes"><span class="k">Ready between</span><span class="v">20:20<span class="to"> – </span>20:27</span></div>
+        <div class="closes"><span class="k">Closes at</span><span class="v">00:14</span></div>
+      </div>
+
+      <div class="band thin" style="margin-top:14px"></div>
+      <div class="release small">
+        <div class="big">No need to stay.</div>
+        <div class="sub">Put the phone down and go back to your evening. The server will be up, and it
+        will close itself at 00:14 whether anyone comes back to this page or not.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:14px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.05</span></div>
+        <div><span class="k">Opened at</span><span class="v">20:14</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn ghost">Close it now</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">1 · Pendant la vérification — <b>P2, sans filet</b></div>
+    <p class="ask">La même chose sans les quatre longueurs : le filet ne parle que d'étapes, et il n'y en a
+    aucune. La ligne d'aide disparaît tout à fait.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Preparing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="headline">
+        <div class="k">Before the first step</div>
+        <div class="stepline">
+          <div class="clock word">Preflight check</div>
+        </div>
+        <div class="meta">since 20:14</div>
+      </div>
+
+      <div class="band thin" style="margin-top:0"></div>
+      <div style="padding:16px 0 4px">
+        <div class="closes"><span class="k">Ready between</span><span class="v">20:20<span class="to"> – </span>20:27</span></div>
+        <div class="closes"><span class="k">Closes at</span><span class="v">00:14</span></div>
+      </div>
+
+      <div class="band thin" style="margin-top:14px"></div>
+      <div class="release small">
+        <div class="big">No need to stay.</div>
+        <div class="sub">Put the phone down and go back to your evening. The server will be up, and it
+        will close itself at 00:14 whether anyone comes back to this page or not.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:14px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.05</span></div>
+        <div><span class="k">Opened at</span><span class="v">20:14</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn ghost">Close it now</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">2 · Après un abandon à la vérification, <b>sans cause</b></div>
+    <p class="ask">Le cas d'une Function tombée pendant la vérification : le délai abandonne, et la marque
+    ne porte aucune cause. La ligne dit où, sans rang, puisque ce n'est pas une étape. Le texte du dessus
+    dit « at the same place » au lieu de « at the same step ».</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Out of service</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">It didn’t start.</div>
+        <div class="sub">Nothing was left running, and nothing is costing anything. Press again; if it
+        stops at the same place twice, tell whoever runs this.</div>
+      </div>
+
+      <div class="band red" style="margin-top:22px"></div>
+      <div class="warn" style="margin-top:14px">
+        <span class="k red">Where it stopped, at 20:39</span>
+        <div class="said"><b>Preflight check</b> · <span>before the first step</span></div>
+      </div>
+
+      <div class="plate">
+        <div class="line"><span class="k">Next session</span><span class="v">4 h · until 00:41</span></div>
+        <div class="line"><span class="k">Estimated cost</span><span class="v">€0.22</span></div>
+      </div>
+
+      <div class="acts push"><div class="btn">Try again</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">3 · Fermée pendant la vérification — <b>F0, l'écran d'aujourd'hui</b></div>
+    <p class="ask">Ce que l'écran de fermeture montrerait tel quel. Ses deux phrases sont fausses ici :
+    aucune machine n'existe, et aucun monde n'a été chargé. L'état dure le temps que la vérification
+    finisse, une à deux secondes, ou une quinzaine de minutes si la Function est tombée.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Closing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Closing down.</div>
+        <div class="sub">The machine is being destroyed — there is no paused server to come back to, and
+        that is on purpose.</div>
+      </div>
+      <div class="band thin" style="margin-top:18px"></div>
+      <div class="release small">
+        <div class="big">The world saves on its own schedule.</div>
+        <div class="sub">Every few minutes, and nothing here can force one. The last minutes of an evening
+        may not be in it — the same as if the machine had crashed.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:14px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.05</span></div>
+      </div>
+      <div class="acts push"></div>
+      <div class="hint">Nothing left to do here.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">3 · Fermée pendant la vérification — <b>F1, rien n'a été lancé</b></div>
+    <p class="ask">Le même écran quand aucune étape n'a commencé : il dit que rien n'a été lancé, donc
+    rien à détruire ni à sauvegarder, et retire le paragraphe de la sauvegarde.</p>
+    <div class="screen">
+      <div class="lede">
+        <div class="wordmark">Beacon <span>· Embervale</span></div>
+        <div class="status off"><span class="dot"></span>Closing</div>
+      </div>
+      <div class="band"></div>
+
+      <div class="empty">
+        <div class="big">Closing down.</div>
+        <div class="sub">It was still being checked: no server was started, so there is nothing to
+        destroy and nothing to save.</div>
+      </div>
+
+      <div class="band thin" style="margin-top:18px"></div>
+      <div class="money">
+        <div><span class="k">This session</span><span class="v">€0.00</span></div>
+      </div>
+      <div class="acts push"></div>
+      <div class="hint">Nothing left to do here.</div>
+    </div>
+  </div>
+
+</div>

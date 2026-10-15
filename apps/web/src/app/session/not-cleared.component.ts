@@ -49,7 +49,11 @@ import { euroLabel, hourLabel, stoppedAt } from '../format';
         <div class="warn" data-field="stopped-at">
           <span class="k" data-warn>Where it stopped, at {{ stopped.at }}</span>
           <div class="said">
-            <b>Step {{ stopped.rank }} of {{ stopped.total }}</b> · {{ stopped.name }}
+            @if (stopped.stage === 'step') {
+              <b>Step {{ stopped.rank }} of {{ stopped.total }}</b> · {{ stopped.name }}
+            } @else {
+              <b>Preflight check</b> · <span class="before">before the first step</span>
+            }
           </div>
         </div>
       }
@@ -79,6 +83,10 @@ import { euroLabel, hourLabel, stoppedAt } from '../format';
       flex: 1;
       display: flex;
       flex-direction: column;
+    }
+
+    .said .before {
+      color: var(--mute);
     }
   `,
 })

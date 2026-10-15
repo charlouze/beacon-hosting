@@ -1,8 +1,9 @@
 import type { Deadline } from '../deadline.js';
+import { endedWithoutServer } from '../ended-without-server.js';
 import type { DomainEvent, ReclaimReason } from '../events.js';
 import type { UnclaimedSweep } from '../ports.js';
 import type { SessionId, SessionState } from '../session.js';
-import type { Expiration, Reclamation } from './reclamations.js';
+import type { EndWithoutServer, Expiration, Reclamation } from './reclamations.js';
 import type { WatchdogView, WorldView } from './view.js';
 
 export type ReclaimOutcome =
@@ -13,9 +14,10 @@ export interface StateCorrection {
   /** Null leaves server/current's state alone. */
   readonly state: SessionState | null;
   /**
-   * Null leaves the recorded one alone; it never clears it. A previous failure
-   * has to stay visible until something replaces it — the interface says "the
-   * last attempt failed", and only a next attempt can answer that.
+   * Null leaves the recorded one alone; only `clearLastError` clears it. A
+   * previous failure has to stay visible until something replaces it — the
+   * interface says "the last attempt failed", and only a next attempt can
+   * answer that.
    */
   readonly lastError: string | null;
   /**
@@ -24,6 +26,12 @@ export interface StateCorrection {
    * fields those are is the adapter's business, not the domain's.
    */
   readonly clearFacts: boolean;
+  /**
+   * Whether the recorded `lastError` is emptied: the session this correction
+   * ends is the next attempt, and it answers that nothing failed. Ignored when
+   * `lastError` carries a string.
+   */
+  readonly clearLastError: boolean;
   /** Sessions whose provisioning intent must be closed. */
   readonly closeIntents: readonly SessionId[];
   readonly events: readonly DomainEvent[];
@@ -45,6 +53,7 @@ const NOTHING: StateCorrection = {
   state: null,
   lastError: null,
   clearFacts: false,
+  clearLastError: false,
   closeIntents: [],
   events: [],
   deadline: null,
@@ -141,7 +150,8 @@ export function sweepEvents(
  * written by a second call from the caller: a session `reclamations()` marks
  * expired can, in the same pass, also be a machine the provider already holds
  * nothing for — and only one function may decide what such a session becomes,
- * or the two can disagree about it in the same breath.
+ * or the two can disagree about it in the same breath. `endWithoutServer` is
+ * folded in for the same reason.
  *
  * `outcomes` must already be this world's own: every entry the loop below
  * walks becomes a `CleanupFailed` or a `CLOSED[...]` event, with no filter by
@@ -163,6 +173,7 @@ export function reconcileWorld(
   world: WorldView,
   outcomes: readonly ReclaimOutcome[],
   expired: readonly Expiration[],
+  endWithoutServer: readonly EndWithoutServer[],
 ): StateCorrection {
   const events: DomainEvent[] = [];
   const closeIntents: SessionId[] = [];
@@ -212,6 +223,7 @@ export function reconcileWorld(
       state: 'FAILED',
       lastError: own.error,
       clearFacts: false,
+      clearLastError: false,
       closeIntents,
       events,
       deadline: null,
@@ -224,11 +236,22 @@ export function reconcileWorld(
       state: 'IDLE',
       lastError: CLOSED[own.reclamation.reason].idleReason,
       clearFacts: true,
+      clearLastError: false,
       closeIntents,
       events,
       deadline: null,
       abandonedSetup: abandonedBy(own.reclamation),
     };
+  }
+
+  if (
+    record.state === 'STOPPING' &&
+    world.session !== null &&
+    world.session.state === 'STOPPING' &&
+    endWithoutServer.some((e) => e.sessionId === record.sessionId)
+  ) {
+    const ending = endedWithoutServer(world.session);
+    return { ...ending, closeIntents, events: [...events, ...ending.events] };
   }
 
   const stillHeld = isStillHeld(view, record.sessionId);
@@ -242,6 +265,7 @@ export function reconcileWorld(
       state: 'IDLE',
       lastError: null,
       clearFacts: true,
+      clearLastError: false,
       closeIntents,
       events,
       deadline: null,
@@ -260,6 +284,7 @@ export function reconcileWorld(
       state: 'IDLE',
       lastError: 'the machine disappeared at the provider',
       clearFacts: true,
+      clearLastError: false,
       closeIntents: closing(closeIntents, record.sessionId),
       events,
       deadline: null,
@@ -278,6 +303,7 @@ export function reconcileWorld(
       state: 'STOPPING',
       lastError: null,
       clearFacts: false,
+      clearLastError: false,
       closeIntents,
       events: [...events, { type: 'SessionExpired', sessionId: expiring.sessionId, detail: expiring.detail }],
       deadline: null,

@@ -4,6 +4,7 @@ import {
   type ServerRecord,
   type Session,
   type SessionId,
+  type SessionState,
   type StateCorrection,
   type WorldId,
 } from '@beacon/session';
@@ -59,6 +60,19 @@ export interface ServerStateStore {
   publish(facts: ServerFacts, at: Date): Promise<void>;
   /** `at` comes from the pass, so one pass stamps everything with one instant. */
   apply(correction: StateCorrection, at: Date): Promise<void>;
+  /**
+   * `apply`, in one transaction that reads `server/current` again and writes
+   * only if it still holds `expected`. False when it does not, and then nothing
+   * is written.
+   */
+  applyIf(expected: ExpectedSession, correction: StateCorrection, at: Date): Promise<boolean>;
+}
+
+export interface ExpectedSession {
+  readonly sessionId: SessionId;
+  readonly state: SessionState;
+  /** When true, the session must not have been claimed for provisioning. */
+  readonly unclaimed?: boolean;
 }
 
 /**
@@ -137,40 +151,7 @@ export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateSt
 
     async apply(correction: StateCorrection, at: Date): Promise<void> {
       const batch = db.batch();
-      const patch: Record<string, unknown> = {};
-
-      if (correction.state !== null) {
-        patch['state'] = correction.state;
-        // The state and the instant it began travel together, always. Writing
-        // one without the other is how "STOPPING for 10 minutes" stops being
-        // answerable.
-        patch['stateSince'] = Timestamp.fromDate(at);
-      }
-      if (correction.lastError !== null) {
-        // Only a string replaces it. Null means "leave the recorded one", not
-        // "clear it": the interface has to keep saying that the previous
-        // attempt failed until a next attempt answers for itself.
-        patch['lastError'] = correction.lastError;
-      }
-      if (correction.clearFacts) {
-        for (const field of RESERVED_FACTS) {
-          patch[field] = null;
-        }
-      }
-      if (correction.deadline !== null) {
-        // The deadline alone. `stateSince` stays where it is: the state did
-        // not change, and the delays of §6 are measured on it.
-        patch['deadline'] = Timestamp.fromDate(correction.deadline.at);
-      }
-      if (correction.abandonedSetup !== null) {
-        // With the state, in the same write: a screen never reads an abandon
-        // without where it stopped. Null leaves the recorded mark, like
-        // `lastError`.
-        patch[ABANDONED_SETUP] = {
-          sessionId: correction.abandonedSetup,
-          at: Timestamp.fromDate(at),
-        };
-      }
+      const patch = correctionPatch(correction, at);
       if (Object.keys(patch).length > 0) {
         batch.set(serverDoc(), patch, { merge: true });
       }
@@ -183,7 +164,67 @@ export function serverStateStore(db: Firestore, worldId: WorldId): ServerStateSt
       // atomicity, not with a retry.
       await batch.commit();
     },
+
+    async applyIf(expected, correction, at): Promise<boolean> {
+      return db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(serverDoc());
+        const data = snapshot.data() ?? {};
+        if (data['sessionId'] !== expected.sessionId) return false;
+        if (data['state'] !== expected.state) return false;
+        if (expected.unclaimed === true && (data['provisionClaimedAt'] ?? null) !== null) {
+          return false;
+        }
+
+        const patch = correctionPatch(correction, at);
+        if (Object.keys(patch).length > 0) transaction.set(serverDoc(), patch, { merge: true });
+        for (const event of correction.events) {
+          transaction.set(db.collection(EVENTS).doc(), eventDocument(event, at, worldId));
+        }
+        return true;
+      });
+    },
   };
+}
+
+/** What a correction writes on `server/current`, as fields. */
+function correctionPatch(correction: StateCorrection, at: Date): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+
+  if (correction.state !== null) {
+    patch['state'] = correction.state;
+    // The state and the instant it began travel together, always. Writing
+    // one without the other is how "STOPPING for 10 minutes" stops being
+    // answerable.
+    patch['stateSince'] = Timestamp.fromDate(at);
+  }
+  if (correction.lastError !== null) {
+    // Only a string replaces it. Null means "leave the recorded one", not
+    // "clear it": the interface has to keep saying that the previous
+    // attempt failed until a next attempt answers for itself.
+    patch['lastError'] = correction.lastError;
+  } else if (correction.clearLastError) {
+    patch['lastError'] = null;
+  }
+  if (correction.clearFacts) {
+    for (const field of RESERVED_FACTS) {
+      patch[field] = null;
+    }
+  }
+  if (correction.deadline !== null) {
+    // The deadline alone. `stateSince` stays where it is: the state did
+    // not change, and the delays of §6 are measured on it.
+    patch['deadline'] = Timestamp.fromDate(correction.deadline.at);
+  }
+  if (correction.abandonedSetup !== null) {
+    // With the state, in the same write: a screen never reads an abandon
+    // without where it stopped. Null leaves the recorded mark, like
+    // `lastError`.
+    patch[ABANDONED_SETUP] = {
+      sessionId: correction.abandonedSetup,
+      at: Timestamp.fromDate(at),
+    };
+  }
+  return patch;
 }
 
 /**

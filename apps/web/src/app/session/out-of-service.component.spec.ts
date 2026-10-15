@@ -90,7 +90,11 @@ describe('OutOfServiceComponent', () => {
   });
 
   describe('after an abandoned setup', () => {
+    const OPENED = new Date('2026-09-12T20:14:00');
+    const STOPPED_AT = new Date('2026-09-12T20:39:00');
+
     const STOPPED: ShownSetup = {
+      stage: 'step',
       step: {
         step: 'fetching-game',
         since: new Date('2026-09-12T20:16:00'),
@@ -103,6 +107,9 @@ describe('OutOfServiceComponent', () => {
 
     const stopped = (fixture: Awaited<ReturnType<typeof render>>): HTMLElement | null =>
       fixture.nativeElement.querySelector('[data-field="stopped-at"]');
+
+    const text = (element: HTMLElement, selector: string): string | undefined =>
+      element.querySelector(selector)?.textContent?.trim();
 
     it('says where the setup stopped, and at what hour', async () => {
       const text = stopped(await render(null, STOPPED))?.textContent ?? '';
@@ -136,22 +143,20 @@ describe('OutOfServiceComponent', () => {
       ).toContain('provisioning did not finish in time');
     });
 
-    it('shows the first step, ranked first, when no order of the game is known', async () => {
-      const text =
-        stopped(
-          await render(null, {
-            step: {
-              step: 'waking',
-              since: new Date('2026-09-12T20:14:00'),
-              activity: null,
-              progress: null,
-            },
-            order: null,
-            abandonedAt: new Date('2026-09-12T20:19:00'),
-          }),
-        )?.textContent ?? '';
-      expect(text).toContain('Step 1 of 4');
-      expect(text).toContain('Waking the server');
+    it('says the setup stopped at the preflight check, with no rank', async () => {
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+
+      expect(text(element, '[data-field="stopped-at"] .said')).toBe('Preflight check · before the first step');
+      expect(element.textContent).not.toContain('Step 1 of 4');
+    });
+
+    it('asks to say so when it stops at the same place twice', async () => {
+      const element: HTMLElement = (await render(null, { stage: 'preflight', since: OPENED, abandonedAt: STOPPED_AT })).nativeElement;
+      expect(element.textContent).toContain('if it stops at the same place twice');
+    });
+
+    it('keeps the same step for an abandon at a step', async () => {
+      expect((await render(null, STOPPED)).nativeElement.textContent).toContain('if it stops at the same step twice');
     });
 
     it('says nothing of it on a world that abandoned no setup', async () => {

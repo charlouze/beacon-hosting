@@ -92,9 +92,9 @@ run = "npx nx run @beacon/functions:personas"
 # `worlds/dev-world/server/current`. Le choisir, c'est donc ecrire ce
 # document — et l'onglet ouvert suit sans rechargement, puisqu'il y est abonne.
 [tasks.screen]
-description = "Met worlds/dev-world/server/current dans l'etat que l'ecran a voir demande (idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
+description = "Met worlds/dev-world/server/current dans l'etat que l'ecran a voir demande (idle, preflight, preparing, running, running-sunkenland, expiring, closing, failed, unreadable)"
 env = { FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080", FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099", GCLOUD_PROJECT = "demo-beacon" }
-usage = 'arg "<screen>" help="idle, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
+usage = 'arg "<screen>" help="idle, preflight, preparing, running, running-sunkenland, expiring, closing, failed, unreadable"'
 run = "npx nx run @beacon/functions:screen -- {{ usage.screen }}"
 
 # Regarder des ecrans ne demande ni tunnel, ni Functions, ni machine : seulement

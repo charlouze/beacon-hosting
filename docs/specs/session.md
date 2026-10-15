@@ -14,7 +14,7 @@ La forme de l'interface appartient à `.impeccable/DIRECTION.md`.
 
 | Métier | Code, et libellé s'il diffère | Ce que c'est |
 |---|---|---|
-| session | `Session` | une partie ouverte sur un monde, en cours de son ouverture à la disparition de son serveur |
+| session | `Session` | une partie ouverte sur un monde, en cours de son ouverture à la disparition de son serveur ou, quand aucun serveur n'a été créé, à la fin de sa mise en place |
 | serveur de jeu | `HostedServer` | ce qu'une session fait naître chez l'hébergeur, qui fait tourner le jeu et qu'on rejoint |
 | heure de fermeture | `Deadline`, affiché `Closes at` | l'instant auquel une session se ferme |
 | ouvrir une session | `opening` | la faire naître sur un monde |
@@ -26,17 +26,21 @@ La forme de l'interface appartient à `.impeccable/DIRECTION.md`.
 | gabarit | `InstanceSize` | le calibre du serveur de jeu |
 | réglages | `SessionSettings` | la durée d'une session, le pas et la fenêtre de prolongation, et le gabarit |
 | jeu | `Game` | un jeu que Beacon sait faire tourner, désigné par son identité |
+| version d'un jeu | `GameVersion` | ce qui identifie une publication d'un jeu par son éditeur |
+| copie du jeu | `GameCopy` | les fichiers d'un jeu, à l'une de ses versions, que Beacon garde pour ses serveurs de jeu |
+| copie en retard | `behind` | une copie du jeu qui manque, ou qui n'est pas à la version que l'éditeur du jeu publie |
 | point de jonction | `JoinInfo`, affiché `How to join` | les moyens de rejoindre le serveur d'une session |
 | fourchette de disponibilité | `readyWindow`, affiché `Ready between` | les deux heures entre lesquelles le serveur devrait devenir joignable |
 | mise en place | `setup` | ce qu'une session traverse entre son ouverture et son passage en service |
-| étape | `SetupStep` | l'une des quatre parties d'une mise en place |
+| vérification préalable | `preflight` | ce que le système vérifie d'une session avant de créer son serveur de jeu |
+| étape | `SetupStep` | l'une des quatre parties d'une mise en place qui suivent sa vérification préalable |
 | activité | `SetupActivity` | ce qu'un serveur de jeu fait à l'intérieur d'une étape |
 | avancement | `SetupProgress` | la part déjà faite de l'activité en cours, ou de l'étape quand elle n'en a pas, en pourcentage |
-| réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu au dernier échec |
-| hors service | `IDLE`, affiché `Out of service` | le monde n'a aucun serveur de jeu |
-| en préparation | `PROVISIONING`, affiché `Preparing` | le serveur se met en place |
+| réponse de l'hébergeur | `lastError`, affiché `What the host said` | ce que l'hébergeur a répondu quand la dernière session a échoué |
+| hors service | `IDLE`, affiché `Out of service` | le monde n'a aucune session en cours |
+| en préparation | `PROVISIONING`, affiché `Preparing` | la session se met en place |
 | en service | `RUNNING`, affiché `In service` | on peut rejoindre le monde dans le jeu |
-| en fermeture | `STOPPING`, affiché `Closing` | la session a commencé à se fermer, et son serveur n'a pas encore disparu |
+| en fermeture | `STOPPING`, affiché `Closing` | la session a commencé à se fermer, et n'a pas encore cessé d'être en cours |
 | bloqué | `FAILED`, affiché `Not cleared` | le système n'a pas pu garantir que rien ne subsiste de la session |
 
 ### Ce que ce contexte emprunte, et ce qu'il en connaît
@@ -71,13 +75,19 @@ Le nombre de mondes qui tournent en même temps n'a aucun plafond.
 Une session ouvre le monde sur sa dernière sauvegarde, quelle qu'ait été la
 cause de la fermeture de la précédente.
 
+Une mise en place commence par une vérification préalable, avant qu'aucun
+serveur de jeu soit créé.
+
 Une mise en place qui aboutit traverse quatre étapes : le serveur se réveille,
 le jeu est installé, le monde est restauré, le jeu démarre. Le réveil du
-serveur commence à l'ouverture de la session et le démarrage du jeu vient en
-dernier ; l'ordre des deux autres dépend du jeu de la session.
+serveur commence quand la vérification préalable a réussi et le démarrage du
+jeu vient en dernier ; l'ordre des deux autres dépend du jeu de la session.
 
 Pendant la mise en place, l'écran affiche l'étape en cours, son rang sur quatre
 et l'heure à laquelle cette étape a commencé.
+
+Exception : pendant la vérification préalable, l'écran affiche qu'elle est en
+cours, et aucune étape.
 
 L'écran affiche l'avancement quand le serveur de jeu en déclare un.
 
@@ -105,6 +115,9 @@ annonce la minute suivante pour la plus tardive.
 Quand l'hébergeur refuse une mise en place, l'écran dit ce qu'il a répondu.
 
 Une mise en place qui n'aboutit pas est abandonnée.
+
+Exception : la mise en place d'une session qu'on ferme pendant sa vérification
+préalable n'est pas abandonnée, quelle que soit l'issue de cette vérification.
 
 Une mise en place est abandonnée dès que le serveur de jeu déclare qu'il ne
 peut pas la finir.
@@ -154,6 +167,10 @@ y compris celle qu'un autre a ouverte.
 Une session dont l'heure de fermeture est passée se ferme sans que personne ait
 à agir.
 
+Une session qu'on ferme pendant sa vérification préalable cesse d'être en
+cours dès que celle-ci se termine : sa mise en place s'arrête là, et aucun
+serveur de jeu n'est créé pour elle.
+
 Une fermeture qui n'aboutit pas est forcée.
 
 Aucun serveur de jeu ne coûte hors d'une session en cours.
@@ -166,7 +183,9 @@ stateDiagram-v2
     IDLE --> PROVISIONING : on ouvre une session
     PROVISIONING --> RUNNING : on peut rejoindre le monde dans le jeu
     RUNNING --> STOPPING : on la ferme, ou son heure de fermeture passe
+    PROVISIONING --> STOPPING : on la ferme
     STOPPING --> IDLE : le serveur a disparu
+    STOPPING --> IDLE : la vérification préalable est terminée, et aucun serveur n'a été créé
     PROVISIONING --> IDLE : la mise en place a échoué, mais rien ne subsiste
     RUNNING --> IDLE : le serveur a disparu chez l'hébergeur
     PROVISIONING --> FAILED : échec, et le système ne peut pas garantir que rien ne subsiste

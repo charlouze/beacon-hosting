@@ -201,3 +201,41 @@ describe('Session.opening on a world', () => {
     expect(Session.idle().worldId).toBeNull();
   });
 });
+
+describe('endWithoutServer', () => {
+  const SESSION_ID = 's1';
+  const sessionIn = (state: 'PROVISIONING' | 'RUNNING' | 'STOPPING') =>
+    Session.from({
+      state,
+      sessionId: SESSION_ID,
+      worldId: ENSHROUDED_WORLD.worldId,
+      game: 'enshrouded',
+      startedBy: 'u1',
+      startedAt: new Date('2026-09-06T20:00:00Z'),
+      deadline: Deadline.at(new Date('2026-09-07T00:00:00Z')),
+      instanceSize: null,
+      hasJoinInfo: false,
+    });
+
+  it('puts a session closed before any server out of service, at no cost', () => {
+    const decision = sessionIn('STOPPING').endWithoutServer();
+
+    expect(decision.session.state).toBe('IDLE');
+    expect(decision.events).toEqual([
+      {
+        type: 'SessionStopped',
+        sessionId: SESSION_ID,
+        detail: 'closed before any server was created',
+        costEuros: 0,
+      },
+    ]);
+  });
+
+  it.each(['PROVISIONING', 'RUNNING'] as const)('refuses a %s session', (state) => {
+    expect(() => sessionIn(state).endWithoutServer()).toThrow();
+  });
+
+  it('refuses when no session is open', () => {
+    expect(() => Session.idle().endWithoutServer()).toThrow();
+  });
+});

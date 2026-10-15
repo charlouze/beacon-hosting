@@ -36,10 +36,15 @@ const runningSession = (sessionId: string, deadlineIso: string) =>
 
 // The one-world shape most scenarios need — a world named 'w' carrying
 // whatever record and session that scenario is about.
-const singleWorld = (server: ServerRecord | null, session: Session | null = null): WorldView => ({
+const singleWorld = (
+  server: ServerRecord | null,
+  session: Session | null = null,
+  stepKept = true,
+): WorldView => ({
   worldId: 'w',
   server,
   session,
+  stepKept,
 });
 
 const view = (parts: Partial<WatchdogView> = {}): WatchdogView => ({
@@ -197,7 +202,7 @@ describe('reclamations', () => {
       worlds: [singleWorld(record('RUNNING', 's1', null), runningSession('s1', '2026-09-07T00:00:00Z'))],
       now: new Date('2026-09-07T00:01:59Z'),
     });
-    expect(reclamations(v, DEFAULT_LIMITS)).toEqual({ destroy: [], expired: [] });
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual({ destroy: [], expired: [], endWithoutServer: [] });
   });
 
   // The filet, and it must not move: an expired deadline no longer destroys,
@@ -226,6 +231,7 @@ describe('reclamations', () => {
       worldId,
       server: { state, sessionId, stateSince: NOW, hasReservedFacts: true },
       session: runningSession(sessionId, deadlineIso),
+      stepKept: true,
     });
 
     it('asks the expired one to stop and leaves the healthy one alone', () => {
@@ -259,5 +265,67 @@ describe('reclamations', () => {
       expect(decision.destroy).toHaveLength(1);
       expect(decision.destroy[0]).toMatchObject({ sessionId: 's-ghost', reason: 'no-open-session' });
     });
+  });
+});
+
+describe('a session closed before any server', () => {
+  const closed = Session.from({
+    state: 'STOPPING',
+    sessionId: 's1',
+    worldId: 'w',
+    game: 'enshrouded',
+    startedBy: 'u1',
+    startedAt: minutesAgo(12),
+    deadline: Deadline.at(new Date('2026-09-05T01:00:00Z')),
+    instanceSize: null,
+    hasJoinInfo: false,
+  });
+  const closing = (stateSince: Date, stepKept: boolean) =>
+    singleWorld(record('STOPPING', 's1', stateSince), closed, stepKept);
+
+  it('goes out of service without a destruction once its stopping delay is past', () => {
+    const v = view({ worlds: [closing(minutesAgo(11), false)] });
+
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual({
+      destroy: [],
+      expired: [],
+      endWithoutServer: [{ worldId: 'w', sessionId: 's1' }],
+    });
+  });
+
+  it('waits like any other until its stopping delay is past', () => {
+    const v = view({ worlds: [closing(minutesAgo(9), false)] });
+    expect(reclamations(v, DEFAULT_LIMITS).endWithoutServer).toEqual([]);
+  });
+
+  it('is destroyed as today when a step was kept for it', () => {
+    const v = view({ worlds: [closing(minutesAgo(11), true)] });
+    expect(reasons(v)).toEqual(['s1:stopping-timeout']);
+  });
+
+  // What is kept can be unreadable: a server the provider holds is closed all the same.
+  it('is destroyed as today when the provider holds a server for it', () => {
+    const v = view({ worlds: [closing(minutesAgo(11), false)], hosted: [hosted('s1')] });
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual(
+      expect.objectContaining({
+        destroy: [expect.objectContaining({ sessionId: 's1', reason: 'stopping-timeout' })],
+        endWithoutServer: [],
+      }),
+    );
+  });
+
+  it('is destroyed as today when its provisioning intent is open', () => {
+    const v = view({ worlds: [closing(minutesAgo(11), false)], openSessions: ['s1'] });
+    expect(reclamations(v, DEFAULT_LIMITS)).toEqual(
+      expect.objectContaining({
+        destroy: [expect.objectContaining({ sessionId: 's1', reason: 'stopping-timeout' })],
+        endWithoutServer: [],
+      }),
+    );
+  });
+
+  it('is destroyed as today when its record cannot be read as a session', () => {
+    const v = view({ worlds: [singleWorld(record('STOPPING', 's1', minutesAgo(11)), null, false)] });
+    expect(reasons(v)).toEqual(['s1:stopping-timeout']);
   });
 });

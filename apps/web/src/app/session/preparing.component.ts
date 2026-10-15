@@ -3,7 +3,7 @@ import {
   SETUP_STEPS,
   setupStepRank,
   type SessionSettings,
-  type ShownSetup,
+  type ShownStep,
 } from '@beacon/session';
 import type { ServerView } from '@beacon/session-record/client';
 import { CLOCK } from '../clock';
@@ -12,23 +12,21 @@ import { activityLabel, euroLabel, hourLabel, stepLabel, windowLabel } from '../
 /** One of the four lengths the rule under the step is cut in. */
 interface Length {
   readonly state: 'done' | 'cur' | 'todo';
-  /** Null for a length to come while the order of the game is not known. */
+  /** Null for the lengths of the preflight check, before any step has begun. */
   readonly name: string | null;
   /** How far the length under way is filled, when the game server measures it. */
   readonly at: string | null;
   readonly waiting: boolean;
 }
 
-function lengthsOf(shown: ShownSetup, rank: number): Length[] {
+function lengthsOf(shown: ShownStep, rank: number): Length[] {
   const { step, progress } = shown.step;
   return SETUP_STEPS.map((_, index) => {
     const position = index + 1;
     if (position !== rank) {
-      const named = shown.order?.[index] ?? null;
       return {
         state: position < rank ? 'done' : 'todo',
-        // Without the order of the game, only the step under way has a name.
-        name: named === null ? null : stepLabel(named),
+        name: stepLabel(shown.order[index]),
         at: null,
         waiting: false,
       };
@@ -43,11 +41,11 @@ function lengthsOf(shown: ShownSetup, rank: number): Length[] {
 }
 
 /**
- * The screen that releases. It says where the setup is — the step under way,
- * its rank, the hour it began, and how far it has got when the game server
- * measures it — and hands the user back to their evening. It never draws a
- * progress no measure carries: a step with no figure gets a length that
- * passes, and no percentage.
+ * The screen that releases. It says where the setup is — the preflight check
+ * and the hour it began, or the step under way, its rank, the hour it began,
+ * and how far it has got when the game server measures it — and hands the
+ * user back to their evening. It never draws a progress no measure carries: a
+ * step with no figure gets a length that passes, and no percentage.
  *
  * A window and never an hour: two setups of the same game end minutes apart,
  * and an hour contradicted releases nobody. It is drawn from the last setups
@@ -62,18 +60,26 @@ function lengthsOf(shown: ShownSetup, rank: number): Length[] {
   template: `
     <div class="hero">
       @if (step(); as step) {
-        <div class="stephero">
-          <span class="k">Step</span>
-          <div class="clock" data-field="step-rank">{{ step.rank }}<span class="of">/{{ total }}</span></div>
-          <div class="what">
-            <div class="name" data-field="step-name">{{ step.name }}</div>
-            <div class="meta tabular">
-              @if (step.progress !== null) {
-                <b data-field="step-progress">{{ step.progress }} %</b>
-              }
-              <span data-field="step-said">{{ step.said }}</span>
+        <div class="stephero" [class.preflight]="step.stage === 'preflight'">
+          @if (step.stage === 'step') {
+            <span class="k">Step</span>
+            <div class="clock" data-field="step-rank">{{ step.rank }}<span class="of">/{{ total }}</span></div>
+            <div class="what">
+              <div class="name" data-field="step-name">{{ step.name }}</div>
+              <div class="meta tabular">
+                @if (step.progress !== null) {
+                  <b data-field="step-progress">{{ step.progress }} %</b>
+                }
+                <span data-field="step-said">{{ step.said }}</span>
+              </div>
             </div>
-          </div>
+          } @else {
+            <span class="k">Before the first step</span>
+            <div class="what">
+              <div class="name" data-field="preflight">Preflight check</div>
+              <div class="meta tabular"><span data-field="step-said">{{ step.said }}</span></div>
+            </div>
+          }
         </div>
       }
       <div class="right">
@@ -132,7 +138,9 @@ function lengthsOf(shown: ShownSetup, rank: number): Length[] {
             Close it now
           </button>
         </div>
-        <div class="hint">The first hour is charged either way.</div>
+        @if (step()?.stage !== 'preflight') {
+          <div class="hint">The first hour is charged either way.</div>
+        }
       </div>
     </div>
   `,
@@ -148,10 +156,22 @@ export class PreparingComponent {
 
   readonly total = SETUP_STEPS.length;
 
-  /** Everything the screen says of the step under way, or null when it is given no setup. */
+  /**
+   * Everything the screen says of the preflight check or of the step under
+   * way, or null when it is given no setup.
+   */
   readonly step = computed(() => {
     const shown = this.view().setup;
     if (shown === null) return null;
+
+    if (shown.stage === 'preflight') {
+      return {
+        stage: 'preflight' as const,
+        said: `since ${hourLabel(shown.since)}`,
+        spoken: 'Preflight check, before the first step',
+        lengths: SETUP_STEPS.map(() => ({ state: 'todo' as const, name: null, at: null, waiting: false })),
+      };
+    }
 
     const rank = setupStepRank(shown);
     const { step, since, activity, progress } = shown.step;
@@ -159,6 +179,7 @@ export class PreparingComponent {
     const begun = `since ${hourLabel(since)}`;
 
     return {
+      stage: 'step' as const,
       rank,
       name,
       progress,

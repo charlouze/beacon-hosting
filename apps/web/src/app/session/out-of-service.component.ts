@@ -22,11 +22,12 @@ import { euroLabel, hourLabel, stoppedAt } from '../format';
     <div class="mid">
       <div class="empty">
         <div>
-          @if (stopped() !== null) {
+          @if (stopped(); as stopped) {
             <div class="big sm">It didn’t start.</div>
             <div class="sub">
               Nothing was left running, and nothing is costing anything. Press again; if it stops
-              at the same step twice, tell whoever runs this.
+              at the same {{ stopped.stage === 'step' ? 'step' : 'place' }} twice, tell whoever runs
+              this.
             </div>
           } @else if (refusal() !== null) {
             <div class="big sm">It didn’t start.</div>
@@ -55,7 +56,11 @@ import { euroLabel, hourLabel, stoppedAt } from '../format';
         <div class="warn" data-field="stopped-at">
           <span class="k" data-warn>Where it stopped, at {{ stopped.at }}</span>
           <div class="said">
-            <b>Step {{ stopped.rank }} of {{ stopped.total }}</b> · {{ stopped.name }}
+            @if (stopped.stage === 'step') {
+              <b>Step {{ stopped.rank }} of {{ stopped.total }}</b> · {{ stopped.name }}
+            } @else {
+              <b>Preflight check</b> · <span class="before">before the first step</span>
+            }
           </div>
         </div>
       }

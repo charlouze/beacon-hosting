@@ -47,14 +47,6 @@ ci-dessous sont établis par lecture.
   borne disparaît avec le problème qu'elle rattrapait ; soit la spec adopte la
   borne, et le lot correctif se requalifie.
 
-- **The life of a session** — une session peut passer de *en préparation* à *en
-  fermeture*, transition que le diagramme ne porte pas. L'écran ne l'offre pas,
-  mais le cœur de décision l'accepte et un chemin y mène. **Si c'est le code qui
-  a raison** — fermer une session pendant sa mise en place est un geste que le
-  produit veut — alors c'est la spec qu'il faut corriger, et le lot correctif se
-  requalifie.
-  reserved by batch-04
-
 - **Running a game** — le catalogue d'un des jeux (`deploy/cloud-init`,
   `enshrouded.ts`) ne transmet à son serveur aucun des comptes Steam que les
   membres d'un monde déclarent : ce serveur démarre sans aucun admin en jeu,

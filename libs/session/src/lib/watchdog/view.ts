@@ -40,6 +40,12 @@ export interface WorldView {
    * when the document says nothing this vocabulary recognises.
    */
   readonly session: Session | null;
+  /**
+   * Whether the setup kept names this world's session. Without it no server
+   * was ever asked for: the first step kept is what lets the Function call
+   * the provider.
+   */
+  readonly stepKept: boolean;
 }
 
 export interface WatchdogView {

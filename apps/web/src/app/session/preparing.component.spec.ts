@@ -5,6 +5,7 @@ import {
   Session,
   type ReadyWindow,
   type ShownSetup,
+  type ShownStep,
 } from '@beacon/session';
 import { CLOCK } from '../clock';
 import { PreparingComponent } from './preparing.component';
@@ -19,25 +20,22 @@ describe('PreparingComponent', () => {
   /** The world is brought back before the game's own container fetches the game. */
   const WORLD_FIRST = ['waking', 'restoring-world', 'fetching-game', 'starting-game'] as const;
 
-  const FIRST_STEP: ShownSetup = {
-    step: { step: 'waking', since: startedAt, activity: null, progress: null },
-    order: null,
-    abandonedAt: null,
-  };
+  const PREFLIGHT: ShownSetup = { stage: 'preflight', since: startedAt, abandonedAt: null };
 
   const WINDOW: ReadyWindow = {
     from: new Date('2026-09-12T20:19:10'),
     to: new Date('2026-09-12T20:22:05'),
   };
 
-  const fetching = (parts: Partial<ShownSetup['step']> = {}): ShownSetup => ({
+  const fetching = (parts: Partial<ShownStep['step']> = {}): ShownStep => ({
+    stage: 'step',
     step: { step: 'fetching-game', since: stepSince, activity: null, progress: null, ...parts },
     order: DEPOT_FIRST,
     abandonedAt: null,
   });
 
   const render = async (
-    setup: ShownSetup | null = FIRST_STEP,
+    setup: ShownSetup | null = PREFLIGHT,
     readyWindow: ReadyWindow | null = WINDOW,
   ) => {
     TestBed.resetTestingModule();
@@ -72,6 +70,9 @@ describe('PreparingComponent', () => {
   const lengths = (fixture: ComponentFixture<PreparingComponent>): HTMLElement[] => [
     ...fixture.nativeElement.querySelectorAll('.track > div'),
   ];
+
+  const text = (element: HTMLElement, selector: string): string | undefined =>
+    element.querySelector(selector)?.textContent?.trim();
 
   const states = (fixture: ComponentFixture<PreparingComponent>): (string | null)[] =>
     lengths(fixture).map((length) => length.getAttribute('data-length'));
@@ -124,17 +125,10 @@ describe('PreparingComponent', () => {
       expect(current.querySelector('i')?.style.getPropertyValue('--at')).toBe('0%');
     });
 
-    it('shows the first step since the opening while the order of the game is not known', async () => {
-      const fixture = await render(FIRST_STEP);
-
-      expect(field(fixture, 'step-name')).toBe('Waking the server');
-      expect(field(fixture, 'step-rank')).toBe('1/4');
-      expect(field(fixture, 'step-said')).toBe('since 20:14');
-    });
-
     // Nothing checks what a game server declares: the screen follows it back.
     it('follows a step declared backwards', async () => {
       const fixture = await render({
+        stage: 'step',
         step: { step: 'waking', since: stepSince, activity: null, progress: null },
         order: DEPOT_FIRST,
         abandonedAt: null,
@@ -145,9 +139,43 @@ describe('PreparingComponent', () => {
     });
   });
 
+  describe('the preflight check', () => {
+    it('shows the preflight check in place of a step, since the opening', async () => {
+      const element: HTMLElement = (await render(PREFLIGHT)).nativeElement;
+
+      expect(element.querySelector('[data-field="step-rank"]')).toBeNull();
+      expect(text(element, '[data-field="preflight"]')).toBe('Preflight check');
+      expect(text(element, '[data-field="step-said"]')).toBe('since 20:14');
+      expect(element.querySelector('.stephero .k')?.textContent?.trim()).toBe('Before the first step');
+    });
+
+    it('keeps the four lengths of the rule, all to come and still', async () => {
+      const element: HTMLElement = (await render(PREFLIGHT)).nativeElement;
+      const lengths = [...element.querySelectorAll('.track [data-length]')];
+
+      expect(lengths.map((l) => l.getAttribute('data-length'))).toEqual(['todo', 'todo', 'todo', 'todo']);
+      expect(element.querySelector('.track .wait')).toBeNull();
+      expect(element.querySelector('.track .k')).toBeNull();
+      expect(element.querySelector('.track')?.getAttribute('aria-label')).toBe('Preflight check, before the first step');
+    });
+
+    it('announces the ready window during the preflight check', async () => {
+      expect((await render(PREFLIGHT)).nativeElement.querySelector('[data-field="ready-window"]')).not.toBeNull();
+    });
+
+    it('does not say the first hour is charged while no server exists', async () => {
+      expect((await render(PREFLIGHT)).nativeElement.querySelector('.hint')).toBeNull();
+    });
+
+    it('still says it once a step is under way', async () => {
+      expect(text((await render(fetching())).nativeElement, '.hint')).toBe('The first hour is charged either way.');
+    });
+  });
+
   describe('the rule in four lengths', () => {
     it('marks the lengths travelled, the one under way and those to come', async () => {
       const fixture = await render({
+        stage: 'step',
         step: { step: 'restoring-world', since: stepSince, activity: null, progress: null },
         order: DEPOT_FIRST,
         abandonedAt: null,
@@ -164,17 +192,6 @@ describe('PreparingComponent', () => {
         'Bringing your world back',
         'Getting the game',
         'Starting the game',
-      ]);
-    });
-
-    it('leaves the lengths to come unnamed while the order of the game is not known', async () => {
-      const fixture = await render(FIRST_STEP);
-
-      expect(lengths(fixture).map((length) => length.textContent?.trim())).toEqual([
-        'Waking the server',
-        '',
-        '',
-        '',
       ]);
     });
 
@@ -222,18 +239,18 @@ describe('PreparingComponent', () => {
   // The game counts too few completed setups to draw a window from: the line
   // goes, and nothing stands in for it.
   it('announces no window when it is given none, and nothing in its place', async () => {
-    const fixture = await render(FIRST_STEP, null);
+    const fixture = await render(PREFLIGHT, null);
 
     expect(fixture.nativeElement.textContent).not.toContain('Ready between');
     expect(field(fixture, 'ready-window')).toBeNull();
-    expect(field(fixture, 'step-name')).toBe('Waking the server');
+    expect(field(fixture, 'preflight')).toBe('Preflight check');
     expect(field(fixture, 'closes-at')).toBe('00:14');
   });
 
   // The session opened at 20:14: the window shown is the one it is given, not
   // one worked out from that hour.
   it('computes no hour of the window itself', async () => {
-    const fixture = await render(FIRST_STEP, {
+    const fixture = await render(PREFLIGHT, {
       from: new Date('2026-09-12T20:31:00'),
       to: new Date('2026-09-12T20:47:00'),
     });
@@ -267,7 +284,7 @@ describe('PreparingComponent', () => {
 
   /** §11: the started hour is due whatever happens next, and saying so is honest. */
   it('offers to close now, and says the first hour is charged either way', async () => {
-    const fixture = await render();
+    const fixture = await render(fetching());
     expect(fixture.nativeElement.querySelector('[data-action="close"]').disabled).toBe(false);
     expect(fixture.nativeElement.textContent).toContain('first hour is charged');
   });

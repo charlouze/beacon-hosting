@@ -33,7 +33,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.doc(SERVER_DOC).delete();
+  await preparing('s1');
   await db.doc(SETUP_DOC).delete();
 });
 
@@ -44,6 +44,29 @@ describe('setupDocPath', () => {
 });
 
 describe('begin', () => {
+  it('keeps the first step from the instant it is given, and says so', async () => {
+    expect(await store.begin('s1', ORDER, OPENED)).toBe(true);
+    expect(await store.read()).toEqual({
+      sessionId: 's1',
+      order: [...ORDER],
+      step: { step: 'waking', since: OPENED, activity: null, progress: null },
+    });
+  });
+
+  it.each(['STOPPING', 'IDLE', 'RUNNING'] as const)(
+    'keeps nothing once the session is %s',
+    async (state) => {
+      await db.doc(SERVER_DOC).set({ state, sessionId: 's1' });
+      expect(await store.begin('s1', ORDER, OPENED)).toBe(false);
+      expect(await store.read()).toBeNull();
+    },
+  );
+
+  it('keeps nothing when the world holds another session', async () => {
+    await preparing('s2');
+    expect(await store.begin('s1', ORDER, OPENED)).toBe(false);
+  });
+
   it('writes the session, the order of its game and the first step since the opening', async () => {
     await store.begin('s1', ORDER, OPENED);
 
@@ -135,8 +158,9 @@ describe('advance', () => {
   });
 
   it('writes nothing when the kept setup belongs to another session', async () => {
-    await preparing('s1');
+    await preparing('s0');
     await store.begin('s0', ORDER, OPENED);
+    await preparing('s1');
 
     const advance = await store.advance('s1', { step: 'fetching-game' }, AT);
 
@@ -145,8 +169,8 @@ describe('advance', () => {
   });
 
   it('writes nothing when the world moved on to another session', async () => {
-    await preparing('s2');
     await store.begin('s1', ORDER, OPENED);
+    await preparing('s2');
 
     const advance = await store.advance('s1', { step: 'fetching-game' }, AT);
 
@@ -155,8 +179,8 @@ describe('advance', () => {
   });
 
   it('writes nothing once the session is no longer preparing', async () => {
-    await db.doc(SERVER_DOC).set({ state: 'RUNNING', sessionId: 's1' });
     await store.begin('s1', ORDER, OPENED);
+    await db.doc(SERVER_DOC).set({ state: 'RUNNING', sessionId: 's1' });
 
     const advance = await store.advance('s1', { step: 'starting-game' }, AT);
 

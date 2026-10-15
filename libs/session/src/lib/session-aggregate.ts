@@ -203,6 +203,28 @@ export class Session {
   }
 
   /**
+   * A session closed while its setup had created nothing ceases to be under
+   * way once that setup ends. No server, so no hour is due.
+   */
+  endWithoutServer(): SessionDecision {
+    const fields = this.required();
+    if (fields.state !== 'STOPPING') {
+      throw new Error(`cannot end a ${fields.state} session without a server`);
+    }
+    return {
+      session: Session.idle(),
+      events: [
+        {
+          type: 'SessionStopped',
+          sessionId: fields.sessionId,
+          detail: 'closed before any server was created',
+          costEuros: 0,
+        },
+      ],
+    };
+  }
+
+  /**
    * The bound applied on read. Without it a forged deadline, once the watchdog
    * brings it back, would make the countdown jump backwards on a screen whose
    * whole principle is that the closing time is an announced fact (§4).

@@ -82,13 +82,16 @@ export function activityLabel(activity: SetupActivity): string {
   return activities[activity];
 }
 
-/** Where an abandoned setup stopped, in the board's own words. */
-export interface StoppedAt {
-  readonly at: string;
-  readonly rank: number;
-  readonly total: number;
-  readonly name: string;
-}
+/** Where an abandoned setup stopped, in the board's own words: its preflight check, or a step and its rank. */
+export type StoppedAt =
+  | { readonly stage: 'preflight'; readonly at: string }
+  | {
+      readonly stage: 'step';
+      readonly at: string;
+      readonly rank: number;
+      readonly total: number;
+      readonly name: string;
+    };
 
 /**
  * Null for a setup under way and for none at all. The step alone: what it was
@@ -96,8 +99,11 @@ export interface StoppedAt {
  */
 export function stoppedAt(shown: ShownSetup | null): StoppedAt | null {
   if (shown === null || shown.abandonedAt === null) return null;
+  const at = hourLabel(shown.abandonedAt);
+  if (shown.stage === 'preflight') return { stage: 'preflight', at };
   return {
-    at: hourLabel(shown.abandonedAt),
+    stage: 'step',
+    at,
     rank: setupStepRank(shown),
     total: SETUP_STEPS.length,
     name: stepLabel(shown.step.step),

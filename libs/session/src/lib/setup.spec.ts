@@ -23,10 +23,10 @@ const kept = (parts: Partial<KeptSetupStep> = {}): KeptSetupStep => ({
 });
 
 describe('firstSetupStep', () => {
-  it('starts on the waking step, at the opening of the session', () => {
-    expect(firstSetupStep(OPENED)).toEqual({
+  it('starts on the waking step, from the instant it is given', () => {
+    expect(firstSetupStep(LATER)).toEqual({
       step: 'waking',
-      since: OPENED,
+      since: LATER,
       activity: null,
       progress: null,
     });
@@ -155,28 +155,21 @@ describe('shownSetup', () => {
 
   it('shows the kept step and the order of its game, while its own session prepares', () => {
     expect(shownSetup(PREPARING, null, keptFor('s1'))).toEqual({
+      stage: 'step',
       step: { step: 'fetching-game', since: LATER, activity: 'downloading', progress: 37 },
       order: ORDER,
       abandonedAt: null,
     });
   });
 
-  it('shows the first step since the opening, and no order, while nothing is kept', () => {
-    expect(shownSetup(PREPARING, null, null)).toEqual({
-      step: { step: 'waking', since: OPENED, activity: null, progress: null },
-      order: null,
-      abandonedAt: null,
-    });
+  it('shows the preflight check since the opening while no step is kept', () => {
+    expect(shownSetup(PREPARING, null, null)).toEqual({ stage: 'preflight', since: OPENED, abandonedAt: null });
   });
 
   // Nothing erases what a setup left: the next session finds the previous one
   // there until its own is begun.
-  it('shows the first step when what is kept belongs to another session', () => {
-    expect(shownSetup(PREPARING, null, keptFor('s0'))).toEqual({
-      step: { step: 'waking', since: OPENED, activity: null, progress: null },
-      order: null,
-      abandonedAt: null,
-    });
+  it('shows the preflight check when what is kept belongs to another session', () => {
+    expect(shownSetup(PREPARING, null, keptFor('s0'))).toEqual({ stage: 'preflight', since: OPENED, abandonedAt: null });
   });
 
   // The mark of the setup before is erased when the next one is claimed, not
@@ -194,6 +187,7 @@ describe('shownSetup', () => {
 
   it('shows the step an abandoned setup stopped at, and the instant it was abandoned', () => {
     expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s1'))).toEqual({
+      stage: 'step',
       step: { step: 'fetching-game', since: LATER, activity: 'downloading', progress: 37 },
       order: ORDER,
       abandonedAt: ABANDONED,
@@ -206,13 +200,10 @@ describe('shownSetup', () => {
     ).toEqual(ABANDONED);
   });
 
-  it('shows the first step of an abandoned setup whose kept step belongs to another session', () => {
-    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s0'))).toEqual({
-      step: { step: 'waking', since: OPENED, activity: null, progress: null },
-      order: null,
-      abandonedAt: ABANDONED,
-    });
-    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), null)?.step.step).toBe('waking');
+  it('shows the preflight check as where an abandoned setup stopped, when no step was kept for it', () => {
+    const stopped = { stage: 'preflight', since: OPENED, abandonedAt: ABANDONED };
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), keptFor('s0'))).toEqual(stopped);
+    expect(shownSetup(OUT_OF_SERVICE, markOf('s1'), null)).toEqual(stopped);
   });
 
   // A session opened then stopped before it was claimed leaves the mark of
@@ -235,6 +226,7 @@ describe('setupStepRank', () => {
   it('reads the rank of a step in the order of its game, from one', () => {
     expect(
       setupStepRank({
+        stage: 'step',
         step,
         order: ['waking', 'restoring-world', 'fetching-game', 'starting-game'],
         abandonedAt: null,
@@ -242,6 +234,7 @@ describe('setupStepRank', () => {
     ).toBe(3);
     expect(
       setupStepRank({
+        stage: 'step',
         step,
         order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
         abandonedAt: null,
@@ -252,14 +245,11 @@ describe('setupStepRank', () => {
   it('ranks the last step fourth', () => {
     expect(
       setupStepRank({
+        stage: 'step',
         step: kept({ step: 'starting-game' }),
         order: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
         abandonedAt: null,
       }),
     ).toBe(4);
-  });
-
-  it('ranks the first step first while no order is known', () => {
-    expect(setupStepRank({ step: firstSetupStep(OPENED), order: null, abandonedAt: null })).toBe(1);
   });
 });

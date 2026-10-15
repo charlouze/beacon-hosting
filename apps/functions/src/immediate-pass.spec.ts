@@ -155,6 +155,7 @@ const watchdogDeps = (db: Firestore, host: ServerHost): WatchdogDeps => ({
   clock: { now: () => new Date() },
   host,
   states: worldStateStores(db),
+  setups: setupStores(db),
   events: systemEvents(db),
   settings: settingsStore(db),
   ledger: provisioningLedger(db),

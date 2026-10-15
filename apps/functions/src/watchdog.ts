@@ -14,7 +14,7 @@ import {
   type WorldId,
   type WorldView,
 } from '@beacon/session';
-import type { SettingsStore, SystemEvents, WorldStateStores } from '@beacon/session-record';
+import type { SettingsStore, SetupStores, SystemEvents, WorldStateStores } from '@beacon/session-record';
 import { expunged, type PlatformJournal } from './platform-journal.js';
 import type { ProvisioningLedger } from './provisioning-ledger.js';
 import type { WatchdogHealth } from './watchdog-health.js';
@@ -23,6 +23,7 @@ export interface WatchdogDeps {
   readonly clock: Clock;
   readonly host: ServerHost;
   readonly states: WorldStateStores;
+  readonly setups: SetupStores;
   readonly events: SystemEvents;
   readonly ledger: ProvisioningLedger;
   readonly health: WatchdogHealth;
@@ -49,7 +50,7 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     deps.health.previousPass(),
     deps.settings.read(),
   ]);
-  const worlds = await Promise.all(worldIds.map((worldId) => readWorld(deps.states, worldId)));
+  const worlds = await Promise.all(worldIds.map((worldId) => readWorld(deps.states, deps.setups, worldId)));
 
   // The job still fires every five minutes, and that is the point: the
   // Monitoring alert of §6 is the only signal of a dead watchdog, it only
@@ -140,8 +141,17 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     // a session marked expired can, in this very pass, also be one the
     // grounding above already sent to IDLE, and reconcileWorld is the one
     // function that gets to decide between the two.
-    const correction = reconcileWorld(view, world, own, expired);
-    await deps.states.for(world.worldId).apply(correction, now);
+    const endWithoutServer = decision.endWithoutServer.filter((e) => e.worldId === world.worldId);
+    const correction = reconcileWorld(view, world, own, expired, endWithoutServer);
+    const store = deps.states.for(world.worldId);
+    const ending = endWithoutServer[0];
+    // On the condition that it is still closing: a pass overlapping this one
+    // read the same record, and would file the same stop a second time.
+    if (ending !== undefined) {
+      await store.applyIf({ sessionId: ending.sessionId, state: 'STOPPING' }, correction, now);
+    } else {
+      await store.apply(correction, now);
+    }
     for (const sessionId of correction.closeIntents) closeIntents.add(sessionId);
   }
 
@@ -149,8 +159,8 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
     (outcome) => !claimedBy.has(outcome.reclamation.sessionId),
   );
   if (unclaimed.length > 0) {
-    const noWorld: WorldView = { worldId: UNCLAIMED_WORLD, server: null, session: null };
-    const correction = reconcileWorld(view, noWorld, unclaimed, []);
+    const noWorld: WorldView = { worldId: UNCLAIMED_WORLD, server: null, session: null, stepKept: false };
+    const correction = reconcileWorld(view, noWorld, unclaimed, [], []);
     systemEvents.push(...correction.events);
     for (const sessionId of correction.closeIntents) closeIntents.add(sessionId);
   }
@@ -171,8 +181,13 @@ export async function runWatchdog(deps: WatchdogDeps): Promise<void> {
   await deps.health.beat(now, swept ? sweep.stranded : previous.stranded, now);
 }
 
-async function readWorld(states: WorldStateStores, worldId: WorldId): Promise<WorldView> {
+async function readWorld(states: WorldStateStores, setups: SetupStores, worldId: WorldId): Promise<WorldView> {
   const store = states.for(worldId);
-  const [server, session] = await Promise.all([store.read(), store.readSession()]);
-  return { worldId, server, session };
+  const [server, session, kept] = await Promise.all([
+    store.read(),
+    store.readSession(),
+    setups.for(worldId).read(),
+  ]);
+  const stepKept = kept !== null && server !== null && kept.sessionId === server.sessionId;
+  return { worldId, server, session, stepKept };
 }

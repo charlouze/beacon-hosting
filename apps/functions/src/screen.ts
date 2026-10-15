@@ -1,5 +1,12 @@
+import { catalogFor } from '@beacon/cloud-init';
 import { DEFAULT_SETTINGS, type Game, type JoinInfo } from '@beacon/session';
-import { completedSetupsDocPath, completedSetupsDocument, serverDocPath } from '@beacon/session-record';
+import {
+  completedSetupsDocPath,
+  completedSetupsDocument,
+  serverDocPath,
+  setupDocPath,
+  setupStores,
+} from '@beacon/session-record';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defaultApp } from './firebase-app.js';
 import { emulatorsOnly } from './emulator-guard.js';
@@ -13,6 +20,7 @@ import { DEV_WORLD_ID, PERSONAS } from './personas.js';
  */
 export const SCREENS = [
   'idle',
+  'preflight',
   'preparing',
   'running',
   'running-sunkenland',
@@ -93,6 +101,8 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
     ...opened,
     state: 'RUNNING',
     stateSince: ago(80 * 60_000),
+    // A session with a server was always claimed; an unclaimed STOPPING one is ended without server.
+    provisionClaimedAt: ago(85 * 60_000),
     instanceId: 'dev-instance',
     ipId: 'dev-ip',
     ip: '51.15.42.7',
@@ -104,7 +114,10 @@ export function screenFixture(screen: Screen, now: Date): Record<string, unknown
       return blank;
 
     // Claimed, because that is what PROVISIONING means to the function: the
-    // claim lock is taken and no second pass will spend money on it.
+    // claim lock is taken and no second pass will spend money on it. Both
+    // write the same document: on 'preparing' a step is kept for the session,
+    // on 'preflight' none is yet.
+    case 'preflight':
     case 'preparing':
       return {
         ...opened,
@@ -176,6 +189,18 @@ export async function screen(name: string, now: Date): Promise<void> {
   await db
     .doc(serverDocPath(DEV_WORLD_ID))
     .set({ ...fixture, joinInfo: forDevWorld(fixture['joinInfo'] as JoinInfo | null) });
+  // After `server/current`: the first step is kept only for the session it
+  // names in PROVISIONING.
+  await db.doc(setupDocPath(DEV_WORLD_ID)).delete();
+  if (name === 'preparing') {
+    await setupStores(db)
+      .for(DEV_WORLD_ID)
+      .begin(
+        'dev-session-0001',
+        catalogFor(DEV_WORLD_GAME).setupStepOrder,
+        new Date(now.getTime() - 30_000),
+      );
+  }
   // A ready window is announced only from two completed setups of the game;
   // written whole on every screen, like `server/current`.
   await db.doc(completedSetupsDocPath(DEV_WORLD_GAME)).set(completedSetupsDocument(DEV_WORLD_SETUPS));
