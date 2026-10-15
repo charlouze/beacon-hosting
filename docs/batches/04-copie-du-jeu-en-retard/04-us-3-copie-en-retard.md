@@ -2088,4 +2088,30 @@ La première lecture de Steam depuis une Function est la première ouverture d'u
 
 ## Rulings log
 
+Ruling: le test « leaves the deposit as it is, and the tool leaves the published version » vérifie la version et l'heure du dépôt juste après `recordPublished`, avant le second dépôt — tel que le plan l'écrivait, il passait même sans `{ merge: true }`, et l'écriture par fusion n'avait aucun test — si c'est faux, une assertion de trop.
+
+Ruling: `immediate-pass.spec.ts`, que le plan ne nommait pas, donne à `ProvisionDeps` un `publisher` qui lève s'il est appelé et un `gameCopies` — le typecheck l'exige, et le `publisher` épingle qu'un jeu sans copie ne lit rien — si c'est faux, une aide de test à reprendre.
+
+Ruling: la déclaration de `steam-user`, qui ne porte pas ses types, est atteinte par un `/// <reference path="./steam-user.d.ts" />` en tête de `steam-publisher.ts`, sous une exception ESLint commentée, et non par un `include` de `apps/functions/tsconfig.app.json` — cet `include` faisait entrer dans l'application un fichier de l'adapter — si c'est faux, un typecheck à recâbler.
+
+Ruling: `bundle-check` cherche `import("steam-user")` dans `main.js`, et non `require("steam-user")` — esbuild laisse tel quel l'import dynamique d'un paquet externe, que Node 22 charge — si c'est faux, une chaîne à changer le jour où le bundler change sa sortie.
+
+Ruling: dans le `try` de `bundle-check`, une Function absente du bundle lève une erreur au lieu d'appeler `fail()` — `process.exit` saute le `finally`, et le dossier d'installation isolé restait sur le disque — sans coût.
+
+Ruling: `onServerStateChange` reçoit `memory: '512MiB'` — le bundle a été mesuré à 165 Mo RSS sur un poste une fois `steam-user` chargé, contre 256 MiB par défaut, et une instance qui manque de mémoire pendant la vérification laisse la session en préparation jusqu'au délai d'abandon — si c'est faux, un prix par invocation un peu plus élevé pour une Function qui tourne quelques fois par soirée.
+
+Ruling: le commentaire de l'option `load` et le README de `libs/steam-publications` disent qu'un chargement de `steam-user` qui échoue le reste jusqu'au recyclage de l'instance ; le code remet toujours à zéro la fabrique, ce qui ne sert qu'à un chargeur injecté — Node garde en cache un `import()` qui a échoué, et le réessai promis n'existait pas en production — si c'est faux, une phrase.
+
+Ruling: le gestionnaire `loggedOn` ne fait rien quand la lecture a déjà rendu sa réponse, et le test de l'erreur tardive vérifie que rien n'a été demandé et qu'une seule déconnexion a eu lieu — un `loggedOn` tardif lançait sinon un `getProductInfo` sur un client déconnecté, qui arme chez `steam-user` un minuteur d'une heure — sans coût.
+
+Ruling: les tests de l'adapter qui doivent réussir prennent un délai de 1 000 ms, et `bundle-check` charge `steam-user` par `import()` depuis le dossier isolé, comme la production — un délai de 50 ms pouvait faire échouer un cas réussi sous une CI chargée — sans coût.
+
+Ruling: la classe `before` de la ligne d'arrêt reste, même quand elle porte une cause — elle précède cette story, et aucune règle CSS ne la cible — si c'est faux, un nom de classe trompeur.
+
+Technical design ruling: la Function ne lit la copie que lorsque la version publiée est lisible — la décision ne dépend pas de la copie dans l'autre cas, et une lecture de la copie en échec changerait une version illisible en refus ordinaire — si c'est faux, une lecture Firestore à ajouter.
+
+Technical design ruling: `bundle-check` charge le bundle dans un Node isolé, hors du dépôt, sur ses seules dépendances déclarées, et non dans l'émulateur — l'émulateur résout les modules en remontant jusqu'aux `node_modules` du dépôt, et chargerait `steam-user` même si le bundle ne le déclarait pas — si c'est faux, une cible à remplacer par un chargement dans l'émulateur.
+
 ## Observed drift
+
+Aucune.
