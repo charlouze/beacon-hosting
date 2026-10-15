@@ -1,3 +1,5 @@
+import type { Game } from './game.js';
+import type { PublishedVersion } from './preflight.js';
 import type { SessionId } from './session.js';
 import type { InstanceSize } from './settings.js';
 import type { Save, SaveOrigin } from './saves/save.js';
@@ -172,4 +174,15 @@ export interface SaveStore {
   fetch(save: Save, toFile: LocalPath): Promise<void>;
   /** Deposit a local archive under a new key, and answer what was written. */
   deposit(fromFile: LocalPath, draft: SaveDraft): Promise<Save>;
+}
+
+/**
+ * Asks the publisher of a game which version it publishes. It speaks of a game
+ * and a version, never of the platform that answers.
+ *
+ * Never rejects: a version it cannot read comes back unreadable, with a cause
+ * that only the platform journal reads.
+ */
+export interface GamePublisher {
+  publishedVersion(game: Game): Promise<PublishedVersion>;
 }

@@ -5,6 +5,7 @@ export * from './lib/game.js';
 export * from './lib/game-version.js';
 export * from './lib/join-info.js';
 export * from './lib/ports.js';
+export * from './lib/preflight.js';
 export * from './lib/ready-window.js';
 export * from './lib/saves/newest.js';
 export * from './lib/saves/save.js';
