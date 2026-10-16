@@ -68,16 +68,7 @@ const PUSH_INTERVAL_MS = AUTOSAVE_SECONDS * 1000;
 /** Where the restore unpacks the 2.3 GB, and where the server reads them. */
 const GAME_DIR = '/sunkenland/game';
 
-/**
- * What `wine` launches, and literally the same value `SERVER_BINARY` guards in
- * `tools/game-depot` — the one file that tool refuses to deposit 2.3 GB
- * without. Module boundaries forbid importing it here, and the smoke barrier
- * closes nothing this time: its game container is a stub, so the line below
- * never runs there. A divergence therefore arrives in production mute — the
- * server never starts, the filter matches no identifier, no join point is ever
- * published, and the session dies of the provisioning delay. A test in each
- * project pins the literal, as for `GAME_FILES_KEY` above.
- */
+/** What `wine` launches, and the file the depot refuses to deposit a copy without. */
 const SERVER_BINARY = 'Sunkenland-DedicatedServer.exe';
 /**
  * The image symlinks the game's own `LocalLow/…/Worlds` here, so this is a
@@ -535,6 +526,7 @@ export const sunkenland: GameCatalogEntry = {
   generatesWorlds: false,
   // The dedicated server, a Steam application distinct from the game client.
   copySteamApp: '2667530',
+  copyExecutable: SERVER_BINARY,
   // Measured at 26 GB occupied, at the peak as at rest: a 20 GB volume fills
   // up before the download ends.
   diskGb: 40,
