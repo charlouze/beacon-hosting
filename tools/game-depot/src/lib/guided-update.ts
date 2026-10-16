@@ -123,7 +123,7 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
     return 'refused';
   }
   try {
-    await ports.record.reach(ports.game);
+    await ports.record.depositedVersion(ports.game);
   } catch (error) {
     say(`  STOP  the record of the copy cannot be reached: ${error instanceof Error ? error.message : String(error)}`);
     say('        BEACON_FIREBASE_PROJECT names the project, and gcloud auth application-default login the identity.');

@@ -19,11 +19,13 @@ interface RecordDouble extends GameCopyRecord {
   readonly recorded: { game: Game; version: GameVersion }[];
 }
 
-function recordDouble(options: { reach?: () => Promise<void>; recordDeposit?: () => Promise<void> } = {}): RecordDouble {
+function recordDouble(
+  options: { depositedVersion?: () => Promise<GameVersion | null>; recordDeposit?: () => Promise<void> } = {},
+): RecordDouble {
   const recorded: { game: Game; version: GameVersion }[] = [];
   return {
     recorded,
-    reach: options.reach ?? (async () => undefined),
+    depositedVersion: options.depositedVersion ?? (async () => null),
     async recordDeposit(game, version) {
       await options.recordDeposit?.();
       recorded.push({ game, version });
@@ -137,7 +139,7 @@ describe('pushing game files', () => {
 
   it('refuses when the record cannot be reached, before building anything', async () => {
     const api = fakeObjectApi();
-    const record = recordDouble({ reach: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
+    const record = recordDouble({ depositedVersion: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
 
     await expect(pushGameFiles({ api, record, game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/record/);
     expect(await api.list('sunkenland/')).toEqual([]);

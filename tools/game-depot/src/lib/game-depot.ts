@@ -73,7 +73,7 @@ async function versionToDeposit(deps: PushGameFilesDeps): Promise<GameVersion> {
   );
   if ('refusal' in installed) throw new Error(`${installed.refusal}: refusing to push`);
   try {
-    await deps.record.reach(deps.game);
+    await deps.record.depositedVersion(deps.game);
   } catch (error) {
     throw new Error(`the record of the copy cannot be reached (${String(error)}): nothing deposited`);
   }

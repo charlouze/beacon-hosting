@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import type { AdminCredentials } from '@beacon/admin-key';
-import { gameVersionFrom } from '@beacon/session';
+import { gameVersionFrom, type GameVersion } from '@beacon/session';
 import { SERVER_BINARY, gameArchiveKeyFor } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import { type GuidedUpdatePorts, runGuidedUpdate } from './guided-update.js';
@@ -99,7 +99,7 @@ function harness(options: {
   readonly tree?: Record<string, number | string>;
   readonly configDump?: string;
   readonly installDir?: string;
-  readonly reach?: () => Promise<void>;
+  readonly depositedVersion?: () => Promise<GameVersion | null>;
   readonly answer?: (question: string, tree: Record<string, number | string>) => boolean;
 }): Harness {
   const tree = options.tree ?? steamWithTheServer();
@@ -144,9 +144,9 @@ function harness(options: {
         return api;
       },
       record: {
-        reach: async (game) => {
+        depositedVersion: async (game) => {
           reached.push(game);
-          await options.reach?.();
+          return (await options.depositedVersion?.()) ?? null;
         },
         recordDeposit: async (_game, version) => {
           recorded.push(version);
@@ -389,7 +389,7 @@ describe('the version of the copy', () => {
   });
 
   it('refuses when the record cannot be reached, without asking', async () => {
-    const flow = harness({ reach: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
+    const flow = harness({ depositedVersion: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
 
     expect(await runGuidedUpdate(flow.ports)).toBe('refused');
     expect(flow.said.join('\n')).toMatch(/record/i);
