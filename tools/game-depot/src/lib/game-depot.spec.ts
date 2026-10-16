@@ -100,16 +100,16 @@ describe('pushing game files', () => {
     await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(/size/);
   });
 
-  // Depositing 2.3 GB from the wrong folder costs a minute of transfer and an
-  // evening of doubt — over the one set of files nobody can push again
-  // without the Steam account.
-  it('refuses a source folder that does not hold the server', async () => {
-    const empty = join(root, 'empty');
-    mkdirSync(empty);
+  // Depositing from the wrong folder costs a transfer and an evening of doubt
+  // over the one set of files nobody can push again without the Steam account.
+  it('refuses a folder without the executable the catalogue names for the game, before building anything', async () => {
+    rmSync(join(sunkenlandInstall, 'Sunkenland-DedicatedServer.exe'));
     const api = fakeObjectApi();
-    await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: empty })).rejects.toThrow(
+
+    await expect(pushGameFiles({ api, record: recordDouble(), game: 'sunkenland', from: sunkenlandInstall })).rejects.toThrow(
       /Sunkenland-DedicatedServer\.exe/,
     );
+    expect(await api.list('sunkenland/')).toEqual([]);
   });
 
   it('records the version of what it deposited, once the deposit is read back', async () => {

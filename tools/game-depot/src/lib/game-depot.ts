@@ -5,7 +5,8 @@ import { create } from 'tar';
 import type { Game, GameVersion } from '@beacon/session';
 import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import { copySteamAppOf, installedVersion } from './steam-manifest.js';
+import { copyApplicationOf } from './copy-application.js';
+import { installedCopy } from './steam-manifest.js';
 
 /**
  * `<game>/game.tar`. The literal the cloud-init writes into
@@ -38,7 +39,7 @@ export interface PushGameFilesDeps {
   /** Where the version of the copy is recorded, once the deposit is read back. */
   readonly record: GameCopyRecord;
   readonly game: Game;
-  /** The local folder holding an install of the game's dedicated server. */
+  /** The local folder holding an install of the game's copy. */
   readonly from: string;
 }
 
@@ -60,17 +61,14 @@ export async function pushGameFiles(deps: PushGameFilesDeps): Promise<GameVersio
   return version;
 }
 
+const onDisk = {
+  exists: (path: string) => existsSync(path),
+  readText: (path: string) => (existsSync(path) ? readFileSync(path, 'utf8') : undefined),
+};
+
 /** The version of the install, once nothing is left that could refuse the push. */
 async function versionToDeposit(deps: PushGameFilesDeps): Promise<GameVersion> {
-  const app = copySteamAppOf(deps.game);
-  if (!existsSync(join(deps.from, SERVER_BINARY))) {
-    throw new Error(`${deps.from} does not hold ${SERVER_BINARY}: refusing to push the wrong folder`);
-  }
-  const installed = installedVersion(
-    (path) => (existsSync(path) ? readFileSync(path, 'utf8') : undefined),
-    deps.from,
-    app,
-  );
+  const installed = installedCopy(onDisk, deps.from, copyApplicationOf(deps.game));
   if ('refusal' in installed) throw new Error(`${installed.refusal}: refusing to push`);
   try {
     await deps.record.depositedVersion(deps.game);

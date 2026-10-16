@@ -13,7 +13,8 @@ import {
   steamcmdCommandFor,
   suggestedInstallDir,
 } from './steam-install.js';
-import { copySteamAppOf, installedVersion } from './steam-manifest.js';
+import { copyApplicationOf } from './copy-application.js';
+import { installedVersion } from './steam-manifest.js';
 
 /**
  * Four states rather than two, because the caller turns them into an exit code
@@ -114,12 +115,12 @@ export async function runGuidedUpdate(ports: GuidedUpdatePorts): Promise<GuidedU
     say('        That is the game client or a half-copied folder, not the dedicated server.');
     return 'refused';
   }
-  const installed = installedVersion(ports.files.readText, installDir, copySteamAppOf(ports.game));
+  const installed = installedVersion(ports.files.readText, installDir, copyApplicationOf(ports.game).steamApp);
   if ('refusal' in installed) {
     say(`  STOP  ${installed.refusal}.`);
     say('        Run this in another window to write the manifest in place, then this command again:');
     say('');
-    say(`          ${steamcmdCommandFor({ installDir, account: steamAccountFor(ports), app: copySteamAppOf(ports.game) })}`);
+    say(`          ${steamcmdCommandFor({ installDir, account: steamAccountFor(ports), app: copyApplicationOf(ports.game).steamApp })}`);
     return 'refused';
   }
   try {
@@ -181,7 +182,7 @@ function sayHowToInstall(ports: GuidedUpdatePorts, libraries: readonly string[])
   say('');
   say('        Run this in another window, then come back here:');
   say('');
-  say(`          ${steamcmdCommandFor({ installDir: suggestedInstallDir(libraries), account, app: copySteamAppOf(ports.game) })}`);
+  say(`          ${steamcmdCommandFor({ installDir: suggestedInstallDir(libraries), account, app: copyApplicationOf(ports.game).steamApp })}`);
   say('');
   say('        +force_install_dir comes before +login on purpose. Steam fixes its install');
   say('        root at login: placed after, the option is not refused, it is ignored, and');

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
-import { gameVersionFrom, type Game, type GameVersion } from '@beacon/session';
-import { catalogFor } from '@beacon/cloud-init';
+import { gameVersionFrom, type GameVersion } from '@beacon/session';
+import type { CopyApplication } from './copy-application.js';
+import type { LocalFiles } from './steam-install.js';
 
 export type InstalledVersion = { readonly version: GameVersion } | { readonly refusal: string };
 
@@ -49,9 +50,20 @@ export function installedVersion(
   return { version };
 }
 
-/** The application the copy of a game holds. A game that goes through no copy has nothing to deposit here. */
-export function copySteamAppOf(game: Game): string {
-  const app = catalogFor(game).copySteamApp;
-  if (app === null) throw new Error(`${game} goes through no copy: nothing of it is deposited`);
-  return app;
+/**
+ * The version of an install of a game's copy, or why it is refused: its
+ * manifest first, then the executable the catalogue says it carries. A folder
+ * that passes both is one a server of that game can start.
+ */
+export function installedCopy(
+  files: Pick<LocalFiles, 'exists' | 'readText'>,
+  installDir: string,
+  copy: CopyApplication,
+): InstalledVersion {
+  const installed = installedVersion(files.readText, installDir, copy.steamApp);
+  if ('refusal' in installed) return installed;
+  if (!files.exists(join(installDir, copy.executable))) {
+    return { refusal: `${installDir} holds no ${copy.executable}, so it is not an install of this copy` };
+  }
+  return installed;
 }
