@@ -1932,4 +1932,20 @@ et ce qu'on attend de lui : `steamcmd` trouvé dans le `PATH`, l'installation ac
 
 ## Rulings log
 
+Ruling: le `const GAMES` local de `catalog.spec.ts` disparaît au profit du `GAMES` de `@beacon/session` — le plan importe celui-ci, et le local collisionne avec lui — si c'est faux, rien : les deux listes portent les deux mêmes jeux.
+
+Ruling: le commentaire du describe `the Steam account` de `steam-install.spec.ts`, que le plan gardait tel quel, dit désormais ce que le test épingle — il disait qu'une commande est imprimée, ce qui n'est plus vrai — si c'est faux, une ligne de commentaire de test change sans nécessité.
+
+Ruling: `findSteamcmd` retire la paire de guillemets qui entoure une entrée du `PATH` — Windows les admet, et une entrée citée ferait dire à l'outil que `steamcmd` manque — si c'est faux, deux lignes et un test de trop.
+
+Ruling: `update` résout `--from` en chemin absolu avant de le donner à `steamcmd` — ce que `steamcmd` fait d'un `+force_install_dir` relatif n'est pas mesuré, et un téléchargement ailleurs ne se découvrirait qu'au refus qui le suit — si c'est faux, une ligne de trop.
+
+Ruling: une réponse au choix du jeu qui ne désigne aucun jeu arrête l'outil avant `steamcmd`, sans reposer la question — le design ne dit rien de ce cas, inatteignable tant qu'un seul jeu passe par une copie — si c'est faux, l'exploitant relance l'outil.
+
+Technical design ruling: le champ du catalogue qui dit l'exécutable s'appelle `copyExecutable`, nul exactement quand `copySteamApp` l'est, et un test l'épingle pour chaque jeu — le design le demande sans le nommer, et garder `copySteamApp` tel quel laisse intacts ses lecteurs dans `apps/functions` — si c'est faux, deux champs nullables se regroupent en un objet `copy`, et ses lecteurs changent.
+
+Technical design ruling: la première ligne du parcours guidé ne nomme plus le jeu, et l'étape 4 le nomme une fois choisi — le design veut l'en-tête qui nomme le jeu imprimé après ce choix, et imprimer l'en-tête au milieu des étapes numérotées le rendrait illisible — si c'est faux, une ligne change de place.
+
+Technical design ruling: `depositedVersion` rend la version d'une copie que les Functions liraient, donc `null` pour une version enregistrée sans son heure de dépôt — le design ne dit pas ce que la lecture rend, et l'outil doit juger « déjà la copie déposée » comme la vérification préalable la juge — si c'est faux, un document à moitié écrit fait proposer un dépôt au lieu de « déposer quand même ? ».
+
 ## Observed drift
