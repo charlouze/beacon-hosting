@@ -1,4 +1,4 @@
-import type { Game } from '@beacon/session';
+import { GAMES, type Game } from '@beacon/session';
 import { catalogFor } from '@beacon/cloud-init';
 
 /** What the catalogue says the copy of a game is made of. */
@@ -16,4 +16,9 @@ export function copyApplicationOf(game: Game): CopyApplication {
     throw new Error(`${game} goes through no copy: nothing of it is deposited`);
   }
   return { steamApp: copySteamApp, executable: copyExecutable };
+}
+
+/** The games this tool deposits a copy of, in the catalogue's order. */
+export function gamesWithACopy(): readonly Game[] {
+  return GAMES.filter((game) => catalogFor(game).copySteamApp !== null);
 }

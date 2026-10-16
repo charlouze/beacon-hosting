@@ -17,23 +17,6 @@ export function gameArchiveKeyFor(game: Game): string {
   return `${game}/game.tar`;
 }
 
-/**
- * The one file an install of the dedicated server always carries, and an
- * empty or half-copied folder never does. Named for Sunkenland and not
- * looked up per game: this tool has exactly one caller today (§4 decision 2),
- * and a table keyed by `Game` would guess at a second one that does not
- * exist yet.
- *
- * Literally the same value `deploy/cloud-init/src/lib/sunkenland.ts` hands to
- * `wine`, and module boundaries forbid importing it from here. Nothing breaks
- * when the two drift, and the drift is mute: the server never starts, the log
- * filter matches nothing, no identifier is ever written, and the session dies
- * of the provisioning delay with nothing saying why. Exported so a test in
- * each project pins the same literal — the only thing holding the two ends
- * together, exactly as for `gameArchiveKeyFor` above.
- */
-export const SERVER_BINARY = 'Sunkenland-DedicatedServer.exe';
-
 export interface PushGameFilesDeps {
   readonly api: ObjectApi;
   /** Where the version of the copy is recorded, once the deposit is read back. */
@@ -50,7 +33,7 @@ export interface PushGameFilesDeps {
  * version is recorded only for a deposit that was read back: a recorded
  * version never describes an archive this tool did not verify.
  *
- * The reread costs a `list`, never a second `get` — downloading 2.3 GB back
+ * The reread costs a `list`, never a second `get` — downloading the archive back
  * would double the price of every push to catch a fault a `ListObjectsV2`
  * already reports.
  */

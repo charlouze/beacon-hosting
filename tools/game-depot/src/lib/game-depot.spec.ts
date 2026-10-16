@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeObjectApi, type ObjectApi, type ObjectSummary } from '@beacon/scaleway-storage';
 import type { GameCopyRecord } from '@beacon/session-record';
 import type { Game, GameVersion } from '@beacon/session';
-import { SERVER_BINARY, gameArchiveKeyFor, pushGameFiles } from './game-depot.js';
+import { gameArchiveKeyFor, pushGameFiles } from './game-depot.js';
 
 const MANIFEST = `"AppState"
 {
@@ -69,19 +69,6 @@ describe('the archive key', () => {
   // says the boundary moved.
   it('builds no key that could name a save', () => {
     expect(gameArchiveKeyFor('sunkenland')).not.toContain('saves/');
-  });
-});
-
-describe('the server binary', () => {
-  // The second literal spanning two projects that cannot import each other:
-  // this tool refuses a folder without it, and
-  // `deploy/cloud-init/src/lib/sunkenland.ts` hands the same name to `wine`.
-  // Its twin there pins this exact string. Nothing else ties them: the smoke
-  // barrier runs a stub game and never executes that `wine` line, so a drift
-  // reaches production mute — no server, no identifier in the log, no join
-  // point, and a session that dies of the provisioning delay.
-  it('names the file the cloud-init actually launches', () => {
-    expect(SERVER_BINARY).toBe('Sunkenland-DedicatedServer.exe');
   });
 });
 
