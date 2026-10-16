@@ -35,9 +35,7 @@ export function installedVersion(
   const path = manifestPathFor(installDir, app);
   const manifest = readText(path);
   if (manifest === undefined) {
-    return {
-      refusal: `${path} is missing, so the version of this install cannot be read. Reinstall it with steamcmd +force_install_dir; game-depot:update prints the exact command`,
-    };
+    return { refusal: `${path} is missing, so the version of this install cannot be read` };
   }
 
   const state = field(manifest, 'StateFlags');

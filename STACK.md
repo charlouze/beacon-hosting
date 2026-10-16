@@ -73,6 +73,11 @@ relevé et se compare six mois plus tard, ce qu'un clic de console ne fait pas.
 Aucun des deux n'est utilisé par la CI ni par la production ; ils existent pour
 que ce qui se fait à la main laisse une trace.
 
+**`steamcmd`** amène l'installation locale d'un jeu à la version que son
+éditeur publie, avant que `tools/game-depot` la dépose. Il n'est pas pin : il
+se met à jour lui-même à son lancement. L'outil le cherche dans le `PATH`, sous
+le nom `steamcmd.exe`.
+
 **`cloudflared`** s'y ajoute pour une raison de sens du trafic. Jusqu'à la
 tranche 3, tout partait de l'émulateur vers l'extérieur et un poste derrière un
 NAT suffisait ; depuis, c'est la machine de jeu qui appelle le plan de contrôle,

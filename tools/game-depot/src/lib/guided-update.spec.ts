@@ -2,14 +2,20 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import type { AdminCredentials } from '@beacon/admin-key';
-import { gameVersionFrom, type GameVersion } from '@beacon/session';
-import { SERVER_BINARY, gameArchiveKeyFor } from './game-depot.js';
+import { gameVersionFrom, type Game, type GameVersion } from '@beacon/session';
+import { gameArchiveKeyFor } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import { type GuidedUpdatePorts, runGuidedUpdate } from './guided-update.js';
+import type { SteamcmdTarget } from './steam-install.js';
 
 const DEFAULT_STEAM = 'C:\\Program Files (x86)\\Steam';
 const SERVER_DIR = join(DEFAULT_STEAM, 'steamapps', 'common', 'Sunkenland Dedicated Server');
 const CLIENT_DIR = join(DEFAULT_STEAM, 'steamapps', 'common', 'Sunkenland');
+const FIRST_INSTALL_DIR = join(DEFAULT_STEAM, 'steamapps', 'common', 'beacon-sunkenland');
+const EXECUTABLE = 'Sunkenland-DedicatedServer.exe';
+const APP = '2667530';
+const OLD_BUILD = '25746735';
+const NEW_BUILD = '25800001';
 
 const ADMIN_SECRET = 'the-admin-secret-nothing-may-ever-print';
 const MACHINE_SECRET = 'the-machine-secret-that-cannot-write';
@@ -39,12 +45,7 @@ const LOGIN_USERS_VDF = `"users"
 }
 `;
 
-/**
- * The ordinary state of a Steam client signed into more than one account:
- * neither carries `MostRecent` nor `AutoLogin`. The first one found is still
- * handed over so the printed line stays pasteable, but the message must say
- * plainly that it is a coin flip between the two.
- */
+/** The ordinary state of a Steam client signed into more than one account: neither is flagged. */
 const LOGIN_USERS_TWO_UNFLAGGED = `"users"
 {
 \t"76561190000000001"
@@ -58,57 +59,113 @@ const LOGIN_USERS_TWO_UNFLAGGED = `"users"
 }
 `;
 
-const SERVER_MANIFEST = `"AppState"
+const LOGIN_USERS_ONE_UNFLAGGED = `"users"
 {
-\t"appid"\t\t"2667530"
-\t"StateFlags"\t\t"4"
-\t"buildid"\t\t"25746735"
+\t"76561190000000002"
+\t{
+\t\t"AccountName"\t\t"the-one-who-owns-the-game"
+\t}
 }
 `;
 
-/** A machine where Steam is logged in and the *client* is installed. */
-function steamWithoutTheServer(): Record<string, number | string> {
+const LOGIN_USERS = join(DEFAULT_STEAM, 'config', 'loginusers.vdf');
+
+const manifestPath = (dir: string): string => join(dir, 'steamapps', `appmanifest_${APP}.acf`);
+
+const manifestOf = (build: string, stateFlags = '4'): string => `"AppState"
+{
+\t"appid"\t\t"${APP}"
+\t"StateFlags"\t\t"${stateFlags}"
+\t"buildid"\t\t"${build}"
+}
+`;
+
+type Tree = Record<string, number | string>;
+
+/** A complete install of the copy, at a build. */
+function installAt(dir: string, build: string): Tree {
   return {
-    [join(DEFAULT_STEAM, 'config', 'loginusers.vdf')]: LOGIN_USERS_VDF,
+    [join(dir, EXECUTABLE)]: 60_000_000,
+    [join(dir, 'Sunkenland-DedicatedServer_Data', 'data.pak')]: 2_240_000_000,
+    [manifestPath(dir)]: manifestOf(build),
+  };
+}
+
+/** Steam logged in, the game client installed, and the copy installed at the old build. */
+function machine(): Tree {
+  return {
+    [LOGIN_USERS]: LOGIN_USERS_VDF,
+    [join(CLIENT_DIR, 'Sunkenland.exe')]: 8_060_000_000,
+    ...installAt(SERVER_DIR, OLD_BUILD),
+  };
+}
+
+/** The same machine before any install of the copy. */
+function machineWithoutTheCopy(): Tree {
+  return {
+    [LOGIN_USERS]: LOGIN_USERS_VDF,
     [join(CLIENT_DIR, 'Sunkenland.exe')]: 8_060_000_000,
   };
 }
 
-function steamWithTheServer(): Record<string, number | string> {
-  return {
-    ...steamWithoutTheServer(),
-    [join(SERVER_DIR, SERVER_BINARY)]: 60_000_000,
-    [join(SERVER_DIR, 'Sunkenland_Data', 'data.pak')]: 2_240_000_000,
-    [join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')]: SERVER_MANIFEST,
+type SteamcmdDouble = (target: SteamcmdTarget, tree: Tree) => number | Promise<number>;
+
+/** steamcmd as measured: it brings the folder it is given to the build Steam publishes, and exits 0. */
+const updatesTo =
+  (build: string): SteamcmdDouble =>
+  (target, tree) => {
+    Object.assign(tree, installAt(target.installDir, build));
+    return 0;
   };
-}
+
+const version = (digits: string): GameVersion => {
+  const built = gameVersionFrom(digits);
+  if (built === null) throw new Error(`not a version: ${digits}`);
+  return built;
+};
 
 const RECORD_DESTINATION = 'Firestore of project beacon-test';
 
 interface Harness {
   readonly said: string[];
   readonly asked: string[];
+  /** In order: `read the record`, `steamcmd`, `ask`, `push`. */
+  readonly events: string[];
+  readonly choices: (readonly Game[])[];
+  readonly installs: SteamcmdTarget[];
   readonly opened: AdminCredentials[];
   readonly bucket: Map<string, number>;
   readonly recorded: string[];
-  readonly reached: string[];
   readonly ports: GuidedUpdatePorts;
 }
 
-function harness(options: {
-  readonly tree?: Record<string, number | string>;
-  readonly configDump?: string;
-  readonly installDir?: string;
-  readonly depositedVersion?: () => Promise<GameVersion | null>;
-  readonly answer?: (question: string, tree: Record<string, number | string>) => boolean;
-}): Harness {
-  const tree = options.tree ?? steamWithTheServer();
+function harness(
+  options: {
+    readonly tree?: Tree;
+    readonly configDump?: string;
+    readonly requestedGame?: string;
+    readonly games?: readonly Game[];
+    readonly choice?: Game;
+    readonly installDir?: string;
+    readonly steamAccount?: string;
+    readonly steamcmdPresent?: boolean;
+    readonly steamcmd?: SteamcmdDouble;
+    readonly canAnswer?: boolean;
+    /** The version on record; `null` for none. Defaults to the old build. */
+    readonly deposited?: string | null;
+    readonly recordUnreachable?: boolean;
+    readonly answer?: (question: string) => boolean;
+  } = {},
+): Harness {
+  const tree = options.tree ?? machine();
   const said: string[] = [];
   const asked: string[] = [];
+  const events: string[] = [];
+  const choices: (readonly Game[])[] = [];
+  const installs: SteamcmdTarget[] = [];
   const opened: AdminCredentials[] = [];
   const bucket = new Map<string, number>();
   const recorded: string[] = [];
-  const reached: string[] = [];
 
   const api: ObjectApi = {
     async list(prefix: string) {
@@ -127,215 +184,411 @@ function harness(options: {
   return {
     said,
     asked,
+    events,
+    choices,
+    installs,
     opened,
     bucket,
     recorded,
-    reached,
     ports: {
-      game: 'sunkenland',
+      requestedGame: options.requestedGame,
+      games: options.games ?? ['sunkenland'],
       bucketName: 'beacon-games',
       steamRoot: DEFAULT_STEAM,
       recordDestination: RECORD_DESTINATION,
       installDir: options.installDir,
+      steamAccount: options.steamAccount,
       files: inMemoryFiles(tree),
+      canAnswer: options.canAnswer ?? true,
+      steamcmd: {
+        present: () => options.steamcmdPresent ?? true,
+        install: async (target) => {
+          events.push('steamcmd');
+          installs.push(target);
+          return (options.steamcmd ?? updatesTo(NEW_BUILD))(target, tree);
+        },
+      },
+      record: {
+        depositedVersion: async () => {
+          events.push('read the record');
+          if (options.recordUnreachable === true) throw new Error('PERMISSION_DENIED');
+          const deposited = options.deposited === undefined ? OLD_BUILD : options.deposited;
+          return deposited === null ? null : version(deposited);
+        },
+        recordDeposit: async (_game, deposited) => {
+          recorded.push(deposited);
+        },
+      },
       rcloneConfigDump: async () => options.configDump ?? DUMP_WITH_BOTH_REMOTES,
       openBucket: (credentials) => {
         opened.push(credentials);
         return api;
       },
-      record: {
-        depositedVersion: async (game) => {
-          reached.push(game);
-          return (await options.depositedVersion?.()) ?? null;
-        },
-        recordDeposit: async (_game, version) => {
-          recorded.push(version);
-        },
-      },
-      pushArchive: async ({ game, record }) => {
+      pushArchive: async ({ game, record, from }) => {
+        events.push('push');
         bucket.set(gameArchiveKeyFor(game), 2_480_000_000);
-        const version = gameVersionFrom('25746735');
-        if (version === null) throw new Error('unreachable');
-        await record.recordDeposit(game, version);
-        return version;
+        const build = /"buildid"\s+"(\d+)"/.exec(String(tree[manifestPath(from)]))?.[1];
+        if (build === undefined) throw new Error(`no manifest in ${from}`);
+        await record.recordDeposit(game, version(build));
+        return version(build);
       },
       ask: async (question) => {
+        events.push('ask');
         asked.push(question);
-        return options.answer?.(question, tree) ?? true;
+        return options.answer?.(question) ?? true;
+      },
+      choose: async (_question, games) => {
+        choices.push(games);
+        return options.choice;
       },
       say: (line) => said.push(line),
     },
   };
 }
 
-describe('when the dedicated server is not installed', () => {
-  it('hands over the exact steamcmd command instead of failing', async () => {
-    const flow = harness({ tree: steamWithoutTheServer(), answer: () => false });
-    const outcome = await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
+const printed = (flow: Harness): string => flow.said.join('\n');
+const lineIndex = (flow: Harness, pattern: RegExp): number => flow.said.findIndex((line) => pattern.test(line));
 
-    expect(outcome).toBe('not-installed');
-    expect(printed).toContain('steamcmd +force_install_dir "');
-    expect(printed).toContain('+app_update 2667530 validate +quit');
-    // Discovered, so the line is one to paste rather than one to edit.
-    expect(printed).toContain('+login the-one-who-owns-the-game +app_update');
+describe('the download, by steamcmd', () => {
+  it('has steamcmd bring the install to the published build, then deposits it', async () => {
+    const flow = harness();
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.installs).toEqual([{ installDir: SERVER_DIR, account: 'the-one-who-owns-the-game', app: APP }]);
+    expect(flow.recorded).toEqual([NEW_BUILD]);
+    expect(flow.events).toEqual(['read the record', 'steamcmd', 'ask', 'push']);
   });
 
-  // The two things that cost an evening each, and neither is visible in the
-  // command itself: an ignored install folder, and a password in the history.
-  it('says why the option order matters, and why no password goes on the line', async () => {
-    const flow = harness({ tree: steamWithoutTheServer(), answer: () => false });
-    await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
+  it('deposits nothing when steamcmd exits on a code other than 0', async () => {
+    const flow = harness({ steamcmd: () => 5 });
 
-    expect(printed).toMatch(/\+force_install_dir[\s\S]*before[\s\S]*\+login/);
-    expect(printed).toMatch(/password/i);
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toMatch(/code 5/);
+    expect(flow.asked).toEqual([]);
+    expect(flow.bucket.size).toBe(0);
+    expect(flow.recorded).toEqual([]);
   });
 
-  // The fixture's account is flagged by MostRecent, so it is a real answer
-  // from the Steam client, not a coin flip — the message must not call it a
-  // guess, and must still say how to override it.
-  it('says how to name another account, without calling a flagged pick a guess', async () => {
-    const flow = harness({ tree: steamWithoutTheServer(), answer: () => false });
-    await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
-    expect(printed).toContain('--steam-account=');
-    expect(printed).toMatch(/is the one the Steam client itself/i);
-    expect(printed).not.toMatch(/none flagged as logged in/i);
-  });
+  it('deposits nothing when steamcmd ends without an exit code', async () => {
+    const flow = harness({ steamcmd: () => Promise.reject(new Error('spawn EACCES')) });
 
-  // The real case this machine hit: two accounts, and nothing flags either.
-  // Silently taking the first would be indistinguishable from a real pick, so
-  // the message must say the pick is a coin flip, only when it truly is one.
-  it('says it took the first of several accounts, only because none is flagged', async () => {
-    const flow = harness({
-      tree: { ...steamWithoutTheServer(), [join(DEFAULT_STEAM, 'config', 'loginusers.vdf')]: LOGIN_USERS_TWO_UNFLAGGED },
-      answer: () => false,
-    });
-    await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
-    expect(printed).toMatch(/2 accounts are in the/i);
-    expect(printed).toMatch(/none flagged as logged in/i);
-    expect(printed).toContain('+login an-old-account +app_update');
-  });
-
-  it('deposits nothing, having found nothing to deposit', async () => {
-    const flow = harness({ tree: steamWithoutTheServer(), answer: () => false });
-    await runGuidedUpdate(flow.ports);
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toContain('spawn EACCES');
     expect(flow.bucket.size).toBe(0);
   });
 
-  // The point of guiding rather than failing: the operator runs steamcmd in
-  // another window and comes back to a flow that is still waiting.
-  it('picks the flow back up once the operator has run it', async () => {
+  it('stops before reading the record or downloading when steamcmd is not on the PATH', async () => {
+    const flow = harness({ steamcmdPresent: false });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toContain('PATH');
+    expect(flow.events).toEqual([]);
+  });
+
+  // steamcmd asks for a password and a Steam Guard code: launched with nobody
+  // to answer, it would wait for ever, or fail in a way that says nothing.
+  it('launches nothing without a terminal to answer in', async () => {
+    const flow = harness({ canAnswer: false });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toMatch(/terminal/i);
+    expect(flow.events).toEqual([]);
+  });
+
+  it('says steamcmd may ask for the password, and hands it none', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(lineIndex(flow, /password/i)).toBeGreaterThan(-1);
+    expect(lineIndex(flow, /password/i)).toBeLessThan(lineIndex(flow, /steamcmd exited with code 0/));
+    expect(Object.keys(flow.installs[0] ?? {})).toEqual(['installDir', 'account', 'app']);
+  });
+
+  it('refuses an install steamcmd left incomplete, without asking', async () => {
     const flow = harness({
-      tree: steamWithoutTheServer(),
-      answer: (question, tree) => {
-        if (/re-check/i.test(question)) {
-          tree[join(SERVER_DIR, SERVER_BINARY)] = 2_300_000_000;
-          tree[join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')] = SERVER_MANIFEST;
-        }
-        return true;
+      steamcmd: (target, tree) => {
+        tree[manifestPath(target.installDir)] = manifestOf(NEW_BUILD, '1026');
+        return 0;
       },
     });
 
-    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
-    expect(flow.bucket.has('sunkenland/game.tar')).toBe(true);
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toMatch(/not complete/);
+    expect(flow.asked).toEqual([]);
   });
 });
 
-describe('what it says it found before it deposits anything', () => {
-  it('names the folder, its weight and its file count', async () => {
-    const flow = harness({});
+describe('the game', () => {
+  it('announces the only game whose copy is deposited, without asking', async () => {
+    const flow = harness();
     await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
 
-    expect(printed).toContain(SERVER_DIR);
-    expect(printed).toContain('3 files');
-    expect(printed).toMatch(/2\.\d\d GB/);
+    expect(flow.choices).toEqual([]);
+    expect(lineIndex(flow, /sunkenland/)).toBeGreaterThan(lineIndex(flow, /^4\./));
   });
 
-  // 8 GB is the client. Depositing it costs a transfer and an evening of doubt
-  // over the one set of files nobody can rebuild without the Steam account.
-  // Matched on the warning's own wording, not on "client" alone: that word is
-  // also in the fixed step-2 title, which any run prints regardless of size.
-  it('warns when the folder weighs what the client weighs', async () => {
+  // The catalogue holds one game with a copy: only the choice is played here.
+  it('asks which game when several have a copy, and names it once chosen', async () => {
+    const flow = harness({ games: ['sunkenland', 'enshrouded'], choice: 'sunkenland' });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.choices).toEqual([['sunkenland', 'enshrouded']]);
+    expect(lineIndex(flow, /sunkenland/)).toBeGreaterThan(lineIndex(flow, /^4\./));
+  });
+
+  it('stops before steamcmd when the answer names no game', async () => {
+    const flow = harness({ games: ['sunkenland', 'enshrouded'], choice: undefined });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(flow.installs).toEqual([]);
+  });
+
+  it('takes the game --game names, without asking', async () => {
+    const flow = harness({ games: ['sunkenland', 'enshrouded'], requestedGame: 'sunkenland' });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.choices).toEqual([]);
+  });
+
+  it('refuses a --game that goes through no copy, saying why', async () => {
+    const flow = harness({ requestedGame: 'enshrouded' });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toMatch(/enshrouded goes through no copy/);
+    expect(flow.events).toEqual([]);
+  });
+
+  it('refuses a --game that names no game', async () => {
+    const flow = harness({ requestedGame: 'tetris' });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toContain('tetris');
+    expect(flow.events).toEqual([]);
+  });
+});
+
+describe('the install folder', () => {
+  // The old recogniser took any folder holding the server's file name. The
+  // manifest steamcmd writes inside the folder is what names the application.
+  it('finds the install by its manifest, and never takes the client next to it', async () => {
     const flow = harness({
-      installDir: CLIENT_DIR,
       tree: {
-        ...steamWithTheServer(),
-        [join(CLIENT_DIR, SERVER_BINARY)]: 1_000,
-        [join(CLIENT_DIR, 'steamapps', 'appmanifest_2667530.acf')]: SERVER_MANIFEST,
+        [LOGIN_USERS]: LOGIN_USERS_VDF,
+        [join(CLIENT_DIR, EXECUTABLE)]: 1_000,
+        [join(CLIENT_DIR, 'Sunkenland.exe')]: 8_060_000_000,
+        ...installAt(SERVER_DIR, OLD_BUILD),
       },
     });
     await runGuidedUpdate(flow.ports);
-    const printed = flow.said.join('\n');
-    expect(printed).toMatch(/far past the 2\.3 GB a dedicated server weighs/i);
-    expect(printed).toContain('the 8 GB game client');
+
+    expect(flow.installs[0]?.installDir).toBe(SERVER_DIR);
   });
 
-  // The counterpart to the test above: a folder at the size a server actually
-  // is must stay quiet about it, or the warning is not a warning at all.
-  it('stays quiet about the client weight for a folder that weighs what a server weighs', async () => {
-    const flow = harness({});
-    await runGuidedUpdate(flow.ports);
-    expect(flow.said.join('\n')).not.toMatch(/far past the 2\.3 GB/i);
+  it('installs into a folder of its own when no install exists, then deposits it', async () => {
+    const flow = harness({ tree: machineWithoutTheCopy(), deposited: null });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.installs[0]?.installDir).toBe(FIRST_INSTALL_DIR);
+    expect(flow.recorded).toEqual([NEW_BUILD]);
   });
 
-  it('refuses a folder given by hand that holds no server binary', async () => {
-    const flow = harness({ installDir: CLIENT_DIR });
+  it('installs into the folder --from names', async () => {
+    const elsewhere = 'D:\\elsewhere';
+    const flow = harness({ tree: machineWithoutTheCopy(), installDir: elsewhere });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.installs[0]?.installDir).toBe(elsewhere);
+  });
+
+  it('refuses a folder without the executable the catalogue names, without asking', async () => {
+    const flow = harness({
+      tree: machineWithoutTheCopy(),
+      steamcmd: (target, tree) => {
+        tree[manifestPath(target.installDir)] = manifestOf(NEW_BUILD);
+        return 0;
+      },
+    });
+
     expect(await runGuidedUpdate(flow.ports)).toBe('refused');
-    expect(flow.said.join('\n')).toContain(SERVER_BINARY);
+    expect(printed(flow)).toContain(EXECUTABLE);
+    expect(flow.asked).toEqual([]);
     expect(flow.bucket.size).toBe(0);
+  });
+
+  it('names the folder, its weight and its file count before asking', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    const beforeTheQuestion = flow.said.slice(0, lineIndex(flow, /^8\./)).join('\n');
+    expect(beforeTheQuestion).toContain(SERVER_DIR);
+    expect(beforeTheQuestion).toContain('3 files');
+    expect(beforeTheQuestion).toMatch(/2\.\d\d GB/);
+  });
+});
+
+describe('the Steam account', () => {
+  it('stops before steamcmd when no account is found and none is named', async () => {
+    const tree = machine();
+    delete tree[LOGIN_USERS];
+    const flow = harness({ tree });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toContain('--steam-account=');
+    expect(flow.installs).toEqual([]);
+  });
+
+  it('takes the account --steam-account names, without judging it', async () => {
+    const flow = harness({ steamAccount: 'someone-else' });
+    await runGuidedUpdate(flow.ports);
+
+    expect(flow.installs[0]?.account).toBe('someone-else');
+    expect(printed(flow)).not.toMatch(/flagged|guess|likely/);
+  });
+
+  it('says the account it takes before steamcmd runs', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(lineIndex(flow, /the-one-who-owns-the-game/)).toBeGreaterThan(-1);
+    expect(lineIndex(flow, /the-one-who-owns-the-game/)).toBeLessThan(lineIndex(flow, /^6\./));
+  });
+
+  it('says a flagged account is the one the Steam client flagged, not a guess', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toMatch(/the one the Steam client itself flagged/);
+    expect(printed(flow)).not.toMatch(/guess/);
+    expect(printed(flow)).toContain('--steam-account=');
+  });
+
+  it('says it took the first of several accounts, only because none is flagged', async () => {
+    const flow = harness({ tree: { ...machine(), [LOGIN_USERS]: LOGIN_USERS_TWO_UNFLAGGED } });
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toMatch(/is a guess: 2 accounts are in the/);
+    expect(printed(flow)).toMatch(/none flagged as logged in/);
+    expect(flow.installs[0]?.account).toBe('an-old-account');
+  });
+
+  it('says the only account in the client is likely right', async () => {
+    const flow = harness({ tree: { ...machine(), [LOGIN_USERS]: LOGIN_USERS_ONE_UNFLAGGED } });
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toMatch(/the only one in the Steam client/);
+  });
+});
+
+describe('the version of the copy', () => {
+  it('stops before the download when the record cannot be reached', async () => {
+    const flow = harness({ recordUnreachable: true });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toMatch(/record of the copy cannot be reached/);
+    expect(flow.installs).toEqual([]);
+  });
+
+  it('says what the record holds, and where', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toContain(`the record of the copy answers, in ${RECORD_DESTINATION}: build ${OLD_BUILD} deposited`);
+  });
+
+  it('says no copy is deposited yet when the record holds none', async () => {
+    const flow = harness({ deposited: null });
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toContain('no copy deposited yet');
+  });
+
+  it('says the installed build is already the deposited copy, and deposits nothing on a no', async () => {
+    const flow = harness({ steamcmd: updatesTo(OLD_BUILD), answer: () => false });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('declined');
+    expect(printed(flow)).toContain(`build ${OLD_BUILD} is already the deposited copy of sunkenland`);
+    expect(flow.asked).toEqual([`deposit build ${OLD_BUILD} again anyway?`]);
+    expect(flow.bucket.size).toBe(0);
+    expect(flow.recorded).toEqual([]);
+  });
+
+  it('deposits the same build again on a yes', async () => {
+    const flow = harness({ steamcmd: updatesTo(OLD_BUILD) });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(flow.recorded).toEqual([OLD_BUILD]);
+  });
+
+  it('asks the usual question when the build is new', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(flow.asked).toEqual(['build the archive and deposit it as sunkenland/game.tar in beacon-games?']);
+  });
+
+  it('says the build it is about to deposit, before asking', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(flow.said.slice(0, lineIndex(flow, /^8\./)).join('\n')).toContain(`build ${NEW_BUILD}`);
+  });
+
+  it('announces the version it recorded, and where', async () => {
+    const flow = harness();
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+
+    expect(printed(flow)).toContain(`build ${NEW_BUILD} recorded as the copy of sunkenland, in ${RECORD_DESTINATION}`);
   });
 });
 
 describe('the deposit', () => {
   it('reads back what the bucket then holds, and announces it', async () => {
-    const flow = harness({});
+    const flow = harness();
     expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
-    expect(flow.said.join('\n')).toContain('sunkenland/game.tar');
-    expect(flow.said.join('\n')).toContain('2.31 GB');
+
+    expect(printed(flow)).toContain('sunkenland/game.tar in beacon-games, 2.31 GB');
   });
 
-  // The machine's key can only read this bucket (§7). Taking it would fail at
-  // the end of a multi-gigabyte upload rather than before it starts.
+  // The machine's key can only read this bucket. Taking it would fail at the
+  // end of a multi-gigabyte upload rather than before it starts.
   it('opens the bucket with the administrator key, never the machine one', async () => {
-    const flow = harness({});
+    const flow = harness();
     await runGuidedUpdate(flow.ports);
+
     expect(flow.opened.map((credentials) => credentials.accessKeyId)).toEqual(['ADMIN-ACCESS-KEY']);
   });
 
   // Told apart from a refusal on purpose: an operator who answers no has been
   // served, and a task runner that paints that red teaches him to ignore red.
   it('deposits nothing when the operator declines, and calls that neither a failure nor a deposit', async () => {
-    const flow = harness({ answer: (question) => !/deposit/i.test(question) });
+    const flow = harness({ answer: () => false });
+
     expect(await runGuidedUpdate(flow.ports)).toBe('declined');
     expect(flow.bucket.size).toBe(0);
+    expect(flow.recorded).toEqual([]);
   });
 
-  // §8, and the reason this tool exists at all: it has no verb that removes.
-  // The objects of the older file-by-file deposit outlive every run of it.
   it('says what it deliberately left alone', async () => {
-    const flow = harness({});
+    const flow = harness();
     await runGuidedUpdate(flow.ports);
-    expect(flow.said.join('\n')).toMatch(/deleted/i);
+
+    expect(printed(flow)).toMatch(/nothing was deleted/i);
   });
 });
 
 describe('the credentials', () => {
-  it('names the missing remote and stops, rather than starting an upload that cannot sign', async () => {
+  it('names the missing remote and stops before anything else', async () => {
     const flow = harness({ configDump: JSON.stringify({ 'scw-machine': {} }) });
+
     expect(await runGuidedUpdate(flow.ports)).toBe('refused');
-    expect(flow.said.join('\n')).toContain('scw-admin');
-    expect(flow.bucket.size).toBe(0);
+    expect(printed(flow)).toContain('scw-admin');
+    expect(flow.events).toEqual([]);
   });
 
-  // Explicit rather than implicit: the flow reads a secret out of rclone on
-  // every run, and the run happens in a terminal whose scrollback is shared in
-  // a chat the day something goes wrong.
+  // The flow reads a secret out of rclone on every run, in a terminal whose
+  // scrollback is shared in a chat the day something goes wrong.
   it('lets no part of a credential reach the output', async () => {
-    const flow = harness({});
+    const flow = harness();
     await runGuidedUpdate(flow.ports);
     const everything = [...flow.said, ...flow.asked].join('\n');
 
@@ -343,71 +596,6 @@ describe('the credentials', () => {
     expect(everything).not.toContain(MACHINE_SECRET);
     expect(everything).not.toContain('ADMIN-ACCESS-KEY');
     expect(everything).not.toContain('MACHINE-ACCESS-KEY');
-    // And it did read them, so the assertion above is not passing on an
-    // output that never held anything at all.
     expect(flow.opened[0]?.secretAccessKey).toBe(ADMIN_SECRET);
-  });
-});
-
-describe('the version of the copy', () => {
-  it('says the build it is about to deposit, before asking', async () => {
-    const flow = harness({});
-    await runGuidedUpdate(flow.ports);
-
-    const beforeTheQuestion = flow.said.slice(0, flow.said.findIndex((line) => line.startsWith('4.')));
-    expect(beforeTheQuestion.join('\n')).toContain('25746735');
-  });
-
-  it('announces the version it recorded', async () => {
-    const flow = harness({});
-    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
-
-    expect(flow.recorded).toEqual(['25746735']);
-    expect(flow.said.join('\n')).toMatch(/25746735 recorded/);
-  });
-
-  it('announces where the record lives', async () => {
-    const flow = harness({});
-    await runGuidedUpdate(flow.ports);
-
-    const printed = flow.said.join('\n');
-    expect(printed).toContain(`the record of the copy answers, in ${RECORD_DESTINATION}`);
-    expect(printed).toContain(`recorded as the copy of sunkenland, in ${RECORD_DESTINATION}`);
-  });
-
-  it('refuses an install whose version cannot be read, without asking', async () => {
-    const tree = steamWithTheServer();
-    delete tree[join(SERVER_DIR, 'steamapps', 'appmanifest_2667530.acf')];
-    const flow = harness({ tree });
-
-    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
-    expect(flow.said.join('\n')).toContain('appmanifest_2667530.acf');
-    expect(flow.said.join('\n')).toContain('+app_update 2667530 validate');
-    expect(flow.said.join('\n')).toContain(SERVER_DIR);
-    expect(flow.asked).toEqual([]);
-    expect(flow.bucket.size).toBe(0);
-  });
-
-  it('refuses when the record cannot be reached, without asking', async () => {
-    const flow = harness({ depositedVersion: async () => Promise.reject(new Error('PERMISSION_DENIED')) });
-
-    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
-    expect(flow.said.join('\n')).toMatch(/record/i);
-    expect(flow.asked).toEqual([]);
-    expect(flow.bucket.size).toBe(0);
-  });
-
-  it('checks the record is reachable before asking', async () => {
-    const flow = harness({});
-    await runGuidedUpdate(flow.ports);
-
-    expect(flow.reached).toEqual(['sunkenland']);
-  });
-
-  it('records nothing when the operator declines', async () => {
-    const flow = harness({ answer: (question) => !/deposit/i.test(question) });
-
-    expect(await runGuidedUpdate(flow.ports)).toBe('declined');
-    expect(flow.recorded).toEqual([]);
   });
 });
