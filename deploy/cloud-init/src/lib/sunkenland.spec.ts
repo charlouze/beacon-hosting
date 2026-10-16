@@ -318,16 +318,13 @@ describe('the sunkenland catalogue entry', () => {
     expect(rendered).not.toMatch(/exec wine /);
   });
 
-  // The second literal spanning two projects that cannot import each other:
-  // `tools/game-depot` refuses to deposit 2.3 GB from a folder that does not
-  // hold this file, and this is the name wine is given. Its twin there pins the
-  // same string, and nothing else ties the two — the smoke barrier runs a stub
-  // game and never executes this line. A drift reaches production mute: no
-  // server, no identifier in the log, no join point, and a session that dies of
-  // the provisioning delay with nothing saying why.
-  it('launches the very binary the depot refuses to push without', () => {
+  // The depot refuses a copy without the executable the catalogue names, and
+  // this line launches it. The smoke barrier runs a stub game and never
+  // executes it: a drift would reach production mute — no server, no
+  // identifier in the log, no join point.
+  it('launches the executable the catalogue says the copy carries', () => {
     expect(renderCloudInit('sunkenland', REQUEST)).toContain(
-      'wine "$GAME_DIR/Sunkenland-DedicatedServer.exe"',
+      `wine "$GAME_DIR/${catalogFor('sunkenland').copyExecutable}"`,
     );
   });
 

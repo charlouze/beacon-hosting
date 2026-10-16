@@ -3,8 +3,13 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { gameCopyDocPath, gameCopyFrom } from './fields.js';
 
 export interface GameCopyRecord {
-  /** Rejects when the record of the copy cannot be read. Writes nothing. */
-  reach(game: Game): Promise<void>;
+  /**
+   * The version the last recorded deposit put in place, or null when none is:
+   * the copy exactly as the Functions read it. Rejects when the record cannot
+   * be read, which is how the tool learns it could not record either. Writes
+   * nothing.
+   */
+  depositedVersion(game: Game): Promise<GameVersion | null>;
   /**
    * Records the version a verified deposit put in place, at the time of the
    * Firestore server. Leaves every other field of the document as it is: the
@@ -15,8 +20,9 @@ export interface GameCopyRecord {
 
 export function gameCopyRecord(db: Firestore): GameCopyRecord {
   return {
-    async reach(game): Promise<void> {
-      await db.doc(gameCopyDocPath(game)).get();
+    async depositedVersion(game): Promise<GameVersion | null> {
+      const snapshot = await db.doc(gameCopyDocPath(game)).get();
+      return gameCopyFrom(snapshot.data() ?? {})?.version ?? null;
     },
 
     async recordDeposit(game, version): Promise<void> {

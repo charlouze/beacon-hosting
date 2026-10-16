@@ -228,6 +228,7 @@ export const enshrouded: GameCatalogEntry = {
   // adopted an archive for is exactly that generation.
   generatesWorlds: true,
   copySteamApp: null,
+  copyExecutable: null,
   // Measured at 15 GB occupied, on a 40 GB volume.
   diskGb: 30,
   // The restore brings the world back before the game's own container starts

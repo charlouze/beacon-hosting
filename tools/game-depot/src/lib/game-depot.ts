@@ -5,7 +5,8 @@ import { create } from 'tar';
 import type { Game, GameVersion } from '@beacon/session';
 import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
-import { copySteamAppOf, installedVersion } from './steam-manifest.js';
+import { copyApplicationOf } from './copy-application.js';
+import { installedCopy } from './steam-manifest.js';
 
 /**
  * `<game>/game.tar`. The literal the cloud-init writes into
@@ -16,29 +17,12 @@ export function gameArchiveKeyFor(game: Game): string {
   return `${game}/game.tar`;
 }
 
-/**
- * The one file an install of the dedicated server always carries, and an
- * empty or half-copied folder never does. Named for Sunkenland and not
- * looked up per game: this tool has exactly one caller today (§4 decision 2),
- * and a table keyed by `Game` would guess at a second one that does not
- * exist yet.
- *
- * Literally the same value `deploy/cloud-init/src/lib/sunkenland.ts` hands to
- * `wine`, and module boundaries forbid importing it from here. Nothing breaks
- * when the two drift, and the drift is mute: the server never starts, the log
- * filter matches nothing, no identifier is ever written, and the session dies
- * of the provisioning delay with nothing saying why. Exported so a test in
- * each project pins the same literal — the only thing holding the two ends
- * together, exactly as for `gameArchiveKeyFor` above.
- */
-export const SERVER_BINARY = 'Sunkenland-DedicatedServer.exe';
-
 export interface PushGameFilesDeps {
   readonly api: ObjectApi;
   /** Where the version of the copy is recorded, once the deposit is read back. */
   readonly record: GameCopyRecord;
   readonly game: Game;
-  /** The local folder holding an install of the game's dedicated server. */
+  /** The local folder holding an install of the game's copy. */
   readonly from: string;
 }
 
@@ -49,7 +33,7 @@ export interface PushGameFilesDeps {
  * version is recorded only for a deposit that was read back: a recorded
  * version never describes an archive this tool did not verify.
  *
- * The reread costs a `list`, never a second `get` — downloading 2.3 GB back
+ * The reread costs a `list`, never a second `get` — downloading the archive back
  * would double the price of every push to catch a fault a `ListObjectsV2`
  * already reports.
  */
@@ -60,20 +44,17 @@ export async function pushGameFiles(deps: PushGameFilesDeps): Promise<GameVersio
   return version;
 }
 
+const onDisk = {
+  exists: (path: string) => existsSync(path),
+  readText: (path: string) => (existsSync(path) ? readFileSync(path, 'utf8') : undefined),
+};
+
 /** The version of the install, once nothing is left that could refuse the push. */
 async function versionToDeposit(deps: PushGameFilesDeps): Promise<GameVersion> {
-  const app = copySteamAppOf(deps.game);
-  if (!existsSync(join(deps.from, SERVER_BINARY))) {
-    throw new Error(`${deps.from} does not hold ${SERVER_BINARY}: refusing to push the wrong folder`);
-  }
-  const installed = installedVersion(
-    (path) => (existsSync(path) ? readFileSync(path, 'utf8') : undefined),
-    deps.from,
-    app,
-  );
+  const installed = installedCopy(onDisk, deps.from, copyApplicationOf(deps.game));
   if ('refusal' in installed) throw new Error(`${installed.refusal}: refusing to push`);
   try {
-    await deps.record.reach(deps.game);
+    await deps.record.depositedVersion(deps.game);
   } catch (error) {
     throw new Error(`the record of the copy cannot be reached (${String(error)}): nothing deposited`);
   }
