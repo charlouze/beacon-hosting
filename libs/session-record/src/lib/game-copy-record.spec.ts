@@ -43,11 +43,17 @@ describe('the document of a copy', () => {
   });
 });
 
-describe('reach', () => {
-  it('answers without writing anything', async () => {
-    await record.reach('sunkenland');
-
+describe('depositedVersion', () => {
+  it('reads none when nothing was deposited, without writing anything', async () => {
+    expect(await record.depositedVersion('sunkenland')).toBeNull();
     expect(await stored()).toBeUndefined();
+  });
+
+  it('reads the version the last deposit recorded', async () => {
+    await record.recordDeposit('sunkenland', version('23178631'));
+    await record.recordDeposit('sunkenland', version('25746735'));
+
+    expect(await record.depositedVersion('sunkenland')).toBe('25746735');
   });
 });
 

@@ -21,3 +21,17 @@ export function adminFirestore(env: Record<string, string | undefined>): Firesto
   const app = initializeApp({ credential: applicationDefault(), projectId }, `admin-firestore-${projectId}`);
   return getFirestore(app);
 }
+
+/** Where `adminFirestore` takes its identity from, once it is proven to answer. */
+export type AdminIdentity = 'emulator' | 'application-default';
+
+/**
+ * Asks Google for a token with the identity `adminFirestore` uses, so that a
+ * missing or expired login stops a tool before it starts, and reads nothing of
+ * the project. Against the emulator no token is ever asked, so none is here.
+ */
+export async function proveAdminIdentity(env: Record<string, string | undefined>): Promise<AdminIdentity> {
+  if (env['FIRESTORE_EMULATOR_HOST'] !== undefined && env['FIRESTORE_EMULATOR_HOST'] !== '') return 'emulator';
+  await applicationDefault().getAccessToken();
+  return 'application-default';
+}

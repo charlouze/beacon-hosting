@@ -1,14 +1,15 @@
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SERVER_BINARY } from './game-depot.js';
 import { inMemoryFiles } from './local-files.spec-helper.js';
 import {
   discoverSteamAccount,
-  findDedicatedServer,
+  findInstall,
+  findSteamcmd,
+  installDirFor,
   steamLibraries,
-  steamcmdCommandFor,
-  suggestedInstallDir,
+  steamcmdArgumentsFor,
 } from './steam-install.js';
+import { manifestPathFor } from './steam-manifest.js';
 
 const DEFAULT_STEAM = 'C:\\Program Files (x86)\\Steam';
 const SECOND_LIBRARY = 'D:\\SteamLibrary';
@@ -106,46 +107,59 @@ describe('the Steam libraries', () => {
   });
 });
 
-describe('recognising an install of the dedicated server', () => {
-  it('accepts the folder that holds the server binary', () => {
-    const server = commonFolder(SECOND_LIBRARY, 'Sunkenland Dedicated Server');
-    const files = inMemoryFiles({ [join(server, SERVER_BINARY)]: 2_300_000 });
-    expect(findDedicatedServer(files, [SECOND_LIBRARY])).toBe(server);
+const APP = '2667530';
+
+describe('finding the install of an application', () => {
+  it('finds the folder whose own manifest names the application', () => {
+    const install = commonFolder(SECOND_LIBRARY, 'Sunkenland Dedicated Server');
+    const files = inMemoryFiles({ [manifestPathFor(install, APP)]: '"AppState" {}' });
+    expect(findInstall(files, [SECOND_LIBRARY], APP)).toBe(install);
   });
 
-  // The client is the one already installed on the administrator's machine, and
-  // it is a different Steam application. Taking it for the server deposits 8 GB
-  // of the wrong files over the only ones nobody can rebuild without the
-  // Steam account.
-  it('refuses the game client, which carries another binary entirely', () => {
+  // The client sits next to the server in the same `common/`, and once held a
+  // file that looked like the server's. Only the manifest steamcmd writes
+  // inside the folder it installs tells the two apart.
+  it('never takes a folder without that manifest, whatever it holds', () => {
     const client = commonFolder(DEFAULT_STEAM, 'Sunkenland');
-    const files = inMemoryFiles({ [join(client, 'Sunkenland.exe')]: 8_060_000 });
-    expect(findDedicatedServer(files, [DEFAULT_STEAM])).toBeUndefined();
+    const files = inMemoryFiles({
+      [join(client, 'Sunkenland.exe')]: 8_060_000,
+      [join(client, 'Sunkenland-DedicatedServer.exe')]: 1_000,
+    });
+    expect(findInstall(files, [DEFAULT_STEAM], APP)).toBeUndefined();
   });
 
-  // The whole reason libraryfolders.vdf is read at all: an 8 GB client and a
-  // 2.3 GB server routinely sit on different drives.
-  it('looks past the library holding the client, into the one holding the server', () => {
-    const server = commonFolder(SECOND_LIBRARY, 'Sunkenland Dedicated Server');
+  it('ignores the manifest of another application', () => {
+    const other = commonFolder(DEFAULT_STEAM, 'Something');
+    const files = inMemoryFiles({ [manifestPathFor(other, '999')]: '"AppState" {}' });
+    expect(findInstall(files, [DEFAULT_STEAM], APP)).toBeUndefined();
+  });
+
+  it('looks past the library holding the client, into the one holding the install', () => {
+    const install = commonFolder(SECOND_LIBRARY, 'Sunkenland Dedicated Server');
     const files = inMemoryFiles({
       [join(commonFolder(DEFAULT_STEAM, 'Sunkenland'), 'Sunkenland.exe')]: 8_060_000,
-      [join(server, SERVER_BINARY)]: 2_300_000,
+      [manifestPathFor(install, APP)]: '"AppState" {}',
     });
-    expect(findDedicatedServer(files, [DEFAULT_STEAM, SECOND_LIBRARY])).toBe(server);
+    expect(findInstall(files, [DEFAULT_STEAM, SECOND_LIBRARY], APP)).toBe(install);
+  });
+});
+
+describe('where a first install goes', () => {
+  it('goes in the first library, under a name no Steam client takes', () => {
+    expect(installDirFor([DEFAULT_STEAM, SECOND_LIBRARY], 'sunkenland')).toBe(
+      commonFolder(DEFAULT_STEAM, 'beacon-sunkenland'),
+    );
   });
 
-  // Where the command tells the operator to install is where the next run must
-  // look, and one rule holds both ends: every `steamapps/common` is swept.
-  it('suggests a destination the next search would find on its own', () => {
-    const target = suggestedInstallDir([DEFAULT_STEAM, SECOND_LIBRARY]);
-    const files = inMemoryFiles({ [join(target, SERVER_BINARY)]: 2_300_000 });
-    expect(findDedicatedServer(files, [DEFAULT_STEAM, SECOND_LIBRARY])).toBe(target);
+  it('is where the next search finds it', () => {
+    const target = installDirFor([DEFAULT_STEAM, SECOND_LIBRARY], 'sunkenland');
+    const files = inMemoryFiles({ [manifestPathFor(target, APP)]: '"AppState" {}' });
+    expect(findInstall(files, [DEFAULT_STEAM, SECOND_LIBRARY], APP)).toBe(target);
   });
 });
 
 describe('the Steam account', () => {
-  // A placeholder in the middle of the line makes it something to edit rather
-  // than something to paste, which is the whole point of printing it.
+  // The account steamcmd logs in with is the one Steam logged in with most recently.
   it('takes the account Steam logged in with most recently', () => {
     const files = inMemoryFiles({ [loginUsersAt(DEFAULT_STEAM)]: LOGIN_USERS_VDF });
     expect(discoverSteamAccount(files, DEFAULT_STEAM)).toEqual({
@@ -180,31 +194,65 @@ describe('the Steam account', () => {
   });
 });
 
-describe('the steamcmd command an operator is handed', () => {
-  const command = (): string =>
-    steamcmdCommandFor({ installDir: 'D:\\SteamLibrary\\steamapps\\common\\srv', account: 'someone', app: '2667530' });
+describe('what steamcmd is launched with', () => {
+  const args = (installDir = 'D:\\SteamLibrary\\steamapps\\common\\srv'): readonly string[] =>
+    steamcmdArgumentsFor({ installDir, account: 'someone', app: APP });
 
   // Steam fixes its install root at login. A `+force_install_dir` that comes
-  // after is not refused — it is ignored, and the 2.3 GB land in steamcmd's own
-  // folder where the next run of this tool will never look.
+  // after is not refused — it is ignored, and the download lands in steamcmd's
+  // own folder where the next run of this tool will never look.
   it('puts +force_install_dir before +login', () => {
-    expect(command().indexOf('+force_install_dir')).toBeLessThan(command().indexOf('+login'));
+    expect(args().indexOf('+force_install_dir')).toBeLessThan(args().indexOf('+login'));
   });
 
-  it('installs the application it is given', () => {
-    expect(command()).toContain('+app_update 2667530 validate');
+  it('updates the application it is given, without validate', () => {
+    expect(args()).toContain('+app_update');
+    expect(args()[args().indexOf('+app_update') + 1]).toBe(APP);
+    expect(args()).not.toContain('validate');
   });
 
-  // The `+login` option accepts a password as a second word, and that word ends
-  // up in the shell history — a plaintext file nothing ever cleans. steamcmd
-  // prompts for it, and Steam Guard prompts again regardless.
+  // `+login` accepts a password as a second word. steamcmd asks for it in the
+  // terminal, and Steam Guard asks again regardless.
   it('carries the account name and nothing behind it', () => {
-    expect(command()).toContain('+login someone +app_update');
+    expect(args().slice(args().indexOf('+login'), args().indexOf('+login') + 3)).toEqual([
+      '+login',
+      'someone',
+      '+app_update',
+    ]);
   });
 
-  it('quotes the install folder, which holds spaces on every Windows machine', () => {
-    expect(steamcmdCommandFor({ installDir: 'C:\\Program Files\\x', account: 'a', app: '2667530' })).toContain(
-      '+force_install_dir "C:\\Program Files\\x"',
+  it('passes a folder with spaces as one argument, unquoted', () => {
+    const folder = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\beacon-sunkenland';
+    expect(args(folder)[args(folder).indexOf('+force_install_dir') + 1]).toBe(folder);
+  });
+
+  it('quits once the update is done', () => {
+    expect(args().at(-1)).toBe('+quit');
+  });
+});
+
+describe('finding steamcmd', () => {
+  const at = (...paths: string[]) => (path: string) => paths.includes(path);
+
+  it('takes steamcmd.exe in the first folder of the PATH that holds it', () => {
+    const pathVariable = ['C:\\Windows', 'C:\\steamcmd', 'D:\\other'].join(win32.delimiter);
+    const exists = at(win32.join('C:\\steamcmd', 'steamcmd.exe'), win32.join('D:\\other', 'steamcmd.exe'));
+    expect(findSteamcmd(pathVariable, exists)).toBe(win32.join('C:\\steamcmd', 'steamcmd.exe'));
+  });
+
+  it('takes steamcmd.exe from a folder the PATH quotes', () => {
+    const pathVariable = ['"C:\\steamcmd"'].join(win32.delimiter);
+    expect(findSteamcmd(pathVariable, at(win32.join('C:\\steamcmd', 'steamcmd.exe')))).toBe(
+      win32.join('C:\\steamcmd', 'steamcmd.exe'),
     );
+  });
+
+  it('finds nothing when no folder of the PATH holds it', () => {
+    expect(findSteamcmd(['C:\\Windows', 'C:\\tools'].join(win32.delimiter), at())).toBeUndefined();
+  });
+
+  it('finds nothing without a PATH, and skips its empty entries', () => {
+    expect(findSteamcmd(undefined, at(win32.join('', 'steamcmd.exe')))).toBeUndefined();
+    expect(findSteamcmd(['', 'C:\\steamcmd'].join(win32.delimiter), at(win32.join('', 'steamcmd.exe')))).toBeUndefined();
   });
 });

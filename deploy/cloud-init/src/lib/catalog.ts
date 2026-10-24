@@ -103,6 +103,13 @@ export interface GameCatalogEntry {
    */
   readonly copySteamApp: string | null;
   /**
+   * The file every install of this game's copy carries, and the one its
+   * server launches, or null exactly when `copySteamApp` is. The depot
+   * refuses a folder without it, so a copy it deposits is one the server
+   * can start.
+   */
+  readonly copyExecutable: string | null;
+  /**
    * The disk a server of this game boots on, in gigabytes: what the system,
    * the containers, the game and its archive occupy together, with room to
    * spare. A constant — a game that outgrows it stalls its own restore.

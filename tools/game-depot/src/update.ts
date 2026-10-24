@@ -1,16 +1,17 @@
-import { type ExecSyncOptionsWithStringEncoding, execSync } from 'node:child_process';
+import { type ExecSyncOptionsWithStringEncoding, execSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { S3Client } from '@aws-sdk/client-s3';
-import { adminFirestore } from '@beacon/admin-firestore';
+import { adminFirestore, proveAdminIdentity } from '@beacon/admin-firestore';
 import { fromS3 } from '@beacon/scaleway-storage';
 import { gameCopyRecord } from '@beacon/session-record';
-import { isGame } from '@beacon/session';
+import type { Game } from '@beacon/session';
+import { gamesWithACopy } from './lib/copy-application.js';
 import { pushGameFiles } from './lib/game-depot.js';
-import { runGuidedUpdate } from './lib/guided-update.js';
+import { type Steamcmd, runGuidedUpdate } from './lib/guided-update.js';
 import { recordDestinationFrom } from './lib/record-destination.js';
-import { DEFAULT_STEAM_ROOT, type LocalFiles } from './lib/steam-install.js';
+import { DEFAULT_STEAM_ROOT, type LocalFiles, findSteamcmd, steamcmdArgumentsFor } from './lib/steam-install.js';
 
 function argValue(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -76,16 +77,31 @@ function rcloneConfigDump(): string {
   }
 }
 
-async function ask(question: string): Promise<boolean> {
-  // Never assume yes. A run with no terminal — a CI, a piped shell, a task
-  // runner that does not forward stdin — must not start a multi-gigabyte
-  // upload nobody is watching.
-  if (!process.stdin.isTTY) {
-    console.log(`  ?     ${question}`);
-    console.log('  !     no terminal to answer on — taking that as no');
-    return false;
-  }
+/**
+ * steamcmd.exe as found on the PATH, and launched as that very file in the
+ * operator's terminal. `spawn` runs an `.exe` without a shell, so the install
+ * folder reaches steamcmd as one argument whatever spaces it holds.
+ */
+function steamcmdOnThisMachine(): Steamcmd {
+  const path = findSteamcmd(process.env['PATH'], existsSync);
+  return {
+    present: () => path !== undefined,
+    install: (target) =>
+      new Promise((resolve, reject) => {
+        if (path === undefined) {
+          reject(new Error('steamcmd.exe is not on the PATH'));
+          return;
+        }
+        const child = spawn(path, [...steamcmdArgumentsFor(target)], { stdio: 'inherit' });
+        child.on('error', reject);
+        child.on('exit', (code, signal) =>
+          code === null ? reject(new Error(`steamcmd ended on ${signal}`)) : resolve(code),
+        );
+      }),
+  };
+}
 
+async function ask(question: string): Promise<boolean> {
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
   try {
     const answer = await terminal.question(`  ?     ${question} [y/N] `);
@@ -95,41 +111,48 @@ async function ask(question: string): Promise<boolean> {
   }
 }
 
+async function choose(question: string, games: readonly Game[]): Promise<Game | undefined> {
+  games.forEach((game, index) => console.log(`        ${index + 1}. ${game}`));
+  const terminal = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await terminal.question(`  ?     ${question} [1-${games.length}] `);
+    return games[Number(answer.trim()) - 1];
+  } finally {
+    terminal.close();
+  }
+}
+
 /**
  * The gesture repeated at every game update, guided from end to end: it finds
- * the key, finds the install or says exactly how to make one, shows what it is
- * about to send, deposits it, reads it back and records its version. Runs on the one machine that
- * owns the game (§7) — never a runner, never the VM, which only reads this
- * bucket.
+ * the key, has steamcmd bring the install to the build the publisher
+ * publishes, shows what it is about to send, deposits it, reads it back and
+ * records its version. Runs on a machine that owns the game — never a runner,
+ * never the VM, which only reads this bucket.
  *
- * `push` stays next door for the scripted case: same deposit, no questions.
+ * `push` stays next door for the scripted case: same deposit, no download, no
+ * questions.
  */
 try {
-  const game = argValue('game') ?? 'sunkenland';
-  if (!isGame(game)) throw new Error(`--game must name a game, got "${game}"`);
-  // The application id and the server binary this flow looks for are
-  // Sunkenland's, exactly like `SERVER_BINARY` next door. The other game gets
-  // its files another way entirely, and would need its own pair before any of
-  // this meant anything for it.
-  if (game !== 'sunkenland') {
-    throw new Error(
-      `the guided update only knows sunkenland's Steam application, and ${game} does not use it — ` +
-        `${game} downloads its own files through steamcmd on the game machine itself, and has nothing to deposit here`,
-    );
-  }
-
   const bucketName = process.env['BEACON_GAMES_BUCKET'] ?? 'beacon-games';
 
+  const from = argValue('from');
+
   const outcome = await runGuidedUpdate({
-    game,
+    requestedGame: argValue('game'),
+    games: gamesWithACopy(),
     bucketName,
     steamRoot: argValue('steam-root') ?? DEFAULT_STEAM_ROOT,
     recordDestination: recordDestinationFrom(process.env),
-    installDir: argValue('from'),
+    installDir: from === undefined ? undefined : resolve(from),
     steamAccount: argValue('steam-account'),
     files: onDisk,
     record: gameCopyRecord(adminFirestore(process.env)),
+    steamcmd: steamcmdOnThisMachine(),
+    // stdout too: steamcmd inherits it, and holds all it writes to a pipe until
+    // it exits (probe/RESULTS.md, section O).
+    canAnswer: process.stdin.isTTY === true && process.stdout.isTTY === true,
     rcloneConfigDump: async () => rcloneConfigDump(),
+    proveIdentity: () => proveAdminIdentity(process.env),
     openBucket: (credentials) =>
       fromS3(
         new S3Client({
@@ -144,12 +167,13 @@ try {
       ),
     pushArchive: pushGameFiles,
     ask,
+    choose,
     say: (line) => console.log(line),
   });
 
-  // Only a fault is red. Handing over the steamcmd line, or taking a `no`, is
-  // this command doing its job, and a task runner that reports either as a
-  // failed target teaches its operator to read past failed targets.
+  // Only a fault is red. Taking a `no` is this command doing its job, and a
+  // task runner that reports it as a failed target teaches its operator to
+  // read past failed targets.
   if (outcome === 'refused') process.exitCode = 1;
 } catch (error) {
   console.error(`beacon: ${String(error)}`);

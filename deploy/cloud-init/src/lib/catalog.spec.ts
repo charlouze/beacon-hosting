@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSetupStepOrder, type Game } from '@beacon/session';
+import { GAMES, isSetupStepOrder } from '@beacon/session';
 import { parseAgentSetup, renderAgentSetup } from '@beacon/agent-protocol';
 import {
   type BootRequest,
@@ -39,8 +39,6 @@ const EXPOSED: readonly (readonly [string, (value: string) => BootRequest])[] = 
     (value) => ({ ...REQUEST, saves: { ...REQUEST.saves, gamesBucket: value } }),
   ],
 ];
-
-const GAMES: readonly Game[] = ['enshrouded', 'sunkenland'];
 
 describe('the frontier every boot crosses', () => {
   for (const game of GAMES) {
@@ -236,5 +234,18 @@ describe('the copy a game goes through', () => {
 
   it('names none for enshrouded, whose server fetches the game itself', () => {
     expect(catalogFor('enshrouded').copySteamApp).toBeNull();
+  });
+
+  it('names the executable the copy of sunkenland carries', () => {
+    expect(catalogFor('sunkenland').copyExecutable).toBe('Sunkenland-DedicatedServer.exe');
+  });
+
+  it('names no executable for enshrouded, which goes through no copy', () => {
+    expect(catalogFor('enshrouded').copyExecutable).toBeNull();
+  });
+
+  it.each(GAMES)('names an executable for %s exactly when it names an application', (game) => {
+    const entry = catalogFor(game);
+    expect(entry.copyExecutable === null).toBe(entry.copySteamApp === null);
   });
 });

@@ -8,31 +8,47 @@ machine ne sait que lire ce seau.
 **Il n'a aucun verbe qui supprime**, et c'est sa principale caractéristique. Il
 ne connaît pas non plus le préfixe des sauvegardes.
 
-## `game-depot:update` — le geste de chaque mise à jour
+## `mise run game-update` — le geste de chaque mise à jour
 
 ```bash
-BEACON_FIREBASE_PROJECT=<projet> npx nx run game-depot:update
+mise run game-update [jeu]
 ```
 
-Guidé de bout en bout : il lit la clé d'administration dans le remote rclone
-`scw-admin` (aucune valeur n'est jamais affichée), cherche l'installation du
-serveur dédié dans **toutes** les bibliothèques Steam, annonce ce qu'il a
-trouvé, dépose et relit, puis enregistre dans Firestore la version de ce qu'il a déposé.
+La tâche fixe `BEACON_FIREBASE_PROJECT` sur le projet de production, et vise donc
+la production. Elle ne passe pas par `nx` : sous Windows, `nx` lit la sortie
+d'une commande par un tube, et `steamcmd` y retient tout jusqu'à sa sortie,
+invites de mot de passe comprises (`probe/RESULTS.md`, section O).
 
-Quand le serveur dédié n'est pas installé — c'est une application Steam
-distincte du client du jeu — il imprime la commande `steamcmd` exacte à lancer
-et attend, plutôt que d'échouer. Il ne peut pas la lancer lui-même : ces
-fichiers sont sous licence, et seul un compte qui possède le jeu les télécharge.
+Guidé de bout en bout : il lit la clé d'administration dans le remote rclone
+`scw-admin` (aucune valeur n'est jamais affichée), propose les jeux du catalogue
+qui passent par une copie, trouve leur installation par son manifeste dans
+**toutes** les bibliothèques Steam, puis lance `steamcmd` pour l'amener à la
+version que l'éditeur publie. Il dépose ensuite l'installation, la relit, et
+enregistre dans Firestore la version de ce qu'il a déposé.
+
+`steamcmd` doit être dans le `PATH`, sous le nom `steamcmd.exe`, et l'outil doit
+tourner dans un terminal dont il lit le clavier et où il écrit : `steamcmd` y
+demande le mot de passe du compte Steam et le code Steam Guard, et y affiche sa
+progression. Sans installation trouvée, il installe dans
+`steamapps/common/beacon-<jeu>` de la première bibliothèque. Un code de sortie
+de `steamcmd` autre que `0` arrête tout, sans rien déposer.
 
 La version est le `buildid` du manifeste que `steamcmd` écrit dans
 l'installation, `steamapps/appmanifest_<application>.acf`. L'outil refuse une
-installation sans manifeste, ou que son manifeste dit incomplète, et refuse de
-déposer quand l'enregistrement ne répond pas. `BEACON_FIREBASE_PROJECT` n'a
-aucune valeur par défaut, et l'identité est celle que
-`gcloud auth application-default login` a laissée sur le poste.
+installation sans manifeste, que son manifeste dit incomplète, ou qui ne porte
+pas l'exécutable que le catalogue donne au jeu, et refuse de déposer quand
+l'enregistrement ne répond pas. Quand la version installée est déjà celle de la
+copie enregistrée, il le dit et demande s'il dépose quand même.
+L'outil ne donne aucune valeur par défaut à `BEACON_FIREBASE_PROJECT`, c'est la
+tâche qui le fixe, et l'identité est celle que
+`gcloud auth application-default login` a laissée sur le poste. L'outil lui
+demande un jeton dès sa première étape, et s'arrête si elle ne répond pas.
 
-Options, toutes facultatives : `--from=<dossier>` pour désigner l'installation à
-la main, `--steam-account=<nom>` quand la machine porte plusieurs comptes Steam,
+Lancé sans la tâche, depuis un terminal, par
+`BEACON_FIREBASE_PROJECT=<projet> npx tsx tools/game-depot/src/update.ts`,
+l'outil prend ces options, toutes facultatives : `--game=<jeu>` pour ne pas avoir à choisir,
+`--from=<dossier>` pour désigner le dossier où `steamcmd` installe, et que l'outil dépose,
+`--steam-account=<nom>` quand la machine porte plusieurs comptes Steam,
 `--steam-root=<dossier>` si Steam n'est pas à son emplacement habituel.
 
 ## `game-depot:push` — le même dépôt, sans question
@@ -42,7 +58,8 @@ npx nx run game-depot:push -- --game=sunkenland --from="<installation locale>"
 ```
 
 Pour un script qui a déjà résolu son dossier et exporté les cinq variables
-`BEACON_S3_*` et `BEACON_FIREBASE_PROJECT`.
+`BEACON_S3_*` et `BEACON_FIREBASE_PROJECT`. Il ne lance pas `steamcmd` : le
+dossier doit déjà porter une installation complète.
 
 ## `game-depot:archive-key`
 

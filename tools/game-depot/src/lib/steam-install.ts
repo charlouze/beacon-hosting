@@ -1,5 +1,6 @@
-import { join } from 'node:path';
-import { SERVER_BINARY } from './game-depot.js';
+import { join, win32 } from 'node:path';
+import type { Game } from '@beacon/session';
+import { manifestPathFor } from './steam-manifest.js';
 
 export interface InstallMeasure {
   readonly fileCount: number;
@@ -9,8 +10,8 @@ export interface InstallMeasure {
 /**
  * The narrow slice of the disk the guided flow needs, and the seam that lets it
  * be tested at all: a real Steam install exists on one machine, weighs
- * gigabytes, and cannot be made to *not* hold the server — which is the case
- * this whole flow exists for.
+ * gigabytes, and cannot be made to *not* hold the install — the case where
+ * the tool installs it itself.
  */
 export interface LocalFiles {
   exists(path: string): boolean;
@@ -21,9 +22,6 @@ export interface LocalFiles {
   /** Everything under this folder, recursively. */
   measure(path: string): InstallMeasure;
 }
-
-/** Where steamcmd is told to put it, when nothing says otherwise. */
-const DEDICATED_SERVER_FOLDER = 'Sunkenland Dedicated Server';
 
 export const DEFAULT_STEAM_ROOT = 'C:\\Program Files (x86)\\Steam';
 
@@ -43,28 +41,26 @@ export function steamLibraries(files: LocalFiles, steamRoot: string): readonly s
 }
 
 /**
- * The install folder, recognised by the one file an install of the dedicated
- * server always carries and no other folder does. The client's own folder sits
- * right next to it in the same `common/`, which is why the binary and not the
- * folder name is what decides.
+ * The install of an application, recognised by the manifest steamcmd writes
+ * inside the folder it installs. A game client sitting next to it in the same
+ * `common/` carries no such file, whatever it is named.
  */
-export function findDedicatedServer(files: LocalFiles, libraries: readonly string[]): string | undefined {
+export function findInstall(files: LocalFiles, libraries: readonly string[], app: string): string | undefined {
   for (const library of libraries) {
     for (const candidate of files.subdirectories(join(library, 'steamapps', 'common'))) {
-      if (files.exists(join(candidate, SERVER_BINARY))) return candidate;
+      if (files.exists(manifestPathFor(candidate, app))) return candidate;
     }
   }
   return undefined;
 }
 
 /**
- * Where the printed command tells steamcmd to install. Inside a Steam library's
- * `common/` on purpose, and not somewhere neutral: that is exactly where the
- * next run of this tool sweeps, so the operator has nothing to remember and no
- * path to pass back.
+ * Where a first install of a game's copy goes: in the first library's
+ * `common/`, where `findInstall` looks next time, under a name no Steam client
+ * takes for an application of its own.
  */
-export function suggestedInstallDir(libraries: readonly string[]): string {
-  return join(libraries[0] ?? DEFAULT_STEAM_ROOT, 'steamapps', 'common', DEDICATED_SERVER_FOLDER);
+export function installDirFor(libraries: readonly string[], game: Game): string {
+  return join(libraries[0] ?? DEFAULT_STEAM_ROOT, 'steamapps', 'common', `beacon-${game}`);
 }
 
 /**
@@ -82,18 +78,16 @@ export interface DiscoveredSteamAccount {
 }
 
 /**
- * The account Steam is most likely logged in as. Worth digging out of
- * `loginusers.vdf` for one reason: a placeholder in the middle of the command
- * turns a line to paste into a line to edit, and an edited line is where a
- * password gets added.
+ * The account Steam is most likely logged in as, which steamcmd logs in with
+ * unless --steam-account names another.
  *
  * `MostRecent` first, `AutoLogin` after, because the client on the machine this
  * was written against writes the second and not the first — with two accounts
  * in the file, reading only `MostRecent` hands over whichever came first, and
  * the operator learns it from steamcmd rather than from here. Absent either
- * flag, the first account in the file is still returned so the command stays
- * pasteable, but `flagged: false` says plainly that the pick is a coin flip —
- * the ordinary state of a Steam client with more than one account signed in.
+ * flag, the first account in the file is still returned, but `flagged: false`
+ * says plainly that the pick is a coin flip — the ordinary state of a Steam
+ * client with more than one account signed in.
  */
 export function discoverSteamAccount(files: LocalFiles, steamRoot: string): DiscoveredSteamAccount | undefined {
   const users = files.readText(join(steamRoot, 'config', 'loginusers.vdf')) ?? '';
@@ -106,29 +100,45 @@ export function discoverSteamAccount(files: LocalFiles, steamRoot: string): Disc
   return { name: chosen[1], flagged: flagged !== undefined, accountCount: accounts.length };
 }
 
-/**
- * The line an operator pastes. Two of its properties cost an evening each when
- * they are wrong, and neither is visible in the result:
- *
- * `+force_install_dir` comes **before** `+login` because Steam fixes its
- * install root at login — placed after, the option is not refused, it is
- * ignored, and 2.3 GB land in steamcmd's own folder where nothing looks.
- *
- * There is no password parameter here, and there cannot be one. `+login`
- * accepts a password as a second word, and that word lands in the shell
- * history, a plaintext file nothing ever cleans. steamcmd prompts for it, and
- * Steam Guard prompts again regardless, so the argument buys nothing.
- */
-export function steamcmdCommandFor(target: {
+export interface SteamcmdTarget {
   readonly installDir: string;
   readonly account: string;
   readonly app: string;
-}): string {
-  return [
-    'steamcmd',
-    `+force_install_dir "${target.installDir}"`,
-    `+login ${target.account}`,
-    `+app_update ${target.app} validate`,
-    '+quit',
-  ].join(' ');
+}
+
+/**
+ * What steamcmd is launched with, one argument per element: the install
+ * folder stays whole whatever spaces it holds. Two properties cost an evening
+ * each when they are wrong, and neither is visible in the result:
+ *
+ * `+force_install_dir` comes **before** `+login` because Steam fixes its
+ * install root at login — placed after, the option is not refused, it is
+ * ignored, and the download lands in steamcmd's own folder where nothing looks.
+ *
+ * There is no password here, and there cannot be one: steamcmd asks for it in
+ * the operator's terminal, and Steam Guard asks again regardless.
+ *
+ * No `validate`, which would reread every local file at each update.
+ */
+export function steamcmdArgumentsFor(target: SteamcmdTarget): readonly string[] {
+  return ['+force_install_dir', target.installDir, '+login', target.account, '+app_update', target.app, '+quit'];
+}
+
+/**
+ * steamcmd.exe in the first folder of the PATH that holds it. The `.exe` and
+ * nothing else: it is the one file `spawn` launches without a shell. A Windows
+ * PATH, read as such whatever the machine running this code.
+ */
+export function findSteamcmd(
+  pathVariable: string | undefined,
+  exists: (path: string) => boolean,
+): string | undefined {
+  for (const entry of (pathVariable ?? '').split(win32.delimiter)) {
+    // Windows allows a PATH entry wrapped in double quotes.
+    const folder = entry.replace(/^"(.*)"$/, '$1');
+    if (folder === '') continue;
+    const candidate = win32.join(folder, 'steamcmd.exe');
+    if (exists(candidate)) return candidate;
+  }
+  return undefined;
 }

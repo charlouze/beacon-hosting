@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { gameVersionFrom } from '@beacon/session';
 import { catalogFor } from '@beacon/cloud-init';
-import { copySteamAppOf, installedVersion, manifestPathFor } from './steam-manifest.js';
+import { installedCopy, installedVersion, manifestPathFor } from './steam-manifest.js';
 
 const INSTALL = join('D:', 'SteamLibrary', 'steamapps', 'common', 'Sunkenland Dedicated Server');
 const APP = '2667530';
@@ -91,12 +91,28 @@ describe('the application this tool installs and reads', () => {
   });
 });
 
-describe('copySteamAppOf', () => {
-  it('names the application of a game that goes through a copy', () => {
-    expect(copySteamAppOf('sunkenland')).toBe(APP);
+describe('installedCopy', () => {
+  const COPY = { steamApp: APP, executable: 'Server.exe' };
+  const onDisk = (tree: Record<string, string>) => ({
+    exists: (path: string) => tree[path] !== undefined,
+    readText: (path: string) => tree[path],
   });
 
-  it('refuses a game that goes through no copy', () => {
-    expect(() => copySteamAppOf('enshrouded')).toThrow(/no copy/);
+  it('reads the build of a complete install that holds the executable', () => {
+    const files = onDisk({ [manifestPathFor(INSTALL, APP)]: COMPLETE, [join(INSTALL, 'Server.exe')]: 'MZ' });
+
+    expect(installedCopy(files, INSTALL, COPY)).toEqual({ version: gameVersionFrom('25746735') });
+  });
+
+  it('refuses a complete install that does not hold the executable, naming it', () => {
+    const files = onDisk({ [manifestPathFor(INSTALL, APP)]: COMPLETE });
+
+    expect(installedCopy(files, INSTALL, COPY)).toEqual({ refusal: expect.stringContaining('Server.exe') });
+  });
+
+  it('refuses on the manifest before it looks for the executable', () => {
+    const files = onDisk({ [join(INSTALL, 'Server.exe')]: 'MZ' });
+
+    expect(installedCopy(files, INSTALL, COPY)).toEqual({ refusal: expect.stringContaining('appmanifest_2667530.acf') });
   });
 });

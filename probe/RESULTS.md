@@ -2241,3 +2241,50 @@ projet ne tiennent plus : le serveur a grossi avec les mises à jour du jeu.
 - Ce que `steamcmd` rend sur un `app_update` sans `validate`, sur un
   `app_update` qui télécharge un nouveau build, sur un lancement qu'il fait
   suivre de sa propre mise à jour, et sur un code Steam Guard refusé.
+
+## O · La sortie de `steamcmd` derrière un lanceur
+
+Question : quand `game-depot` lance `steamcmd` en lui passant sa propre entrée
+et sa propre sortie, ce que `steamcmd` écrit arrive-t-il au terminal pendant
+qu'il tourne ?
+
+Commande : `npm --prefix probe run steam:output`
+
+Mesuré le 2026-10-24 par le commanditaire, dans un terminal PowerShell sur
+Windows, `steamcmd` version `1792617903` installé par scoop et lancé par son
+shim. Connexion anonyme, aucun téléchargement.
+
+### Sous `nx`, et en direct
+
+Un processus intermédiaire lance `steamcmd +login anonymous +quit` et écrit une
+ligne par seconde tant qu'il tourne. Il est lancé comme `nx run-commands` lance
+une cible sous Windows, `nx` n'y prenant de pseudo-terminal que si
+`NX_WINDOWS_PTY_SUPPORT` vaut `true` : `shell`, `windowsHide`, entrée héritée,
+sortie et erreur lues par tube. Ou bien il est lancé directement depuis le
+terminal.
+
+| Lancement | Sortie que reçoit `steamcmd` | Ce qui arrive au terminal |
+|---|---|---|
+| comme `nx` | un tube | le bandeau, puis les trois secondes de la connexion, puis toutes les lignes de la connexion d'un bloc, à la sortie de `steamcmd` |
+| direct | la console | les lignes au fil de la connexion, la ligne de seconde tombant au milieu de `Connecting anonymously to Steam Public...` |
+| comme `nx`, `steamcmd` détaché dans une fenêtre à lui | aucune, sa propre console | rien dans le terminal |
+
+Dans les trois cas, l'entrée du processus intermédiaire est une console.
+
+### Ce que `steamcmd` retient
+
+Mesuré le même jour depuis le poste, sans console en entrée, sortie lue par
+tube et horodatée à réception : `+force_install_dir <dossier> +login anonymous +app_update 1007 +quit`,
+le Steamworks SDK Redist.
+
+| Reçu à | Lignes |
+|---|---|
+| 974 ms | le bandeau |
+| 11 406 ms | du chargement de l'API jusqu'à `Success! App '1007' fully installed.` |
+| 11 645 ms | les lignes du lanceur de `steamcmd`, puis la sortie, code `0` |
+
+Le journal de `steamcmd`, `logs/console_log.txt` à côté de son exécutable, date
+chacune de ces lignes au moment où elle est écrite. Pendant l'essai de
+`game-depot:update` du 2026-10-23, il porte une ligne de progression toutes les
+deux secondes, pendant une minute de téléchargement de 5 414 036 163 octets,
+dont rien n'a été affiché avant la sortie de `steamcmd`.
