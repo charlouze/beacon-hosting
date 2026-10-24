@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { S3Client } from '@aws-sdk/client-s3';
-import { adminFirestore } from '@beacon/admin-firestore';
+import { adminFirestore, proveAdminIdentity } from '@beacon/admin-firestore';
 import { fromS3 } from '@beacon/scaleway-storage';
 import { gameCopyRecord } from '@beacon/session-record';
 import type { Game } from '@beacon/session';
@@ -152,6 +152,7 @@ try {
     // it exits (probe/RESULTS.md, section O).
     canAnswer: process.stdin.isTTY === true && process.stdout.isTTY === true,
     rcloneConfigDump: async () => rcloneConfigDump(),
+    proveIdentity: () => proveAdminIdentity(process.env),
     openBucket: (credentials) =>
       fromS3(
         new S3Client({

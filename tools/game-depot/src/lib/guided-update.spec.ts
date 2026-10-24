@@ -154,6 +154,8 @@ function harness(
     /** The version on record; `null` for none. Defaults to the old build. */
     readonly deposited?: string | null;
     readonly recordUnreachable?: boolean;
+    /** What proving the Google identity returns, or the error it throws. */
+    readonly identity?: 'emulator' | 'application-default' | Error;
     readonly answer?: (question: string) => boolean;
   } = {},
 ): Harness {
@@ -220,6 +222,11 @@ function harness(
         },
       },
       rcloneConfigDump: async () => options.configDump ?? DUMP_WITH_BOTH_REMOTES,
+      proveIdentity: async () => {
+        const identity = options.identity ?? 'application-default';
+        if (identity instanceof Error) throw identity;
+        return identity;
+      },
       openBucket: (credentials) => {
         opened.push(credentials);
         return api;
@@ -600,6 +607,31 @@ describe('the credentials', () => {
     expect(await runGuidedUpdate(flow.ports)).toBe('refused');
     expect(printed(flow)).toContain('scw-admin');
     expect(flow.events).toEqual([]);
+  });
+
+  // The record is read before the download and written after the upload: a
+  // login that expired would otherwise be learnt minutes, or gigabytes, in.
+  it('stops before anything else when no Google identity answers, naming the login to run', async () => {
+    const flow = harness({ identity: new Error('Could not load the default credentials.') });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('refused');
+    expect(printed(flow)).toContain('Could not load the default credentials.');
+    expect(printed(flow)).toContain('gcloud auth application-default login');
+    expect(flow.events).toEqual([]);
+  });
+
+  it('says the Google identity answers', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    expect(printed(flow)).toContain('the Google identity gcloud auth application-default login left here answers');
+  });
+
+  it('asks no Google identity of the emulator, and says so', async () => {
+    const flow = harness({ identity: 'emulator' });
+
+    expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
+    expect(printed(flow)).toContain('no Google identity needed: the record is in the emulator');
   });
 
   // The flow reads a secret out of rclone on every run, in a terminal whose

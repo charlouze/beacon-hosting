@@ -1,6 +1,7 @@
 import { isGame, type Game, type GameVersion } from '@beacon/session';
 import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
+import type { AdminIdentity } from '@beacon/admin-firestore';
 import { ADMIN_REMOTE, type AdminCredentials, adminCredentialsFrom, describeRemote } from '@beacon/admin-key';
 import { type DepositSteps, type PushGameFilesDeps, gameArchiveKeyFor } from './game-depot.js';
 import { type CopyApplication, copyApplicationOf } from './copy-application.js';
@@ -59,6 +60,8 @@ export interface GuidedUpdatePorts {
    */
   readonly canAnswer: boolean;
   readonly rcloneConfigDump: () => Promise<string>;
+  /** `proveAdminIdentity`: a token asked of Google with the identity that writes the record. */
+  readonly proveIdentity: () => Promise<AdminIdentity>;
   readonly openBucket: (credentials: AdminCredentials) => ObjectApi;
   /** `pushGameFiles` itself. A port only so a test does not need gigabytes on disk. */
   readonly pushArchive: (deps: PushGameFilesDeps) => Promise<GameVersion>;
@@ -113,8 +116,9 @@ async function guide(ports: GuidedUpdatePorts): Promise<GuidedUpdateOutcome> {
   say(`beacon: game files, from this machine into ${ports.bucketName}`);
 
   say('');
-  say('1. The administrator key, never the machine one');
+  say('1. Your administrator credentials, never the machine ones');
   const credentials = await adminKey(ports);
+  await googleIdentity(ports);
 
   say('');
   say('2. steamcmd, which downloads the game with your Steam account');
@@ -186,6 +190,24 @@ async function adminKey(ports: GuidedUpdatePorts): Promise<AdminCredentials> {
   ports.say(`  ok    ${describeRemote(ADMIN_REMOTE, credentials)}`);
   ports.say('  ok    no credential value is printed by this command, here or below');
   return credentials;
+}
+
+/** Proven before anything else: the record is read before the download, and written after the upload. */
+async function googleIdentity(ports: GuidedUpdatePorts): Promise<void> {
+  let identity: AdminIdentity;
+  try {
+    identity = await ports.proveIdentity();
+  } catch (error) {
+    throw new Stop([
+      `no Google identity answers for the record of the copy: ${reasonOf(error)}`,
+      'Run `gcloud auth application-default login`, then run this again.',
+    ]);
+  }
+  ports.say(
+    identity === 'emulator'
+      ? '  ok    no Google identity needed: the record is in the emulator'
+      : '  ok    the Google identity gcloud auth application-default login left here answers',
+  );
 }
 
 async function gameToDeposit(ports: GuidedUpdatePorts): Promise<Game> {

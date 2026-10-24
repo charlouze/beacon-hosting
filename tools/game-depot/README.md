@@ -41,7 +41,8 @@ l'enregistrement ne répond pas. Quand la version installée est déjà celle de
 copie enregistrée, il le dit et demande s'il dépose quand même.
 L'outil ne donne aucune valeur par défaut à `BEACON_FIREBASE_PROJECT`, c'est la
 tâche qui le fixe, et l'identité est celle que
-`gcloud auth application-default login` a laissée sur le poste.
+`gcloud auth application-default login` a laissée sur le poste. L'outil lui
+demande un jeton dès sa première étape, et s'arrête si elle ne répond pas.
 
 Lancé sans la tâche, depuis un terminal, par
 `BEACON_FIREBASE_PROJECT=<projet> npx tsx tools/game-depot/src/update.ts`,
