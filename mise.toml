@@ -133,3 +133,16 @@ run = "npx nx run dev-session:session"
 [tasks.inventory]
 description = "Liste ce que le compte Scaleway detient — lecture seule, ne cree rien"
 run = "npm --prefix probe run scw:inventory"
+
+# Le geste de chaque mise a jour d'un jeu, et la seule tache qui vise la
+# production : il n'y a qu'un projet, et c'est la tache qui le nomme, jamais un
+# defaut de l'outil. Elle ne passe pas par nx : sous Windows il lit la sortie
+# d'une commande par un tube, ou steamcmd retient tout jusqu'a sa sortie,
+# invites de mot de passe comprises (probe/RESULTS.md, section O). `raw` laisse
+# la console du terminal a steamcmd.
+[tasks.game-update]
+description = "Amene un jeu a la version publiee par steamcmd et depose sa copie — en production"
+env = { BEACON_FIREBASE_PROJECT = "beacon-hosting-charlouze" }
+raw = true
+usage = 'arg "[game]" help="Le jeu, propose sinon"'
+run = "npx tsx tools/game-depot/src/update.ts {% if usage.game %}--game={{ usage.game }}{% endif %}"

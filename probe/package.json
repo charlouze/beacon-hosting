@@ -15,7 +15,8 @@
     "scw:game": "tsx scaleway/game-on-type-probe.ts",
     "scw:session": "tsx scaleway/session-probe.ts",
     "scw:sunkenland": "tsx scaleway/sunkenland-probe.ts",
-    "steam:version": "tsx steam/version-probe.ts"
+    "steam:version": "tsx steam/version-probe.ts",
+    "steam:output": "tsx steam/steamcmd-output-probe.ts"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",

@@ -148,7 +148,9 @@ try {
     files: onDisk,
     record: gameCopyRecord(adminFirestore(process.env)),
     steamcmd: steamcmdOnThisMachine(),
-    canAnswer: process.stdin.isTTY === true,
+    // stdout too: steamcmd inherits it, and holds all it writes to a pipe until
+    // it exits (probe/RESULTS.md, section O).
+    canAnswer: process.stdin.isTTY === true && process.stdout.isTTY === true,
     rcloneConfigDump: async () => rcloneConfigDump(),
     openBucket: (credentials) =>
       fromS3(

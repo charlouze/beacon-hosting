@@ -53,7 +53,10 @@ export interface GuidedUpdatePorts {
   readonly files: LocalFiles;
   readonly record: GameCopyRecord;
   readonly steamcmd: Steamcmd;
-  /** Whether someone can answer at a keyboard: steamcmd asks for a password and a Steam Guard code. */
+  /**
+   * Whether this terminal both reads the keyboard and shows steamcmd's output
+   * as it is written: steamcmd asks for a password and a Steam Guard code.
+   */
   readonly canAnswer: boolean;
   readonly rcloneConfigDump: () => Promise<string>;
   readonly openBucket: (credentials: AdminCredentials) => ObjectApi;
@@ -125,7 +128,9 @@ async function guide(ports: GuidedUpdatePorts): Promise<GuidedUpdateOutcome> {
   if (!ports.canAnswer) {
     throw new Stop([
       'no terminal to answer in: steamcmd would ask for a password and a Steam Guard',
-      'code nobody could type. Run this from a terminal.',
+      'code nobody could see. With its output piped, as nx does on Windows, steamcmd',
+      'holds every line, its prompts included, until it exits.',
+      'Run `mise run game-update` from a terminal.',
     ]);
   }
   say('  ok    steamcmd and this command ask their questions here');

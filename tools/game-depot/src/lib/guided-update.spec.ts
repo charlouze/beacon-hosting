@@ -294,6 +294,7 @@ describe('the download, by steamcmd', () => {
 
     expect(await runGuidedUpdate(flow.ports)).toBe('refused');
     expect(printed(flow)).toMatch(/terminal/i);
+    expect(printed(flow)).toContain('mise run game-update');
     expect(flow.events).toEqual([]);
   });
 
