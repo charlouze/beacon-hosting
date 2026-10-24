@@ -99,6 +99,37 @@ describe('pushing game files', () => {
     expect(await api.list('sunkenland/')).toEqual([]);
   });
 
+  it('announces the archive being built, then sent with the size it deposits', async () => {
+    const steps: string[] = [];
+    const api = fakeObjectApi();
+    await pushGameFiles({
+      api,
+      record: recordDouble(),
+      game: 'sunkenland',
+      from: sunkenlandInstall,
+      steps: { building: () => steps.push('building'), sending: (sizeBytes) => steps.push(`sending ${sizeBytes}`) },
+    });
+
+    const [deposited] = await api.list('sunkenland/game.tar');
+    expect(steps).toEqual(['building', `sending ${deposited?.sizeBytes}`]);
+  });
+
+  it('announces nothing for a folder it refuses', async () => {
+    rmSync(join(sunkenlandInstall, 'Sunkenland-DedicatedServer.exe'));
+    const steps: string[] = [];
+
+    await expect(
+      pushGameFiles({
+        api: fakeObjectApi(),
+        record: recordDouble(),
+        game: 'sunkenland',
+        from: sunkenlandInstall,
+        steps: { building: () => steps.push('building'), sending: () => steps.push('sending') },
+      }),
+    ).rejects.toThrow();
+    expect(steps).toEqual([]);
+  });
+
   it('records the version of what it deposited, once the deposit is read back', async () => {
     const record = recordDouble();
 

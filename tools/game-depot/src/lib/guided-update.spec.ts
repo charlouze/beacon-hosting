@@ -224,8 +224,10 @@ function harness(
         opened.push(credentials);
         return api;
       },
-      pushArchive: async ({ game, record, from }) => {
+      pushArchive: async ({ game, record, from, steps }) => {
         events.push('push');
+        steps?.building();
+        steps?.sending(2_480_000_000);
         bucket.set(gameArchiveKeyFor(game), 2_480_000_000);
         const build = /"buildid"\s+"(\d+)"/.exec(String(tree[manifestPath(from)]))?.[1];
         if (build === undefined) throw new Error(`no manifest in ${from}`);
@@ -547,6 +549,20 @@ describe('the deposit', () => {
     expect(await runGuidedUpdate(flow.ports)).toBe('deposited');
 
     expect(printed(flow)).toContain('sunkenland/game.tar in beacon-games, 2.31 GB');
+  });
+
+  // Building then sending gigabytes is minutes of silence: said as each starts,
+  // so the operator does not take it for a hang.
+  it('says the archive is being built, then sent, before reading it back', async () => {
+    const flow = harness();
+    await runGuidedUpdate(flow.ports);
+
+    const building = flow.said.findIndex((line) => line.includes(`building the archive of ${SERVER_DIR}`));
+    const sending = lineIndex(flow, /sending sunkenland\/game\.tar, 2\.31 GB, to beacon-games: nothing shows until it is done/);
+    const readBack = lineIndex(flow, /sunkenland\/game\.tar in beacon-games/);
+    expect(building).toBeGreaterThan(-1);
+    expect(sending).toBeGreaterThan(building);
+    expect(readBack).toBeGreaterThan(sending);
   });
 
   // The machine's key can only read this bucket. Taking it would fail at the

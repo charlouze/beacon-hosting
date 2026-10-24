@@ -17,6 +17,12 @@ export function gameArchiveKeyFor(game: Game): string {
   return `${game}/game.tar`;
 }
 
+/** The two long silences of a deposit, announced as each one starts. */
+export interface DepositSteps {
+  building(): void;
+  sending(sizeBytes: number): void;
+}
+
 export interface PushGameFilesDeps {
   readonly api: ObjectApi;
   /** Where the version of the copy is recorded, once the deposit is read back. */
@@ -24,6 +30,7 @@ export interface PushGameFilesDeps {
   readonly game: Game;
   /** The local folder holding an install of the game's copy. */
   readonly from: string;
+  readonly steps?: DepositSteps;
 }
 
 /**
@@ -66,11 +73,13 @@ async function depositArchive(deps: PushGameFilesDeps): Promise<void> {
   const workDir = mkdtempSync(join(tmpdir(), 'game-depot-'));
   try {
     const archive = join(workDir, 'game.tar');
+    deps.steps?.building();
     // No gzip: these files are already compressed, and re-compressing 2.3 GB
     // would cost minutes of CPU on both ends for nothing.
     await create({ file: archive, cwd: deps.from }, ['.']);
     const sizeBytes = statSync(archive).size;
 
+    deps.steps?.sending(sizeBytes);
     await deps.api.put(key, archive);
 
     const deposited = (await deps.api.list(key)).find((summary) => summary.key === key);

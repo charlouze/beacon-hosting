@@ -2,7 +2,7 @@ import { isGame, type Game, type GameVersion } from '@beacon/session';
 import type { GameCopyRecord } from '@beacon/session-record';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import { ADMIN_REMOTE, type AdminCredentials, adminCredentialsFrom, describeRemote } from '@beacon/admin-key';
-import { type PushGameFilesDeps, gameArchiveKeyFor } from './game-depot.js';
+import { type DepositSteps, type PushGameFilesDeps, gameArchiveKeyFor } from './game-depot.js';
 import { type CopyApplication, copyApplicationOf } from './copy-application.js';
 import {
   type DiscoveredSteamAccount,
@@ -322,7 +322,12 @@ async function operatorAgrees(
 async function deposit(ports: GuidedUpdatePorts, credentials: AdminCredentials, game: Game, from: string): Promise<void> {
   const key = gameArchiveKeyFor(game);
   const bucket = ports.openBucket(credentials);
-  const version = await ports.pushArchive({ api: bucket, record: ports.record, game, from });
+  const steps: DepositSteps = {
+    building: () => ports.say(`  ..    building the archive of ${from}, in a temporary folder`),
+    sending: (sizeBytes) =>
+      ports.say(`  ..    sending ${key}, ${gigabytes(sizeBytes)}, to ${ports.bucketName}: nothing shows until it is done`),
+  };
+  const version = await ports.pushArchive({ api: bucket, record: ports.record, game, from, steps });
 
   // Read back rather than trust. `pushGameFiles` already compares the size it
   // deposited; this second look is what the operator gets to see, and it costs
