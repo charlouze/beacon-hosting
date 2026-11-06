@@ -27,7 +27,7 @@ const GAME_IMAGE =
 const GAME = 'sunkenland' as const;
 
 /**
- * The one archive holding the 2.3 GB this machine may not download (§7), and
+ * The one archive holding the game files this machine may not download (§7), and
  * literally the same value `gameArchiveKeyFor` builds in `tools/game-depot`.
  * Module boundaries forbid importing it here, and nothing breaks when the two
  * diverge: only the smoke barrier holds both ends together.
@@ -65,7 +65,7 @@ const AUTOSAVE_SECONDS = 300;
  */
 const PUSH_INTERVAL_MS = AUTOSAVE_SECONDS * 1000;
 
-/** Where the restore unpacks the 2.3 GB, and where the server reads them. */
+/** Where the restore unpacks the game files, and where the server reads them. */
 const GAME_DIR = '/sunkenland/game';
 
 /** What `wine` launches, and the file the depot refuses to deposit a copy without. */
@@ -205,7 +205,7 @@ const startSh = (adminSteamIds: readonly string[]): string => `#!/usr/bin/env ba
 set -euo pipefail
 
 # Never SteamCMD: this dedicated server needs an account that owns the licence,
-# and §7 keeps every Steam credential off a game machine. The 2.3 GB arrive
+# and §7 keeps every Steam credential off a game machine. The game files arrive
 # from object storage, restored exactly like a save.
 GAME_DIR=${GAME_DIR}
 WORLD_DIR=${WORLD_DIR}
@@ -322,7 +322,7 @@ const COMPOSE = `services:
   # First, and the game waits on it. §6 étape 7: until this exits zero there is
   # no game container at all, so nobody can join a world that is not the right
   # one — and that evening cannot be saved over the real one. For this game it
-  # also brings the 2.3 GB the machine is not allowed to download itself (§7),
+  # also brings the game files the machine is not allowed to download itself (§7),
   # which is one more \`get\` and no second code path.
   restore:
     image: ${COMPANION_IMAGE}
@@ -370,7 +370,7 @@ const COMPOSE = `services:
     volumes:
       - ./start.sh:/opt/beacon/start.sh:ro
       - ./serverid-filter.sh:/opt/beacon/serverid-filter.sh:ro
-      # Read-only on purpose: these 2.3 GB are licensed files deposited once,
+      # Read-only on purpose: these game files are licensed files deposited once,
       # and nothing on a game machine has any business rewriting them.
       - ./game:${GAME_DIR}:ro
       # Where the identifier is announced, and the only thing this container
@@ -527,9 +527,9 @@ export const sunkenland: GameCatalogEntry = {
   // The dedicated server, a Steam application distinct from the game client.
   copySteamApp: '2667530',
   copyExecutable: SERVER_BINARY,
-  // Measured at 26 GB occupied, at the peak as at rest: a 20 GB volume fills
-  // up before the download ends.
-  diskGb: 40,
+  // The restore keeps the archive next to what it unpacks, so the game counts
+  // twice. Build 26481793 weighs 14 GB, and 40 GB filled up before the world.
+  diskGb: 60,
   // The restore brings the game back from the depot first, then the world.
   setupStepOrder: ['waking', 'fetching-game', 'restoring-world', 'starting-game'],
   agentSetup: AGENT_SETUP,

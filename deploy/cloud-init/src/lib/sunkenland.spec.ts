@@ -231,7 +231,7 @@ describe('the sunkenland catalogue entry', () => {
     );
   });
 
-  // §7: these 2.3 GB are licensed, deposited once, and nothing on a game
+  // §7: these game files are licensed, deposited once, and nothing on a game
   // machine has to rewrite them. The restore writes them, the game reads them.
   it('mounts the game files writable for the restore and read-only for the game', () => {
     const compose = renderCompose('sunkenland');
