@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ObjectApi } from '@beacon/scaleway-storage';
 import {
@@ -155,6 +155,9 @@ async function restoreGameFiles(
     // No progress from here on: nothing says how far an unpacking is.
     await declarer.declare({ step: 'fetching-game', activity: 'unpacking' });
     await unpackInto(archive, gameFiles.directory);
+    // Before the world: kept, the game counts twice on the disk, and a 14 GB
+    // copy filled 40 GB that way on 2026-11-06.
+    rmSync(archive);
     // Same reprise as the world's own chown, and for the same reason measured
     // 2026-09-05: the server reads this folder as an unprivileged uid, the
     // unpack ran as root, and an archive mode that did not leave the server

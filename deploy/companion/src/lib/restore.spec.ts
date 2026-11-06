@@ -315,6 +315,26 @@ describe('runRestore with game files', () => {
     expect(deps.report).toHaveBeenCalledWith(expect.objectContaining({ phase: 'failed' }));
   });
 
+  // Measured 2026-11-06: a 14 GB copy kept next to its unpacked files filled a
+  // 40 GB disk before the world arrived.
+  it('removes the game archive before it fetches the world', async () => {
+    const archive = join(deps.config.workDir, 'game-files.tar');
+    let archiveLeft: boolean | undefined;
+    const store = deps.store;
+    deps = {
+      ...deps,
+      store: {
+        ...store,
+        fetch: async (save, toFile) => {
+          archiveLeft = existsSync(archive);
+          return store.fetch(save, toFile);
+        },
+      },
+    };
+    await runRestore(deps);
+    expect(archiveLeft).toBe(false);
+  });
+
   // Measured 2026-09-05 on the world folder: the server runs as an unprivileged
   // uid, the unpack runs as root, and the oblivion is silent. Same line, for
   // the folder the server reads its files from.
