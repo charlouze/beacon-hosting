@@ -1,0 +1,20 @@
+# The production image by default, pinned to the digest that
+# deploy/cloud-init/src/lib/enshrouded.ts boots, or another one through
+# PROBE_IMAGE, with the same environment and the same single mount. Only the
+# port is kept off the host: nobody joins this server, it is read from its files.
+services:
+  enshrouded:
+    image: ${PROBE_IMAGE:-mornedhels/enshrouded-server@sha256:160d469d7a2dbed3a8dac2b1904df387302bfa0f524a26344582e1b76ca46fe4}
+    container_name: probe-enshrouded
+    stop_grace_period: 90s
+    environment:
+      SERVER_NAME: beacon-probe
+      SERVER_SLOT_COUNT: "4"
+      SERVER_ROLE_0_NAME: Default
+      SERVER_ROLE_0_PASSWORD: probe
+      SERVER_ROLE_0_CAN_ACCESS_INVENTORIES: "true"
+      SERVER_ROLE_0_CAN_EDIT_BASE: "true"
+      SERVER_ROLE_0_CAN_EXTEND_BASE: "true"
+      UPDATE_CRON: ""
+    volumes:
+      - ./data:/opt/enshrouded
