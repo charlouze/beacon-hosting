@@ -333,6 +333,20 @@ describe('the enshrouded catalogue entry', () => {
 });
 
 describe('worldLayoutRefusal', () => {
+  it('accepte le monde que le serveur ouvre', () => {
+    expect(enshrouded.worldLayoutRefusal(['world0.ksd', 'global.ksd'])).toBeNull();
+  });
+
+  it('refuse un autre emplacement de monde et dit de le renommer', () => {
+    const refusal = enshrouded.worldLayoutRefusal(['world1.ksd', 'global.ksd']);
+    expect(refusal).toContain('world1.ksd');
+    expect(refusal).toContain('rename the world to adopt to world0.ksd');
+  });
+
+  it('refuse le monde enfoui sous un dossier', () => {
+    expect(enshrouded.worldLayoutRefusal(['savegame/world0.ksd'])).not.toBeNull();
+  });
+
   it('accepte un index et le fichier qu il designe', () => {
     expect(enshrouded.worldLayoutRefusal(['3ad85aea', '3ad85aea-index'])).toBeNull();
   });
