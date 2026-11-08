@@ -2288,3 +2288,58 @@ chacune de ces lignes au moment où elle est écrite. Pendant l'essai de
 `game-depot:update` du 2026-10-23, il porte une ligne de progression toutes les
 deux secondes, pendant une minute de téléchargement de 5 414 036 163 octets,
 dont rien n'a été affiché avant la sortie de `steamcmd`.
+
+## K · Le format de sauvegarde `.ksd`
+
+Question : après la mise à jour du jeu du 2026-11-07, qui a converti les
+sauvegardes d'un client en `worldN.ksd`, qu'est-ce qu'un serveur dédié démarre,
+lit et écrit ?
+
+Commande : `PROBE_IMAGE=<image> ./enshrouded-save-format/run.sh <scénario>`, une graine par
+scénario sous `enshrouded-save-format/seeds/`.
+
+Mesuré le 2026-11-08 sur le poste de développement, Docker Desktop, le jeu
+installé par l'image elle-même au premier démarrage. Aucun joueur connecté.
+
+### L'image épinglée ne démarre plus le jeu
+
+Sur `mornedhels/enshrouded-server@sha256:85978a10…`, celle que
+`deploy/cloud-init` épingle, le serveur s'arrête à l'initialisation sur
+`Failed to initialize Steamworks system...Version Mismatch` puis
+`No SteamUtils011`, et le superviseur le relance : sept boucles en onze minutes,
+jamais `HostOnline`. Sur `@sha256:160d469d…`, publiée le 2026-10-23, le même
+dossier vide atteint `HostOnline` en deux minutes, sans aucune erreur Steamworks.
+
+Sur une installation neuve par cette image, les marqueurs de la mise en place
+tiennent : 70 lignes `Update state (0x61) downloading, progress:`, puis
+`Success! App '2278520' fully installed`, puis `HostOnline`. Le serveur dédié
+téléchargé pèse 8 102 177 083 octets, en trois minutes.
+
+### Ce que le serveur à jour écrit
+
+| Graine | Ce que le serveur fait | Ce qui reste dans `savegame/` |
+|---|---|---|
+| vide | génère un monde | `world0.ksd` (42 833 o), `backup/world0.ksd.backup-N` |
+| `3ad85aea*`, l'ancien format | `[savedata2-migration]` le convertit | `world0.ksd` (339 269 o), l'ancien sous `migrated/`, les `3ad85aea_info*` laissés à la racine |
+| `world1.ksd` + `global.ksd` d'un client | les trouve, ne les charge pas | `world1.ksd` intact, un `world0.ksd` vierge à côté |
+| le même monde renommé `world0.ksd` | le charge : le monde réécrit porte son nom | `world0.ksd` (42 833 o, la graine en faisait 87 233) |
+
+Le serveur ne lit que `world0.ksd`. Il écrit toujours dans `savegame/`, que le
+compagnon archive en entier : la sauvegarde et la restauration ne dépendent pas
+du format.
+
+### Les réglages de jeu
+
+Au chargement, le serveur affiche `Game Settings 'Default'` et prévient
+`'gameSettings' will not be applied Preset is not set to 'Custom'`. Les réglages
+viennent de `enshrouded_server.json`, où la production ne pose aucun
+`SERVER_GS_*`.
+
+### Ce qui reste ouvert
+
+- Que les réglages qu'un joueur a posés dans le monde de son client tiennent
+  sous un serveur réglé `Default`, ou soient remplacés par ceux du serveur. Le
+  journal penche pour le remplacement, mais rien n'a été lu depuis un client
+  connecté.
+- Ce que perd un monde de client réécrit par le serveur, de 87 233 à 42 833
+  octets. La graine a été créée le soir même et à peine jouée.
