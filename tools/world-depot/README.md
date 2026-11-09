@@ -59,8 +59,10 @@ DNS à créer avant la première session.
 catalogue le dit par `generatesWorlds` (§4), jamais un `if` sur le nom du jeu.
 Sans archive, l'outil crée le monde et n'appelle pas le dépôt : la première
 session laisse le jeu générer un monde vierge, ce que le compagnon sait déjà
-faire pour Enshrouded. `--from` désigne, comme avant, le dossier qui contient
-**directement** le dossier `<nom>~<GUID>`.
+faire pour Enshrouded. `--from` désigne le dossier qui contient **directement** le
+monde : `world0.ksd` pour Enshrouded, le dossier `<nom>~<GUID>` pour Sunkenland.
+Le serveur d'Enshrouded n'ouvre aucun autre emplacement, donc un monde de client
+numéroté autrement se renomme `world0.ksd` avant l'adoption.
 
 **Le monde se crée avant le dépôt, et une seule fois.** Si `--world` désigne
 un monde qui existe déjà, l'outil vérifie que `--game` concorde avec le sien,

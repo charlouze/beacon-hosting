@@ -19,6 +19,9 @@ import { fill, indent } from './template.js';
  */
 const GAME_CONTAINER = 'enshrouded';
 
+/** The one world file the server opens, whatever a client numbered it. */
+const SERVER_WORLD = 'world0.ksd';
+
 /**
  * Measured, `probe/RESULTS.md` section P: the tool that downloads this game
  * prints a state every two seconds or so, and a line once the install is over.
@@ -278,18 +281,28 @@ export const enshrouded: GameCatalogEntry = {
     if (entries.length === 0) {
       return 'the archive is empty: no save file at all';
     }
-    // A `<hex>-index` at the archive root, not nested — a `-C` one level too
-    // high buries it under a folder, and that alone is the parent-directory
-    // trap: this never opens the index to read `.latest`, which would be
-    // judging completeness rather than layout.
-    const indexes = entries.filter((entry) => !entry.includes('/') && entry.endsWith('-index'));
-    if (indexes.length === 0) {
-      return `found ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.join(', ')}) but no "<hex>-index" at the archive root`;
+    // Only names at the archive root count: a `-C` one level too high buries
+    // the world under a folder, and the server then boots a blank one.
+    const root = entries.filter((entry) => !entry.includes('/'));
+    if (root.includes(SERVER_WORLD)) {
+      return null;
     }
-    const orphaned = indexes.filter((index) => !entries.includes(index.slice(0, -'-index'.length)));
-    if (orphaned.length > 0) {
-      return `${orphaned.join(', ')} names no matching save file at the archive root`;
+    // Measured, `probe/RESULTS.md` section K: the server converts this older
+    // layout into `world0.ksd` on its first boot. The index is never opened to
+    // read `.latest`, which would be judging completeness rather than layout.
+    const indexes = root.filter((entry) => entry.endsWith('-index'));
+    if (indexes.length > 0) {
+      const orphaned = indexes.filter((index) => !root.includes(index.slice(0, -'-index'.length)));
+      return orphaned.length > 0
+        ? `${orphaned.join(', ')} names no matching save file at the archive root`
+        : null;
     }
-    return null;
+    // Measured, section K: any other slot is ignored, and a blank world0.ksd
+    // is generated beside it. A client numbers its worlds from world0.
+    const otherSlots = root.filter((entry) => /^world\d+\.ksd$/.test(entry));
+    if (otherSlots.length > 0) {
+      return `found ${otherSlots.join(', ')} but the server opens only "${SERVER_WORLD}": rename the world to adopt to ${SERVER_WORLD}`;
+    }
+    return `found ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.join(', ')}) but neither "${SERVER_WORLD}" nor a "<hex>-index" at the archive root`;
   },
 };
